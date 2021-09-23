@@ -50,6 +50,8 @@
 //Enables the usage of a SymmetricTensor "class" and rotation matrices
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/physics/transformations.h>
+#include <deal.II/physics/elasticity/kinematics.h>
+#include <deal.II/physics/elasticity/standard_tensors.h>
 #include <iomanip>
 
 namespace Project_attempt
@@ -81,7 +83,7 @@ namespace Project_attempt
 
 	template <int dim>
 	double get_mu(const double E, const double nu) {
-		double tmp =E / (2 * (1 + nu));
+		double tmp = E / (2 * (1 + nu));
 		return tmp;
 	}
 
@@ -135,6 +137,42 @@ namespace Project_attempt
 		for (unsigned int i = 0; i < dim; ++i)
 			for (unsigned int j = i + 1; j < dim; ++j)
 				strain[i][j] = (grad[i][j] + grad[j][i]) / 2;
+		return strain;
+	}
+
+
+	template <int dim>
+	Tensor<2, dim>
+		get_FF(Tensor<2, dim>& grad_P)
+	{
+		Tensor<2, dim> FF;
+		FF = Physics::Elasticity::Kinematics::F(grad_P);
+		return FF;
+	}
+
+
+	template< int dim>
+	double get_Jf(Tensor<2,dim> &FF)
+	{
+		double Jf;
+		Jf = determinant(FF);
+		return Jf;
+	}
+	template <int dim>
+	Tensor<2, dim>
+		get_cofactorF(const Tensor<2, dim>& FF, double& Jf)
+	{
+		Tensor<2, dim> CofactorF;
+		CofactorF = Jf * invert(transpose_operator(FF));
+		return CofactorF;
+	}
+
+	template <int dim> 
+	Tensor<2,dim>
+		get_pk1(const Tensor<2, dim>& FF, double& mu, double Jf, double kappa, Tensor<2,dim> CofactorF)
+	{
+		Tensor<2, dim> strain;
+		strain = mu * Jf ^ (-5 / 3) * (FF - 1 / 3(FF * FF) * CofactorF + kappa * (Jf - 1) * CofactorF);
 		return strain;
 	}
 
