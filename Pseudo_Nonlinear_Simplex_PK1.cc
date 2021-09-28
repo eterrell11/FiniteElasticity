@@ -54,6 +54,11 @@
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <iomanip>
 
+#include <deal.II/lac/linear_operator.h>
+#include <deal.II/lac/packaged_operation.h>
+#include <deal.II/physics/elasticity/standard_tensors.h>
+
+
 namespace Project_attempt
 {
 	using namespace dealii;
@@ -143,10 +148,10 @@ namespace Project_attempt
 
 	template <int dim>
 	Tensor<2, dim>
-		get_FF(Tensor<2, dim>& grad_P)
+		get_FF(Tensor<2, dim>& grad_p)
 	{
 		Tensor<2, dim> FF;
-		FF = Physics::Elasticity::Kinematics::F(grad_P);
+		FF = Physics::Elasticity::Kinematics::F(grad_p);
 		return FF;
 	}
 
@@ -160,20 +165,31 @@ namespace Project_attempt
 	}
 	template <int dim>
 	Tensor<2, dim>
-		get_cofactorF(const Tensor<2, dim>& FF, double& Jf)
+		get_cofactorF( Tensor<2, dim>& FF, double& Jf)
 	{
-		Tensor<2, dim> CofactorF;
-		CofactorF = Jf * invert(transpose_operator(FF));
+		Tensor<2,dim> CofactorF;
+		CofactorF = Jf * (invert(transpose(FF)));
 		return CofactorF;
 	}
 
 	template <int dim> 
 	Tensor<2,dim>
-		get_pk1(const Tensor<2, dim>& FF, double& mu, double Jf, double kappa, Tensor<2,dim> CofactorF)
+		get_pk1( Tensor<2, dim>& FF,const double& mu, double& Jf,const double& kappa, Tensor<2,dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * Jf ^ (-5 / 3) * (FF - 1 / 3(FF * FF) * CofactorF + kappa * (Jf - 1) * CofactorF);
+		strain = mu * (std::cbrt(Jf)/(Jf*Jf)) * (FF - 1 / 3*(FF * FF) * CofactorF + kappa * (Jf - 1) * CofactorF);
 		return strain;
+	}
+
+	template <int dim>
+	inline Tensor<2,dim>
+		get_pk1_all( Tensor<2, dim>& grad_p, const double mu, const double kappa)
+	{
+		Tensor<2,dim> FF = get_FF(grad_p);
+		double Jf = get_Jf(FF);
+		Tensor<2,dim> CofactorF = get_cofactorF(FF, Jf);
+		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, kappa, CofactorF);
+		return pk1;
 	}
 
 	
@@ -267,6 +283,7 @@ namespace Project_attempt
 
 		static const double youngs_modulus;
 		static const double poissons_ratio;
+
 
 		static const double kappa;
 		static const double mu;
@@ -533,19 +550,18 @@ namespace Project_attempt
 		FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     cell_rhs(dofs_per_cell);
 
-		Lambda<dim> lambda; //calls Lambda values from corresponding function
-		Mu<dim> mu; // calls Mu values from corresponding function
 
 		//Defines vectors to contain valuse for physical parameters
 		// std::vector<double> E(n_q_points); 
 		// This term isn't really needed here, would be nice to display elasticity on mesh
-		std::vector<double> lambda_values(n_q_points);
-		std::vector<double> mu_values(n_q_points);
+		
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 		RightHandSide<dim> right_hand_side;
 		std::vector<Vector<double>> rhs_values(n_q_points, Vector<double>(dim));
+
+		const FEValuesExtractors::Vector momentum(0);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 			if (cell->is_locally_owned())
@@ -555,33 +571,18 @@ namespace Project_attempt
 
 				fe_values.reinit(cell);
 
-				lambda.value_list(fe_values.get_quadrature_points(), lambda_values); //Actually pulls lambda value
-				mu.value_list(fe_values.get_quadrature_points(), mu_values); //Actually pulls mu value
 
 				//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					const unsigned int component_i =
-						fe.system_to_component_index(i).first;
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						const unsigned int component_j =
-							fe.system_to_component_index(j).first;
 						for (const unsigned int q_point : fe_values.quadrature_point_indices())
 						{
 
 							cell_matrix(i, j) +=
-								((fe_values.shape_grad(i, q_point)[component_i] *
-									fe_values.shape_grad(j, q_point)[component_j] *
-									lambda_values[q_point]) +
-									(fe_values.shape_grad(i, q_point)[component_j] *
-										fe_values.shape_grad(j, q_point)[component_i] *
-										mu_values[q_point]) +
-									((component_i == component_j) ?
-										(fe_values.shape_grad(i, q_point) *
-											fe_values.shape_grad(j, q_point) *
-											mu_values[q_point]) :
-										0)) *
+								fe_values[momentum].value(i,q_point) *
+								fe_values[momentum].value(j,q_point) *
 								fe_values.JxW(q_point);
 						}
 					}
@@ -595,11 +596,13 @@ namespace Project_attempt
 				{
 					const unsigned int component_i = fe.system_to_component_index(i).first;
 					for (const unsigned int q_point : fe_values.quadrature_point_indices()) {
-						const SymmetricTensor<2, dim>& old_stress = local_quadrature_points_data[q_point].old_stress;
-						cell_rhs(i) += (rhs_values[q_point](component_i) *
+						//const SymmetricTensor<2, dim>& old_stress = local_quadrature_points_data[q_point].old_stress;
+						Tensor<2, dim> grad_p = fe_values[momentum].gradient(i, q_point);
+						Tensor<2, dim> pk1 = get_pk1_all(grad_p, mu, kappa);
+						/*cell_rhs(i) += (rhs_values[q_point](component_i) *
 							fe_values.shape_value(i, q_point) -
 							old_stress * get_strain(fe_values, i, q_point)) *
-							fe_values.JxW(q_point);
+							fe_values.JxW(q_point);*/
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
