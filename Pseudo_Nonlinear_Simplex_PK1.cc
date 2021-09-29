@@ -173,7 +173,7 @@ namespace Project_attempt
 	}
 
 	template <int dim> 
-	Tensor<2,dim>
+	Tensor<2,dim> //calculates pk1 = pk1_dev+pk1_vol
 		get_pk1( Tensor<2, dim>& FF,const double& mu, double& Jf,const double& kappa, Tensor<2,dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
@@ -182,7 +182,7 @@ namespace Project_attempt
 	}
 
 	template <int dim>
-	inline Tensor<2,dim>
+	inline Tensor<2,dim> //Provides construction of PK1 stress tensor
 		get_pk1_all( Tensor<2, dim>& grad_p, const double mu, const double kappa)
 	{
 		Tensor<2,dim> FF = get_FF(grad_p);
@@ -328,16 +328,16 @@ namespace Project_attempt
 	class RightHandSide : public Function<dim>
 	{
 	public:
-		virtual void vector_value(const Point<dim>& /*p*/, Vector<double>& values) const override
+		virtual void vector_value(const Point<dim>& /*p*/, Tensor<1,dim>& values)
 
 		{
-			Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> point_1;
-			values(0) = -12;
+			values[2] = -9.8; //gravity? Need to check units n'at
 		}
 		virtual void
-			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Vector<double>>& value_list) const override
+			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1,dim>>& value_list)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
@@ -559,7 +559,7 @@ namespace Project_attempt
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 		RightHandSide<dim> right_hand_side;
-		std::vector<Vector<double>> rhs_values(n_q_points, Vector<double>(dim));
+		std::vector<Tensor<1,dim>> rhs_values(n_q_points, Tensor<1,dim>());
 
 		const FEValuesExtractors::Vector momentum(0);
 
@@ -603,6 +603,9 @@ namespace Project_attempt
 							fe_values.shape_value(i, q_point) -
 							old_stress * get_strain(fe_values, i, q_point)) *
 							fe_values.JxW(q_point);*/
+						cell_rhs(i) += scalar_product(-pk1 , fe_values[momentum].gradient(i, q_point)) *
+							fe_values.JxW(q_point) + fe_values[momentum].value(i, q_point) * rhs_values[q_point] *
+							fe_values.JxW(q_point);
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
