@@ -239,10 +239,8 @@ namespace Project_attempt
 		unsigned int solve();
 		void         output_results() const;
 
-		void do_initial_timestep(); //first timestep is different
 		void do_timestep();
 
-		void refine_grid();
 		void move_mesh();
 
 		void setup_quadrature_point_history();
@@ -267,8 +265,10 @@ namespace Project_attempt
 		PETScWrappers::MPI::Vector solution;
 		PETScWrappers::MPI::Vector system_rhs;
 
-		Vector<double> old_incremental_displacement;
+		Vector<double> momentum;
+		Vector<double> old_momentum;
 		Vector<double> incremental_displacement;
+
 
 		double present_time;
 		double present_timestep;
@@ -450,7 +450,25 @@ namespace Project_attempt
 	template<int dim>
 	void Inelastic<dim>::run()
 	{
-		do_initial_timestep();
+		create_coarse_grid();
+		pcout << "    Number of active cells:       "
+			<< triangulation.n_active_cells() << " (by partition:";
+		for (unsigned int p = 0; p < n_mpi_processes; ++p)
+			pcout << (p == 0 ? ' ' : '+')
+			<< (GridTools::count_cells_with_subdomain_association(
+				triangulation, p));
+		pcout << ")" << std::endl;
+
+		setup_system();
+
+		pcout << "    Number of degrees of freedom: " << dof_handler.n_dofs()
+			<< " (by partition:";
+		for (unsigned int p = 0; p < n_mpi_processes; ++p)
+			pcout << (p == 0 ? ' ' : '+')
+			<< (DoFTools::count_dofs_with_subdomain_association(dof_handler,
+				p));
+		pcout << ")" << std::endl;
+
 		while (present_time < end_time)
 			do_timestep();
 	}
@@ -529,6 +547,8 @@ namespace Project_attempt
 		system_matrix.reinit(locally_owned_dofs, locally_owned_dofs, dsp, mpi_communicator);
 		solution.reinit(locally_owned_dofs, mpi_communicator);
 		system_rhs.reinit(locally_owned_dofs, mpi_communicator);
+		momentum.reinit(dof_handler.n_dofs());
+		old_momentum.reinit(dof_handler.n_dofs());
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
 
@@ -752,45 +772,7 @@ namespace Project_attempt
 		}
 	}
 
-	//The initial timestep is different in that it involves creating the mesh in the first place,
-	// along with refining the grid using Kelly error estimates, similar to our homework
-	template<int dim>
-	void Inelastic<dim>::do_initial_timestep()
-	{
-		present_time += present_timestep;
-		++timestep_no;
-		pcout << "Timestep " << timestep_no << "at time" << present_time << std::endl;
-		for (unsigned int cycle = 0; cycle < 2; ++cycle)
-		{
-			pcout << "Cycle " << cycle << ':' << std::endl;
-			if (cycle == 0)
-				create_coarse_grid();
-			else
-				//refine_grid();
-			{
-			};
-			pcout << "    Number of active cells:       "
-				<< triangulation.n_active_cells() << " (by partition:";
-			for (unsigned int p = 0; p < n_mpi_processes; ++p)
-				pcout << (p == 0 ? ' ' : '+')
-				<< (GridTools::count_cells_with_subdomain_association(
-					triangulation, p));
-			pcout << ")" << std::endl;
-			setup_system();
-			pcout << "    Number of degrees of freedom: " << dof_handler.n_dofs()
-				<< " (by partition:";
-			for (unsigned int p = 0; p < n_mpi_processes; ++p)
-				pcout << (p == 0 ? ' ' : '+')
-				<< (DoFTools::count_dofs_with_subdomain_association(dof_handler,
-					p));
-			pcout << ")" << std::endl;
-			solve_timestep();
-		}
-		move_mesh();
-		output_results();
-
-		pcout << std::endl;
-	}
+	
 
 
 
@@ -812,42 +794,7 @@ namespace Project_attempt
 		pcout << std::endl;
 	}
 
-	//Refines elements based on Kelly Error Estimate
-	template <int dim>
-	void Inelastic<dim>::refine_grid()
-	{
-		Vector<float>error_per_cell(triangulation.n_active_cells());
-
-		KellyErrorEstimator<dim>::estimate(dof_handler,
-			QGaussSimplex<dim - 1>(fe.degree + 1), std::map<types::boundary_id, const Function<dim>*>(),
-			incremental_displacement,
-			error_per_cell,
-			ComponentMask(),
-			nullptr,
-			MultithreadInfo::n_threads(),
-			this_mpi_process);
-
-		const unsigned int n_local_cells = triangulation.n_locally_owned_active_cells();
-
-
-		PETScWrappers::MPI::Vector distributed_error_per_cell(mpi_communicator,
-			triangulation.n_active_cells(),
-			n_local_cells);
-		for (unsigned int i = 0; i < error_per_cell.size(); ++i)
-			if (error_per_cell(i) != 0)
-				distributed_error_per_cell(i) = error_per_cell(i);
-		distributed_error_per_cell.compress(VectorOperation::insert);
-
-		error_per_cell = distributed_error_per_cell;
-
-		GridRefinement::refine_and_coarsen_fixed_number(triangulation,
-			error_per_cell,
-			0.3,
-			0.03);
-		triangulation.execute_coarsening_and_refinement();
-
-		setup_quadrature_point_history();
-	}
+	
 
 
 	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
