@@ -177,7 +177,7 @@ namespace Project_attempt
 		get_pk1( Tensor<2, dim>& FF,const double& mu, double& Jf,const double& kappa, Tensor<2,dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf)/(Jf*Jf)) * (FF - 1 / 3*(FF * FF) * CofactorF + kappa * (Jf - 1) * CofactorF);
+		strain = mu * (std::cbrt(Jf)/(Jf*Jf)) * (FF - 1 / 3*scalar_product(FF,FF) * CofactorF + kappa * (Jf - 1) * CofactorF);
 		return strain;
 	}
 
@@ -266,6 +266,8 @@ namespace Project_attempt
 		PETScWrappers::MPI::SparseMatrix system_matrix;
 		PETScWrappers::MPI::Vector solution;
 		PETScWrappers::MPI::Vector system_rhs;
+
+		Vector<double> old_incremental_displacement;
 		Vector<double> incremental_displacement;
 
 		double present_time;
@@ -481,8 +483,8 @@ namespace Project_attempt
 					const Point<dim> face_center = face->center();
 					if (face_center[2] == -side)
 						face->set_boundary_id(4);
-					else if (face_center[2] == side)
-						face->set_boundary_id(5);
+					//else if (face_center[2] == side) // Serves to disable top incremental fixed displacements. => body forces dominate
+						//face->set_boundary_id(5);
 				}
 		setup_quadrature_point_history();
 		
@@ -594,7 +596,7 @@ namespace Project_attempt
 				right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					const unsigned int component_i = fe.system_to_component_index(i).first;
+					//const unsigned int component_i = fe.system_to_component_index(i).first; //Unneeded because I'm now using a dot product for the body force
 					for (const unsigned int q_point : fe_values.quadrature_point_indices()) {
 						//const SymmetricTensor<2, dim>& old_stress = local_quadrature_points_data[q_point].old_stress;
 						Tensor<2, dim> grad_p = fe_values[momentum].gradient(i, q_point);
@@ -603,9 +605,8 @@ namespace Project_attempt
 							fe_values.shape_value(i, q_point) -
 							old_stress * get_strain(fe_values, i, q_point)) *
 							fe_values.JxW(q_point);*/
-						cell_rhs(i) += scalar_product(-pk1 , fe_values[momentum].gradient(i, q_point)) *
-							fe_values.JxW(q_point) + fe_values[momentum].value(i, q_point) * rhs_values[q_point] *
-							fe_values.JxW(q_point);
+						cell_rhs(i) += scalar_product(-pk1 , fe_values[momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
+							fe_values[momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
@@ -624,12 +625,12 @@ namespace Project_attempt
 
 
 		//calls the incremental boundary condition functions to define the displacement of the mesh
-		VectorTools::interpolate_boundary_values(
+		/*VectorTools::interpolate_boundary_values(
 			mapping,
 			dof_handler,
 			5,
 			IncrementalBoundaryValues<dim>(present_time, present_timestep, end_time),
-			boundary_values);
+			boundary_values);*/
 		PETScWrappers::MPI::Vector tmp(locally_owned_dofs, mpi_communicator);
 		MatrixTools::apply_boundary_values(boundary_values,
 			system_matrix, tmp, system_rhs, false);
@@ -675,6 +676,12 @@ namespace Project_attempt
 
 		return solver_control.last_step();
 	}
+
+	/*template <int dim>
+	void Inelastic<dim>::time_integrator()
+	{
+		pcout << "    Integrating in time..." << std::endl;
+	}*/
 
 
 	//Spits out solution into vectors then into .vtks
