@@ -239,6 +239,9 @@ namespace Project_attempt
 		unsigned int solve();
 		void         output_results() const;
 
+		/* void time_integrator();
+		void time_integrator_final(); */
+
 		void do_timestep();
 
 		void move_mesh();
@@ -674,6 +677,18 @@ namespace Project_attempt
 		pcout << std::endl;
 	}
 
+	/*template<int dim>
+	void Inelastic<dim>::time_integrator()
+	{
+
+	}
+
+	template<int dim>
+	void Inelastic<dim>::time_integrator_final()
+	{
+
+	}*/
+
 	//solves system using CG
 	template <int dim>
 	unsigned int Inelastic<dim>::solve()
@@ -697,11 +712,7 @@ namespace Project_attempt
 		return solver_control.last_step();
 	}
 
-	/*template <int dim>
-	void Inelastic<dim>::time_integrator()
-	{
-		pcout << "    Integrating in time..." << std::endl;
-	}*/
+	
 
 
 	//Spits out solution into vectors then into .vtks
