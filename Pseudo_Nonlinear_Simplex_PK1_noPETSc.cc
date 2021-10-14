@@ -58,6 +58,8 @@
 #include <deal.II/lac/packaged_operation.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
+//for dealing with constraints for time dependent problems
+#include <deal.II/lac/constrained_linear_operator.h>
 
 namespace Project_attempt
 {
@@ -259,13 +261,16 @@ namespace Project_attempt
 		MappingFE<dim> mapping;
 		FESystem<dim> fe;
 
-		AffineConstraints<double> constraints;
+		AffineConstraints<double> homogeneous_constraints;
 
 		const QGaussSimplex<dim> quadrature_formula;
 
 		//std::vector<PointHistory<dim>> quadrature_point_history;
-		SparsityPattern sparsity_pattern;
-		SparseMatrix<double> system_matrix;
+		SparsityPattern constrained_sparsity_pattern;
+		SparsityPattern unconstrained_sparsity_pattern;
+		SparseMatrix<double> constrained_mass_matrix;
+		SparseMatrix<double> unconstrained_mass_matrix;
+		
 		Vector<double> system_rhs;
 
 		Vector<double> momentum;
@@ -500,27 +505,35 @@ namespace Project_attempt
 		dof_handler.distribute_dofs(fe);
 
 
-		constraints.clear();
+		homogeneous_constraints.clear();
 		VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim),
-			constraints); //Establishes zero BCs, => must replace
+			homogeneous_constraints); //Establishes zero BCs, 
 		DoFTools::make_hanging_node_constraints(dof_handler,
-			constraints);
-		constraints.close();
+			homogeneous_constraints);
+		homogeneous_constraints.close();
 
-		DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
+		DynamicSparsityPattern dsp_constrained(dof_handler.n_dofs());
 		DoFTools::make_sparsity_pattern(dof_handler,
-			dsp,
-			constraints,
+			dsp_constrained,
+			homogeneous_constraints,
 			false);
-		sparsity_pattern.copy_from(dsp);
+		unconstrained_sparsity_pattern.copy_from(dsp_constrained);
+		unconstrained_mass_matrix.reinit(constrained_sparsity_pattern);
+
+		DynamicSparsityPattern dsp_unconstrained(dof_handler.n_dofs());
+		DoFTools::make_sparsity_pattern(dof_handler,
+			dsp_unconstrained,
+			homogeneous_constraints,
+			false);
+		unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
+		unconstrained_mass_matrix.reinit(constrained_sparsity_pattern);
 
 
 		//No longer need to pass matrices and vectors through MPI communication object
 
-		system_matrix.reinit(sparsity_pattern);
 		system_rhs.reinit(dof_handler.n_dofs());
 		momentum.reinit(dof_handler.n_dofs());
 		old_momentum.reinit(dof_handler.n_dofs());
@@ -531,7 +544,7 @@ namespace Project_attempt
 	void Inelastic<dim>::assemble_system()
 	{
 		system_rhs = 0;
-		system_matrix = 0;
+		constrained_mass_matrix = 0;
 
 		FEValues<dim> fe_values(mapping,
 			fe,
@@ -544,7 +557,7 @@ namespace Project_attempt
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
 
-		FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     cell_rhs(dofs_per_cell);
 
 
@@ -560,7 +573,7 @@ namespace Project_attempt
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
-			cell_matrix = 0;
+			cell_mass_matrix = 0;
 			cell_rhs = 0;
 
 			fe_values.reinit(cell);
@@ -574,7 +587,7 @@ namespace Project_attempt
 					for (const unsigned int q_point : fe_values.quadrature_point_indices())
 					{
 
-						cell_matrix(i, j) +=
+						cell_mass_matrix(i, j) +=
 							fe_values[momentum].value(i, q_point) *
 							fe_values[momentum].value(j, q_point) *
 							fe_values.JxW(q_point);
@@ -601,20 +614,25 @@ namespace Project_attempt
 						fe_values[momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
 				}
 			}
-			//Removed because not needed outside of PETSc?
-			//system_matrix.compress(VectorOperation::add);
-
-			//system_rhs.compress(VectorOperation::add);
+			
 
 			FEValuesExtractors::Scalar x_component(dim - 3);
 			FEValuesExtractors::Scalar y_component(dim - 2);
 			FEValuesExtractors::Scalar z_component(dim - 1);
 
 			cell->get_dof_indices(local_dof_indices);
-			std::map<types::global_dof_index, double> boundary_values;
-			VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
-			MatrixTools::apply_boundary_values(boundary_values,
-				system_matrix, incremental_displacement, system_rhs, false);
+			
+			homogeneous_constraints.distribute_local_to_global(
+				cell_mass_matrix,
+				local_dof_indices,
+				constrained_mass_matrix);
+
+			//Remove in favor of old fashioned dl2g
+			//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
+			/*MatrixTools::apply_boundary_values(boundary_values,
+				system_matrix, incremental_displacement, system_rhs,false);*/
+			unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
+			system_rhs.add(local_dof_indices, cell_rhs);
 		}
 
 		//calls the incremental boundary condition functions to define the displacement of the mesh
@@ -660,15 +678,37 @@ namespace Project_attempt
 	template <int dim>
 	unsigned int Inelastic<dim>::solve()
 	{
-		//Vector<double> distributed_incremental_displacement(
-			//locally_owned_dofs, mpi_communicator);
+		std::swap(old_momentum, momentum);
+
+		Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
+		/*VectorTools::create_right_hand_side(mapping,
+			dof_handler,
+			QGauss<dim>(fe.degree + 2),
+				system_rhs,
+				load_vector);*/
+		load_vector = system_rhs;
+		load_vector *= present_timestep;
+		unconstrained_mass_matrix.vmult_add(load_vector, old_momentum);
+
+		AffineConstraints<double> constraints;
+		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+			0,
+			Functions::ZeroFunction<dim>(dim),
+			constraints);
+		constraints.close();
+
+		auto u_system_operator = linear_operator(unconstrained_mass_matrix);
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			constraints, u_system_operator, load_vector);
+
+
 		SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
 		PreconditionJacobi<SparseMatrix<double>> preconditioner;
-		preconditioner.initialize(system_matrix, 1.2);
+		preconditioner.initialize(constrained_mass_matrix, 1.2);
 
-		solver.solve(system_matrix,
+		solver.solve(constrained_mass_matrix,
 			incremental_displacement,
 			system_rhs,
 			preconditioner);
