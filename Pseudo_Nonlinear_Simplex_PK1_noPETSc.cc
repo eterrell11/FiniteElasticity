@@ -443,7 +443,7 @@ namespace Project_attempt
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
-		, end_time(0.1)
+		, end_time(0.025)
 		, timestep_no(0)
 	{}
 
@@ -504,10 +504,12 @@ namespace Project_attempt
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (face_center[2] == -side)
+					if (face_center[2] == -side) {
 						face->set_boundary_id(4);
-					//else if (face_center[2] == side) // Serves to disable top incremental fixed displacements. => body forces dominate
-						//face->set_boundary_id(5);
+						//else if (face_center[2] == side) // Serves to disable top incremental fixed displacements. => body forces dominate
+							//face->set_boundary_id(5);
+						cout << " I'm on the boundary" << cell << std::endl;
+					}
 				}
 		//setup_quadrature_point_history();
 
@@ -717,7 +719,7 @@ namespace Project_attempt
 
 		AffineConstraints<double> constraints;
 		dealii::VectorTools::interpolate_boundary_values(dof_handler,
-			0,
+			4,
 			Functions::ZeroFunction<dim>(dim),
 			constraints);
 		constraints.close();
@@ -725,6 +727,8 @@ namespace Project_attempt
 		auto u_system_operator = linear_operator(unconstrained_mass_matrix);
 		auto setup_constrained_rhs = constrained_right_hand_side(
 			constraints, u_system_operator, load_vector);
+		Vector<double> rhs(dof_handler.n_dofs());
+		setup_constrained_rhs.apply(rhs);
 
 		
 		SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
@@ -735,7 +739,7 @@ namespace Project_attempt
 
 		solver.solve(constrained_mass_matrix,
 			momentum,
-			system_rhs,
+			rhs,
 			preconditioner);
 		constraints.distribute(incremental_displacement);
 
