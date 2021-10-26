@@ -263,7 +263,7 @@ namespace Project_attempt
 		parallel::shared::Triangulation<dim> triangulation;
 		DoFHandler<dim>    dof_handler;
 		MappingFE<dim> mapping;
-		FESystem<dim> fe;
+		FESystem<dim> fe(FE_SimplexP<dim>(1)^dim, FE_SimplexP<dim>(1), FE_SimplexP<dim,dim>(1)^(dim * dim));
 
 		AffineConstraints<double> homogeneous_constraints;
 
@@ -278,7 +278,7 @@ namespace Project_attempt
         SparseMatrix<double> unconstrained_pressure_mass_matrix;
 
         
-		Vector<double> system_rhs;
+		Vector<double> momentum_system_rhs;
 
         Vector<double> pressure;
         Vector<double> old_pressure;
@@ -418,7 +418,6 @@ namespace Project_attempt
 		: triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
 		, mapping(FE_SimplexP<dim>(1))
-		, fe(FE_SimplexP<dim>(1), dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
@@ -510,6 +509,13 @@ namespace Project_attempt
 
 		momentum.reinit(dof_handler.n_dofs());
 		old_momentum.reinit(dof_handler.n_dofs());
+        
+        pressure.reinit(dof_handler.n_dofs());
+        old_pressure.reinit(dof_handler.n_dofs());
+        
+        def_gradient.reinit(dof_handler.n_dofs());
+        old_def_gradient.reinit(dof_handler.n_dofs());
+
 
 		cout << " Applying initial momentum" << std::endl;
 		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), momentum);
@@ -544,14 +550,14 @@ namespace Project_attempt
 
 		//No longer need to pass matrices and vectors through MPI communication object
 
-		system_rhs.reinit(dof_handler.n_dofs());
+		momentum_system_rhs.reinit(dof_handler.n_dofs());
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
 
 	template <int dim>
 	void Inelastic<dim>::assemble_system()
 	{
-		system_rhs = 0;
+		momentum_system_rhs = 0;
 		//constrained_mass_matrix = 0;
 
 		FEValues<dim> fe_values(mapping,
@@ -567,7 +573,8 @@ namespace Project_attempt
 
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
-
+        
+        FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     cell_rhs(dofs_per_cell);
 
@@ -581,6 +588,10 @@ namespace Project_attempt
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
 		const FEValuesExtractors::Vector Momentum(0);
+        const FEValuesExtractors::Scalar Pressure(dim);
+        const FEValuesExtractors::Tensor<dim> Def_Gradient(dim+1);
+
+        Tensor<dim, dim> FF ;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -594,10 +605,15 @@ namespace Project_attempt
 				ExcInternalError());
 
 			cell_mass_matrix = 0;
+            cell_pressure_mass_matrix = 0;
 			cell_rhs = 0;
-
 			fe_values.reinit(cell);
-
+            
+            for(int i :fe_values.dof_indices()){
+                for (const unsigned int j : fe_values.dof_indices()){
+                    FF = fe_values[Def_Gradient].value(i,j);
+                }
+            }
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int i : fe_values.dof_indices())
@@ -611,6 +627,10 @@ namespace Project_attempt
 							fe_values[Momentum].value(i, q_point) *
 							fe_values[Momentum].value(j, q_point) *
 							fe_values.JxW(q_point);
+                        cell_pressure_mass_matrix(i,j) += 1/kappa *
+                            fe_values[Momentum].value(i, q_point) *
+                            fe_values[Momentum].value(j, q_point) *
+                            fe_values.JxW(q_point);
 					}
 				}
 			}
@@ -649,11 +669,11 @@ namespace Project_attempt
 			//Remove in favor of old fashioned dl2g
 			//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
 			/*MatrixTools::apply_boundary_values(boundary_values,
-				system_matrix, incremental_displacement, system_rhs,false);*/
+				system_matrix, incremental_displacement, momentum_system_rhs,false);*/
 
 
 			unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
-			system_rhs.add(local_dof_indices, cell_rhs);
+			momentum_system_rhs.add(local_dof_indices, cell_rhs);
 		}
 
 
@@ -674,7 +694,7 @@ namespace Project_attempt
 	{
 		cout << " Assembling system..." << std::flush;
 		assemble_system();
-		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "norm of rhs is " << momentum_system_rhs.l2_norm() << std::endl;
 
 		const unsigned int n_iterations = solve();
 		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
@@ -698,9 +718,9 @@ namespace Project_attempt
 		/*VectorTools::create_right_hand_side(mapping,
 			dof_handler,
 			QGauss<dim>(fe.degree + 2),
-				system_rhs,
+				momentum_system_rhs,
 				load_vector);*/
-		load_vector = system_rhs;
+		load_vector = momentum_system_rhs;
 		load_vector *= present_timestep;
 		unconstrained_mass_matrix.vmult_add(load_vector, old_momentum);
 
@@ -718,7 +738,7 @@ namespace Project_attempt
 		setup_constrained_rhs.apply(rhs);
 
 		
-		SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
+		SolverControl            solver_control(10000000, 1e-16 * momentum_system_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
 		PreconditionJacobi<SparseMatrix<double>> preconditioner;
