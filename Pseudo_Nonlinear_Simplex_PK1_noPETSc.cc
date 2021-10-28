@@ -69,7 +69,7 @@ namespace Project_attempt
 	/// SPACE FOR DEFINING GLOBAL VARIABLES. ASK DAVID IF THIS IS KOSHER
 	/// </summary>
 	static double nu = 0.3;
-	static double E = 7500;
+	static double E = 1000;
 
 
 
@@ -176,7 +176,7 @@ namespace Project_attempt
 		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, const double& kappa, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / (Jf * Jf)) * (FF - scalar_product(FF, FF) / 3  * CofactorF/Jf) + (kappa * (Jf - 1) * CofactorF);
+		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3  * CofactorF/Jf) + (kappa * (Jf - 1) * CofactorF);
 		//Tensor<2, dim> pk1_dev = (FF - scalar_product(FF, FF) / 3 * CofactorF / Jf);
 		//Tensor<2, dim> pk1_vol = (kappa * (Jf - 1) * CofactorF);
 		//cout << "norm of pk1_dev = " << FF << std::endl;
@@ -372,7 +372,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim)
-		, velocity(0.5)
+		, velocity(0.1)
 	{}
 
 	template <int dim>
@@ -415,7 +415,7 @@ namespace Project_attempt
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
-		, end_time(1)
+		, end_time(0.2)
 		, timestep_no(0)
 	{}
 
