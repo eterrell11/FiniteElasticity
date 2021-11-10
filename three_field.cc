@@ -131,7 +131,7 @@ namespace Project_attempt
 	}
 
 
-	template <int dim>
+	/*template <int dim>
 	Tensor<2, dim>
 		get_FF(const std::vector<Tensor<1, dim>>& grad_p)
 	{
@@ -142,11 +142,8 @@ namespace Project_attempt
 				FF[i][j] = I[i][j] + grad_p[i][j];
 			}
 		}
-		if (FF.norm() != std::sqrt(3)) {
-			//cout << "Norm of FF: " << FF.norm() << std::endl;
-		}
 		return FF;
-	}
+	}*/
 
 
 	template< int dim>
@@ -154,9 +151,6 @@ namespace Project_attempt
 	{
 		double Jf;
 		Jf = determinant(FF);
-
-		//cout << "J = " << Jf << std::endl;
-
 		return Jf;
 
 	}
@@ -176,19 +170,15 @@ namespace Project_attempt
 		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, const double& kappa, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / (Jf * Jf)) * (FF - scalar_product(FF, FF) / 3  * CofactorF/Jf) + (kappa * (Jf - 1) * CofactorF);
-		//Tensor<2, dim> pk1_dev = (FF - scalar_product(FF, FF) / 3 * CofactorF / Jf);
-		//Tensor<2, dim> pk1_vol = (kappa * (Jf - 1) * CofactorF);
-		//cout << "norm of pk1_dev = " << FF << std::endl;
-		//cout << "norm of pk1_vol = " << pk1_vol.norm() << std::endl;
+		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0  * CofactorF/Jf) + (kappa * (Jf - 1) * CofactorF);
 		return strain;
 	}
 
 	template <int dim>
 	inline Tensor<2, dim> //Provides construction of PK1 stress tensor
-		get_pk1_all(const std::vector<Tensor<1,dim>>& grad_p, const double mu, const double kappa)
+		get_pk1_all(Tensor<2,dim> FF, const double mu, const double kappa)
 	{
-		Tensor<2, dim> FF = get_FF(grad_p);
+		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
 		Tensor<2, dim> CofactorF = get_cofactorF(FF, Jf);
 		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, kappa, CofactorF);
@@ -263,7 +253,7 @@ namespace Project_attempt
 		parallel::shared::Triangulation<dim> triangulation;
 		DoFHandler<dim>    dof_handler;
 		MappingFE<dim> mapping;
-		FESystem<dim> fe(FE_SimplexP<dim>(1)^dim, FE_SimplexP<dim>(1), FE_SimplexP<dim,dim>(1)^(dim * dim));
+		FESystem<dim> fe;
 
 		AffineConstraints<double> homogeneous_constraints;
 
@@ -418,6 +408,7 @@ namespace Project_attempt
 		: triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
 		, mapping(FE_SimplexP<dim>(1))
+		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim * dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
@@ -473,9 +464,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 10;
-		repetitions[1] = 10;
-		repetitions[2] = 20;
+		repetitions[0] = 5;
+		repetitions[1] = 5;
+		repetitions[2] = 5;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
 			p1,
@@ -505,28 +496,30 @@ namespace Project_attempt
 	{
 
 		dof_handler.distribute_dofs(fe);
+		DoFRenumbering::component_wise(dof_handler);
 
 
-		momentum.reinit(dof_handler.n_dofs());
-		old_momentum.reinit(dof_handler.n_dofs());
+		momentum.reinit(dim);
+		old_momentum.reinit(dim);
         
-        pressure.reinit(dof_handler.n_dofs());
-        old_pressure.reinit(dof_handler.n_dofs());
+        pressure.reinit(1);
+        old_pressure.reinit(1);
         
-        def_gradient.reinit(dof_handler.n_dofs());
-        old_def_gradient.reinit(dof_handler.n_dofs());
+        def_gradient.reinit(dim*dim);
+        old_def_gradient.reinit(dim*dim);
 
+		cout << " I made it this far" << std::endl;
 
 		cout << " Applying initial momentum" << std::endl;
-		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), momentum);
+		//VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), momentum);
 
 
 		homogeneous_constraints.clear();
-		VectorTools::interpolate_boundary_values(mapping,
+		/*VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim),
-			homogeneous_constraints); //Establishes zero BCs, 
+			homogeneous_constraints);*/ //Establishes zero BCs, 
 		DoFTools::make_hanging_node_constraints(dof_handler,
 			homogeneous_constraints);
 		homogeneous_constraints.close();
@@ -589,9 +582,11 @@ namespace Project_attempt
 
 		const FEValuesExtractors::Vector Momentum(0);
         const FEValuesExtractors::Scalar Pressure(dim);
-        const FEValuesExtractors::Tensor<dim> Def_Gradient(dim+1);
+        const FEValuesExtractors::Tensor<2> Def_Gradient(dim+1);
 
-        Tensor<dim, dim> FF ;
+		Tensor<2,dim> FF;
+		double vectorcounter;
+
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -604,16 +599,15 @@ namespace Project_attempt
 				&quadrature_point_history.back(),
 				ExcInternalError());
 
+			FF = 0;
 			cell_mass_matrix = 0;
             cell_pressure_mass_matrix = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
-            
-            for(int i :fe_values.dof_indices()){
-                for (const unsigned int j : fe_values.dof_indices()){
-                    FF = fe_values[Def_Gradient].value(i,j);
-                }
-            }
+
+			std::vector<Vector<double>> FF_vec(quadrature_formula.size(), Vector<double> (dim*dim));
+			fe_values.get_function_values(def_gradient, FF_vec);
+			
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int i : fe_values.dof_indices())
@@ -639,11 +633,20 @@ namespace Project_attempt
 
 					//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
 			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
-			for (const unsigned int i : fe_values.dof_indices())
+			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
-				for (const unsigned int q_point : fe_values.quadrature_point_indices()) {
+				vectorcounter = 0;
+				for (const unsigned int q : fe_values.quadrature_point_indices()) {
+					for (const unsigned int i : fe_values.dof_indices()) {
+						for (const unsigned int j : fe_values.dof_indices()) {
+							FF[i][j] = FF_vec[q](vectorcounter);
+							++vectorcounter;
+						}
+					}
+				}
+				for (const unsigned int i : fe_values.dof_indices()) {
 					fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
-					Tensor<2, dim> pk1 = get_pk1_all(displacement_increment_grads[q_point], mu, kappa);
+					Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
 					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
 						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
 				
