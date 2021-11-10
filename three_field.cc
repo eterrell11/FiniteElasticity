@@ -204,12 +204,6 @@ namespace Project_attempt
 		const Point<3> curl(grad_u[2][1] - grad_u[1][2], grad_u[0][2] - grad_u[2][0], grad_u[1][0] - grad_u[0][1]);
 		const double tan_angle = std::sqrt(curl * curl);
 		const double angle = std::atan(tan_angle);
-		//if (std::abs(angle) < 1e-9)
-		//{
-		//	static const double rotation[3][3] = { {1, 0 ,0 }, { 0, 1 , 0 },{0, 0, 1} };
-		//	static const Tensor<2, 3> rot(rotation);
-		//	return rot;
-		//}
 		const Point<3> axis = curl / tan_angle;
 		return Physics::Transformations::Rotations::rotation_matrix_3d(axis,
 			-angle);
@@ -222,7 +216,7 @@ namespace Project_attempt
 	{
 	public:
 		Inelastic();
-		~Inelastic();  //Provides a destructor
+		~Inelastic();
 		void run();
 
 	private:
