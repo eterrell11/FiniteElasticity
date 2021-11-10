@@ -254,23 +254,16 @@ namespace Project_attempt
 		const QGaussSimplex<dim> quadrature_formula;
 
 		std::vector<PointHistory<dim>> quadrature_point_history;
-		SparsityPattern constrained_sparsity_pattern;
-		SparsityPattern unconstrained_sparsity_pattern;
-		SparseMatrix<double> constrained_mass_matrix;
-		SparseMatrix<double> unconstrained_mass_matrix;
-        SparseMatrix<double> constrained_pressure_mass_matrix;
-        SparseMatrix<double> unconstrained_pressure_mass_matrix;
+		BlockSparsityPattern constrained_sparsity_pattern;
+		BlockSparsityPattern unconstrained_sparsity_pattern;
+		BlockSparseMatrix<double> constrained_mass_matrix;
+		BlockSparseMatrix<double> unconstrained_mass_matrix;
 
         
-		Vector<double> momentum_system_rhs;
+		BlockVector<double> system_rhs;
 
-        Vector<double> pressure;
-        Vector<double> old_pressure;
-        Vector<double> def_gradient;
-        Vector<double> old_def_gradient;
-		Vector<double> momentum;
-		Vector<double> old_momentum;
-		Vector<double> incremental_displacement;
+        BlockVector<double> solution;
+        BlockVector<double> old_solution;
 
 
 		double present_time;
@@ -430,12 +423,12 @@ namespace Project_attempt
 	void Inelastic<dim>::run()
 	{
 		create_coarse_grid();
-		cout << "    Number of active cells:       "
+		//cout << "    Number of active cells:       "
 			<< triangulation.n_active_cells() << std::endl;
 
 		setup_system();
 
-		cout << "    Number of degrees of freedom:     " << dof_handler.n_dofs() << std::endl;
+		//cout << "    Number of degrees of freedom:     " << dof_handler.n_dofs() << std::endl;
 
 		while (present_time < end_time)
 			do_timestep();
@@ -491,16 +484,55 @@ namespace Project_attempt
 
 		dof_handler.distribute_dofs(fe);
 		DoFRenumbering::component_wise(dof_handler);
-
-
-		momentum.reinit(dim);
-		old_momentum.reinit(dim);
         
-        pressure.reinit(1);
-        old_pressure.reinit(1);
+        const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+        const unsigned int n_u = dofs_per_component[0],
+                           n_p = dofs_per_component[dim],
+        n_FF = dofs_per_component[dim+1];
         
-        def_gradient.reinit(dim*dim);
-        old_def_gradient.reinit(dim*dim);
+        std::cout << "Number of active cells: " << triangulation.n_active_cells() <<std::endl
+        << "Total number of cells: " << triangulation.n_cells()
+        << std::endl
+        << "Number of degrees of freedom: " << dof_handler.n_dofs()
+        << " (" << n_u << '+' << n_p << '+' << n_FF << ')'  << std::endl;
+
+        
+        BlockDynamicSparsityPattern dsp(3,3);
+        dsp.block(0,0).reinit(n_u,n_u);
+        dsp.block(1,0).reinit(n_p,n_u);
+        dsp.block(0,1).reinit(n_u,n_p);
+        dsp.block(2,0).reinit(n_f,n_u);
+        dsp.block(0,2).reinit(n_u,n_f);
+        dsp.block(1,1).reinit(n_p,n_p);
+        dsp.block(2,2).reinit(n_f,n_f);
+        dsp.block(1,2).reinit(n_p,n_f);
+        dsp.block(2,1).reinit(n_f,n_p);
+        DoFTools::make_sparsity_pattern(dof_handler,dsp);
+        
+        unconstrained_sparsity_pattern.copy_from(dsp);
+        system_matrix.reinit(sparsity_pattern);
+        
+        
+        
+		solution.reinit(3);
+        solution.block(0).reinit(n_u);
+        solution.block(1).reinit(n_p);
+        solution.block(2).reinit(n_f);
+        solution.collect_sizes();
+        
+        old_solution.reinit(3);
+        old_solution.block(0).reinit(n_u);
+        old_solution.block(1).reinit(n_p);
+        old_solution.block(2).reinit(n_f);
+        old_solution.collect_sizes();
+        
+        system_rhs.reinit(3);
+        system_rhs.block(0).reinit(n_u);
+        system_rhs.block(1).reinit(n_p);
+        system_rhs.block(2).reinit(n_f);
+        system_rhs.collect_sizes();
+        
+        
 
 		cout << " I made it this far" << std::endl;
 
