@@ -61,6 +61,10 @@
 //for dealing with constraints for time dependent problems
 #include <deal.II/lac/constrained_linear_operator.h>
 
+//for block matrices
+#include <deal.II/lac/block_sparse_matrix.h>
+#include <deal.II/lac/block_vector.h>
+
 namespace Project_attempt
 {
 	using namespace dealii;
@@ -265,6 +269,8 @@ namespace Project_attempt
         BlockVector<double> solution;
         BlockVector<double> old_solution;
 
+		Vector<double> incremental_displacement;
+
 
 		double present_time;
 		double present_timestep;
@@ -424,7 +430,7 @@ namespace Project_attempt
 	{
 		create_coarse_grid();
 		//cout << "    Number of active cells:       "
-			<< triangulation.n_active_cells() << std::endl;
+		//<< triangulation.n_active_cells() << std::endl;
 
 		setup_system();
 
@@ -488,49 +494,16 @@ namespace Project_attempt
         const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
         const unsigned int n_u = dofs_per_component[0],
                            n_p = dofs_per_component[dim],
-        n_FF = dofs_per_component[dim+1];
+        n_f = dofs_per_component[dim+1];
         
         std::cout << "Number of active cells: " << triangulation.n_active_cells() <<std::endl
         << "Total number of cells: " << triangulation.n_cells()
         << std::endl
         << "Number of degrees of freedom: " << dof_handler.n_dofs()
-        << " (" << n_u << '+' << n_p << '+' << n_FF << ')'  << std::endl;
+        << " (" << n_u << '+' << n_p << '+' << n_f << ')'  << std::endl;
 
         
-        BlockDynamicSparsityPattern dsp(3,3);
-        dsp.block(0,0).reinit(n_u,n_u);
-        dsp.block(1,0).reinit(n_p,n_u);
-        dsp.block(0,1).reinit(n_u,n_p);
-        dsp.block(2,0).reinit(n_f,n_u);
-        dsp.block(0,2).reinit(n_u,n_f);
-        dsp.block(1,1).reinit(n_p,n_p);
-        dsp.block(2,2).reinit(n_f,n_f);
-        dsp.block(1,2).reinit(n_p,n_f);
-        dsp.block(2,1).reinit(n_f,n_p);
-        DoFTools::make_sparsity_pattern(dof_handler,dsp);
-        
-        unconstrained_sparsity_pattern.copy_from(dsp);
-        system_matrix.reinit(sparsity_pattern);
-        
-        
-        
-		solution.reinit(3);
-        solution.block(0).reinit(n_u);
-        solution.block(1).reinit(n_p);
-        solution.block(2).reinit(n_f);
-        solution.collect_sizes();
-        
-        old_solution.reinit(3);
-        old_solution.block(0).reinit(n_u);
-        old_solution.block(1).reinit(n_p);
-        old_solution.block(2).reinit(n_f);
-        old_solution.collect_sizes();
-        
-        system_rhs.reinit(3);
-        system_rhs.block(0).reinit(n_u);
-        system_rhs.block(1).reinit(n_p);
-        system_rhs.block(2).reinit(n_f);
-        system_rhs.collect_sizes();
+       
         
         
 
@@ -541,16 +514,26 @@ namespace Project_attempt
 
 
 		homogeneous_constraints.clear();
-		/*VectorTools::interpolate_boundary_values(mapping,
+		VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim),
-			homogeneous_constraints);*/ //Establishes zero BCs, 
+			homogeneous_constraints); //Establishes zero BCs, 
 		DoFTools::make_hanging_node_constraints(dof_handler,
 			homogeneous_constraints);
 		homogeneous_constraints.close();
 
-		DynamicSparsityPattern dsp_constrained(dof_handler.n_dofs());
+		//DynamicSparsityPattern dsp_constrained(dof_handler.n_dofs());
+		BlockDynamicSparsityPattern dsp_constrained(3, 3);
+		dsp_constrained.block(0, 0).reinit(n_u, n_u);
+		dsp_constrained.block(1, 0).reinit(n_p, n_u);
+		dsp_constrained.block(0, 1).reinit(n_u, n_p);
+		dsp_constrained.block(2, 0).reinit(n_f, n_u);
+		dsp_constrained.block(0, 2).reinit(n_u, n_f);
+		dsp_constrained.block(1, 1).reinit(n_p, n_p);
+		dsp_constrained.block(2, 2).reinit(n_f, n_f);
+		dsp_constrained.block(1, 2).reinit(n_p, n_f);
+		dsp_constrained.block(2, 1).reinit(n_f, n_p);
 		DoFTools::make_sparsity_pattern(dof_handler,
 			dsp_constrained,
 			homogeneous_constraints,
@@ -558,18 +541,52 @@ namespace Project_attempt
 		constrained_sparsity_pattern.copy_from(dsp_constrained);
 		constrained_mass_matrix.reinit(constrained_sparsity_pattern);
 
-		DynamicSparsityPattern dsp_unconstrained(dof_handler.n_dofs());
-		DoFTools::make_sparsity_pattern(dof_handler,
-			dsp_unconstrained);
+		//DynamicSparsityPattern dsp_unconstrained(dof_handler.n_dofs());
+		//DoFTools::make_sparsity_pattern(dof_handler,
+		//	dsp_unconstrained);
+		//unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
+		//unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
+
+		BlockDynamicSparsityPattern dsp_unconstrained(3, 3);
+		dsp_unconstrained.block(0, 0).reinit(n_u, n_u);
+		dsp_unconstrained.block(1, 0).reinit(n_p, n_u);
+		dsp_unconstrained.block(0, 1).reinit(n_u, n_p);
+		dsp_unconstrained.block(2, 0).reinit(n_f, n_u);
+		dsp_unconstrained.block(0, 2).reinit(n_u, n_f);
+		dsp_unconstrained.block(1, 1).reinit(n_p, n_p);
+		dsp_unconstrained.block(2, 2).reinit(n_f, n_f);
+		dsp_unconstrained.block(1, 2).reinit(n_p, n_f);
+		dsp_unconstrained.block(2, 1).reinit(n_f, n_p);
+		DoFTools::make_sparsity_pattern(dof_handler, dsp_unconstrained);
 		unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
 		unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
+
+
+
+		solution.reinit(3);
+		solution.block(0).reinit(n_u);
+		solution.block(1).reinit(n_p);
+		solution.block(2).reinit(n_f);
+		solution.collect_sizes();
+
+		old_solution.reinit(3);
+		old_solution.block(0).reinit(n_u);
+		old_solution.block(1).reinit(n_p);
+		old_solution.block(2).reinit(n_f);
+		old_solution.collect_sizes();
+
+		system_rhs.reinit(3);
+		system_rhs.block(0).reinit(n_u);
+		system_rhs.block(1).reinit(n_p);
+		system_rhs.block(2).reinit(n_f);
+		system_rhs.collect_sizes();
 
 
 
 
 		//No longer need to pass matrices and vectors through MPI communication object
 
-		momentum_system_rhs.reinit(dof_handler.n_dofs());
+		//momentum_system_rhs.reinit(dof_handler.n_dofs());
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
 
@@ -593,12 +610,12 @@ namespace Project_attempt
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
         
-        FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
+        
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     cell_rhs(dofs_per_cell);
 
 
-		//Defines vectors to contain valuse for physical parameters
+		//Defines vectors to contain values for physical parameters
 
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -618,16 +635,15 @@ namespace Project_attempt
 		{
 			PointHistory<dim>* local_quadrature_points_history =
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-			Assert(local_quadrature_points_history >=
+			/*Assert(local_quadrature_points_history >=
 				&quadrature_point_history.front(),
 				ExcInternalError());
 			Assert(local_quadrature_points_history <=
 				&quadrature_point_history.back(),
-				ExcInternalError());
+				ExcInternalError());*/
 
 			FF = 0;
 			cell_mass_matrix = 0;
-            cell_pressure_mass_matrix = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
