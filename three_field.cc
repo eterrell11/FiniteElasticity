@@ -174,19 +174,19 @@ namespace Project_attempt
 		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, const double& kappa, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0  * CofactorF/Jf) + (kappa * (Jf - 1) * CofactorF);
+		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (kappa * (Jf - 1) * CofactorF);
 		return strain;
 	}
 
 	template <int dim>
 	inline Tensor<2, dim> //Provides construction of PK1 stress tensor
-		get_pk1_all(Tensor<2,dim> FF, const double mu, const double kappa)
+		get_pk1_all(Tensor<2, dim> FF, const double mu, const double kappa)
 	{
 		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
 		Tensor<2, dim> CofactorF = get_cofactorF(FF, Jf);
 		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, kappa, CofactorF);
-		
+
 		return pk1;
 	}
 
@@ -263,11 +263,11 @@ namespace Project_attempt
 		BlockSparseMatrix<double> constrained_mass_matrix;
 		BlockSparseMatrix<double> unconstrained_mass_matrix;
 
-        
+
 		BlockVector<double> system_rhs;
 
-        BlockVector<double> solution;
-        BlockVector<double> old_solution;
+		BlockVector<double> solution;
+		BlockVector<double> old_solution;
 
 		Vector<double> incremental_displacement;
 
@@ -378,8 +378,8 @@ namespace Project_attempt
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) = -p[1]*rotator;
-		values(1) = p[0]*rotator;
+		values(0) = -p[1] * rotator;
+		values(1) = p[0] * rotator;
 		values(2) = 0;
 
 	}
@@ -401,7 +401,7 @@ namespace Project_attempt
 		: triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
 		, mapping(FE_SimplexP<dim>(1))
-		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim * dim)
+		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
@@ -444,7 +444,8 @@ namespace Project_attempt
 	//Classic grid generating bit. This is where the actual hollowed hemisphere is employed
 	template <int dim>
 	void Inelastic<dim>::create_coarse_grid()
-	{;
+	{
+		;
 		/*if (dim == 3) {
 			const Point<dim> p1( -1, -1, -1 );
 			const Point<dim> p2(1, 1, 1);
@@ -490,22 +491,22 @@ namespace Project_attempt
 
 		dof_handler.distribute_dofs(fe);
 		DoFRenumbering::component_wise(dof_handler);
-        
-        const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-        const unsigned int n_u = dofs_per_component[0],
-                           n_p = dofs_per_component[dim],
-        n_f = dofs_per_component[dim+1];
-        
-        std::cout << "Number of active cells: " << triangulation.n_active_cells() <<std::endl
-        << "Total number of cells: " << triangulation.n_cells()
-        << std::endl
-        << "Number of degrees of freedom: " << dof_handler.n_dofs()
-        << " (" << n_u << '+' << n_p << '+' << n_f << ')'  << std::endl;
 
-        
-       
-        
-        
+		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0],
+			n_p = dofs_per_component[dim],
+			n_f = dofs_per_component[dim + 1];
+
+		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
+			<< "Total number of cells: " << triangulation.n_cells()
+			<< std::endl
+			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
+			<< " (" << n_u << '+' << n_p << '+' << n_f << ')' << std::endl;
+
+
+
+
+
 
 		cout << " I made it this far" << std::endl;
 
@@ -609,8 +610,8 @@ namespace Project_attempt
 
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
-        
-        
+
+
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     cell_rhs(dofs_per_cell);
 
@@ -624,10 +625,10 @@ namespace Project_attempt
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
 		const FEValuesExtractors::Vector Momentum(0);
-        const FEValuesExtractors::Scalar Pressure(dim);
-        const FEValuesExtractors::Tensor<2> Def_Gradient(dim+1);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
-		Tensor<2,dim> FF;
+		Tensor<2, dim> FF;
 		double vectorcounter;
 
 
@@ -647,363 +648,367 @@ namespace Project_attempt
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
-			std::vector<Vector<double>> FF_vec(quadrature_formula.size(), Vector<double> (dim*dim));
-			fe_values.get_function_values(def_gradient, FF_vec);
-			
+			std::vector<Vector<double>> FF_vec(quadrature_formula.size(), Vector<double>(dim * dim));
+			fe_values.get_function_values(solution, sol_vec);
+
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
-			for (const unsigned int i : fe_values.dof_indices())
-			{
-				for (const unsigned int j : fe_values.dof_indices())
-				{
-					for (const unsigned int q_point : fe_values.quadrature_point_indices())
-					{
-
-						cell_mass_matrix(i, j) +=
-							fe_values[Momentum].value(i, q_point) *
-							fe_values[Momentum].value(j, q_point) *
-							fe_values.JxW(q_point);
-                        cell_pressure_mass_matrix(i,j) += 1/kappa *
-                            fe_values[Momentum].value(i, q_point) *
-                            fe_values[Momentum].value(j, q_point) *
-                            fe_values.JxW(q_point);
-					}
-				}
-			}
-			/*	const PointHistory<dim>* local_quadrature_points_data =
-					reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
-
-					//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
-			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
-				vectorcounter = 0;
-				for (const unsigned int q : fe_values.quadrature_point_indices()) {
-					for (const unsigned int i : fe_values.dof_indices()) {
-						for (const unsigned int j : fe_values.dof_indices()) {
-							FF[i][j] = FF_vec[q](vectorcounter);
-							++vectorcounter;
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					for (const unsigned int j : fe_values.dof_indices())
+					{
+						// For all the diagonal mass matrices
+						if ((i < dim && j < dim)) {
+							cell_mass_matrix(i, j) +=
+								fe_values[Momentum].value(i, q_point) *
+								fe_values[Momentum].value(j, q_point) *
+								fe_values.JxW(q_point);
 						}
+						else if (i == dim && j == dim) {
+							cell_mass_matrix(i, j) += 1 / kappa *
+								fe_values[Pressure].value(i, q_point) *
+								fe_values[Pressure].value(j, q_point) *
+								fe_values.JxW(q_point);
+						}
+						else if ((i > dim && j > dim)) { 
+							cell_mass_matrix(i,j) += 
+								fe_values[Def_Gradient].value(i, q_point) *
+								fe_values[Def_Gradient].value(j, q_point) *
+								fe_values.JxW(q_point);
 					}
-				}
-				for (const unsigned int i : fe_values.dof_indices()) {
+
+					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
+
+
+					// NEED TO REDO THESE LINES
 					fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
 					Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
 					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
 						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
-				
+
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 					}
 				}
 			}
-
-
-
-
-			cell->get_dof_indices(local_dof_indices);
-			
-
-			homogeneous_constraints.distribute_local_to_global(
-				cell_mass_matrix,
-				local_dof_indices,
-				constrained_mass_matrix);
-
-			
-
-			//Remove in favor of old fashioned dl2g
-			//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
-			/*MatrixTools::apply_boundary_values(boundary_values,
-				system_matrix, incremental_displacement, momentum_system_rhs,false);*/
-
-
-			unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
-			momentum_system_rhs.add(local_dof_indices, cell_rhs);
 		}
+		/*	const PointHistory<dim>* local_quadrature_points_data =
+				reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
 
-
-		FEValuesExtractors::Scalar x_component(dim - 3);
-		FEValuesExtractors::Scalar y_component(dim - 2);
-		FEValuesExtractors::Scalar z_component(dim - 1);
-
-
-		
-		
-		
-	}
-
-
-	//Assembles system, solves system, updates quad data.
-	template<int dim>
-	void Inelastic<dim>::solve_timestep()
-	{
-		cout << " Assembling system..." << std::flush;
-		assemble_system();
-		cout << "norm of rhs is " << momentum_system_rhs.l2_norm() << std::endl;
-
-		const unsigned int n_iterations = solve();
-		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
-
-		//cout << "  Updating quadrature point data..." << std::flush;
-		//update_quadrature_point_history();
-		cout << std::endl;
-	}
-
-	
-
-	
-
-	//solves system using CG
-	template <int dim>
-	unsigned int Inelastic<dim>::solve()
-	{
-		std::swap(old_momentum, momentum);
-
-		Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
-		/*VectorTools::create_right_hand_side(mapping,
-			dof_handler,
-			QGauss<dim>(fe.degree + 2),
-				momentum_system_rhs,
-				load_vector);*/
-		load_vector = momentum_system_rhs;
-		load_vector *= present_timestep;
-		unconstrained_mass_matrix.vmult_add(load_vector, old_momentum);
-
-		AffineConstraints<double> constraints;
-		dealii::VectorTools::interpolate_boundary_values(dof_handler,
-			4,
-			Functions::ZeroFunction<dim>(dim),
-			constraints);
-		constraints.close();
-
-		auto u_system_operator = linear_operator(unconstrained_mass_matrix);
-		auto setup_constrained_rhs = constrained_right_hand_side(
-			constraints, u_system_operator, load_vector);
-		Vector<double> rhs(dof_handler.n_dofs());
-		setup_constrained_rhs.apply(rhs);
-
-		
-		SolverControl            solver_control(10000000, 1e-16 * momentum_system_rhs.l2_norm());
-		SolverCG<Vector<double>>  solver(solver_control);
-
-		PreconditionJacobi<SparseMatrix<double>> preconditioner;
-		preconditioner.initialize(constrained_mass_matrix, 1.2);
-
-		solver.solve(constrained_mass_matrix,
-			momentum,
-			rhs,
-			preconditioner);
-		constraints.distribute(momentum);
-		Vector<double> dp = momentum - old_momentum;
-		//cout << "change in momentum: " << dp << std::endl;
-
-		return solver_control.last_step();
-	}
-
-	//template<int dim>
-	//void Inelastic<dim>::time_integrator()
-	//{
-	//	//for now, use FE1 integrator, later make it into SSPRK2
-	//	Vector<double> tmp = incremental_displacement + present_timestep * momentum;
-	//	incremental_displacement = 0.5 * ( incremental_displacement +  tmp + present_timestep * momentum ) ;
-	//}
-
-
-	//Spits out solution into vectors then into .vtks
-	template<int dim>
-	void Inelastic<dim>::output_results() const
-	{
-		DataOut<dim> data_out;
-		data_out.attach_dof_handler(dof_handler);
-
-		std::vector<std::string> solution_names;
-		switch (dim)
+				//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
+		for (const unsigned int q_point : fe_values.quadrature_point_indices())
 		{
-		case 1:
-			solution_names.emplace_back("displacement");
-			break;
-		case 2:
-			solution_names.emplace_back("x_displacement");
-			solution_names.emplace_back("y_displacement");
-			break;
-		case 3:
-			solution_names.emplace_back("x_displacement");
-			solution_names.emplace_back("y_displacement");
-			solution_names.emplace_back("z_displacement");
-			break;
-		default:
-			Assert(false, ExcInternalError());
+
 		}
-		data_out.add_data_vector(incremental_displacement, solution_names);
-
-		std::vector<std::string> solution_names2(dim, "momentum");
-		std::vector<DataComponentInterpretation::DataComponentInterpretation>
-			data_component_interpretation(
-				dim, DataComponentInterpretation::component_is_part_of_vector);
-		data_out.add_data_vector(momentum,
-			solution_names2,
-			DataOut<dim>::type_dof_data,
-			data_component_interpretation);
-
-		Vector<double> norm_of_pk1(triangulation.n_active_cells());
-		{
-			for (auto& cell : triangulation.active_cell_iterators()) {
-				Tensor<2, dim> accumulated_stress;
-				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();;
-			}
-		}
-		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-
-		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
-		GridTools::get_subdomain_association(triangulation, partition_int);
 
 
-		//Deals with partitioning data
 
 
-		data_out.build_patches(mapping);
+		cell->get_dof_indices(local_dof_indices);
 
 
-		DataOutBase::VtkFlags vtk_flags;
-		vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
-		data_out.set_flags(vtk_flags);
-		std::ofstream output("output-" + std::to_string(present_time) +".vtu");
-		data_out.write_vtu(output);
-		//DataOutBase::write_pvd_record(pvd_output, times_and_names);
+		homogeneous_constraints.distribute_local_to_global(
+			cell_mass_matrix,
+			local_dof_indices,
+			constrained_mass_matrix);
+
+
+
+		//Remove in favor of old fashioned dl2g
+		//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
+		/*MatrixTools::apply_boundary_values(boundary_values,
+			system_matrix, incremental_displacement, momentum_system_rhs,false);*/
+
+
+		unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
+		momentum_system_rhs.add(local_dof_indices, cell_rhs);
 	}
 
 
+	FEValuesExtractors::Scalar x_component(dim - 3);
+	FEValuesExtractors::Scalar y_component(dim - 2);
+	FEValuesExtractors::Scalar z_component(dim - 1);
 
 
 
-	template <int dim>
-	void Inelastic<dim>::do_timestep()
+
+
+}
+
+
+//Assembles system, solves system, updates quad data.
+template<int dim>
+void Inelastic<dim>::solve_timestep()
+{
+	cout << " Assembling system..." << std::flush;
+	assemble_system();
+	cout << "norm of rhs is " << momentum_system_rhs.l2_norm() << std::endl;
+
+	const unsigned int n_iterations = solve();
+	cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
+
+	//cout << "  Updating quadrature point data..." << std::flush;
+	//update_quadrature_point_history();
+	cout << std::endl;
+}
+
+
+
+
+
+//solves system using CG
+template <int dim>
+unsigned int Inelastic<dim>::solve()
+{
+	std::swap(old_momentum, momentum);
+
+	Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
+	/*VectorTools::create_right_hand_side(mapping,
+		dof_handler,
+		QGauss<dim>(fe.degree + 2),
+			momentum_system_rhs,
+			load_vector);*/
+	load_vector = momentum_system_rhs;
+	load_vector *= present_timestep;
+	unconstrained_mass_matrix.vmult_add(load_vector, old_momentum);
+
+	AffineConstraints<double> constraints;
+	dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		4,
+		Functions::ZeroFunction<dim>(dim),
+		constraints);
+	constraints.close();
+
+	auto u_system_operator = linear_operator(unconstrained_mass_matrix);
+	auto setup_constrained_rhs = constrained_right_hand_side(
+		constraints, u_system_operator, load_vector);
+	Vector<double> rhs(dof_handler.n_dofs());
+	setup_constrained_rhs.apply(rhs);
+
+
+	SolverControl            solver_control(10000000, 1e-16 * momentum_system_rhs.l2_norm());
+	SolverCG<Vector<double>>  solver(solver_control);
+
+	PreconditionJacobi<SparseMatrix<double>> preconditioner;
+	preconditioner.initialize(constrained_mass_matrix, 1.2);
+
+	solver.solve(constrained_mass_matrix,
+		momentum,
+		rhs,
+		preconditioner);
+	constraints.distribute(momentum);
+	Vector<double> dp = momentum - old_momentum;
+	//cout << "change in momentum: " << dp << std::endl;
+
+	return solver_control.last_step();
+}
+
+//template<int dim>
+//void Inelastic<dim>::time_integrator()
+//{
+//	//for now, use FE1 integrator, later make it into SSPRK2
+//	Vector<double> tmp = incremental_displacement + present_timestep * momentum;
+//	incremental_displacement = 0.5 * ( incremental_displacement +  tmp + present_timestep * momentum ) ;
+//}
+
+
+//Spits out solution into vectors then into .vtks
+template<int dim>
+void Inelastic<dim>::output_results() const
+{
+	DataOut<dim> data_out;
+	data_out.attach_dof_handler(dof_handler);
+
+	std::vector<std::string> solution_names;
+	switch (dim)
 	{
-		present_time += present_timestep;
-		++timestep_no;
-		cout << "Timestep " << timestep_no << " at time " << present_time
-			<< std::endl;
-		if (present_time > end_time)
-		{
-			present_timestep -= (present_time - end_time);
-			present_time = end_time;
-		}
-		solve_timestep();
-		//time_integrator();
-		move_mesh();
-		output_results();
-		cout << std::endl;
+	case 1:
+		solution_names.emplace_back("displacement");
+		break;
+	case 2:
+		solution_names.emplace_back("x_displacement");
+		solution_names.emplace_back("y_displacement");
+		break;
+	case 3:
+		solution_names.emplace_back("x_displacement");
+		solution_names.emplace_back("y_displacement");
+		solution_names.emplace_back("z_displacement");
+		break;
+	default:
+		Assert(false, ExcInternalError());
 	}
+	data_out.add_data_vector(incremental_displacement, solution_names);
 
+	std::vector<std::string> solution_names2(dim, "momentum");
+	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+		data_component_interpretation(
+			dim, DataComponentInterpretation::component_is_part_of_vector);
+	data_out.add_data_vector(momentum,
+		solution_names2,
+		DataOut<dim>::type_dof_data,
+		data_component_interpretation);
 
-
-
-	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
-	template< int dim>
-	void Inelastic<dim>::move_mesh()
+	Vector<double> norm_of_pk1(triangulation.n_active_cells());
 	{
-		cout << "    Moving mesh..." << std::endl;
-		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-		for (auto& cell : dof_handler.active_cell_iterators())
-			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-				if (vertex_touched[cell->vertex_index(v)] == false)
-				{
-					vertex_touched[cell->vertex_index(v)] = true;
-					Point<dim> tmp_momentum;
-					Point<dim> tmp_loc = cell->vertex(v);
-					Point<dim> tmp;
-
-					for (unsigned int d = 0; d < dim; ++d) {
-						tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
-						
-						// SSPRK2 in here? 
-						//f^int
-						tmp[d] = tmp_loc[d] +present_timestep * tmp_momentum[d];
-						incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
-						//f^n+1
-					}
-					//cout << "Momentum" <<  tmp_momentum << std::endl;
-					//cout << "f^int" << tmp << std::endl;
-					cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
-
-				}
-
-	}
-
-
-	// This chunk of code allows for communication between current code state and quad point history
-	template<int dim>
-	void Inelastic<dim>::setup_quadrature_point_history()
-	{
-		triangulation.clear_user_data();
-		{
-			std::vector<PointHistory<dim>> tmp;
-			quadrature_point_history.swap(tmp);
+		for (auto& cell : triangulation.active_cell_iterators()) {
+			Tensor<2, dim> accumulated_stress;
+			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+				accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
+			norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();;
 		}
-		quadrature_point_history.resize(triangulation.n_locally_owned_active_cells()
-			* quadrature_formula.size());
-		unsigned int history_index = 0;
-		for (auto& cell : triangulation.active_cell_iterators())
-			if (cell->is_locally_owned())
+	}
+	data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
+
+	std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
+	GridTools::get_subdomain_association(triangulation, partition_int);
+
+
+	//Deals with partitioning data
+
+
+	data_out.build_patches(mapping);
+
+
+	DataOutBase::VtkFlags vtk_flags;
+	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
+	data_out.set_flags(vtk_flags);
+	std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
+	data_out.write_vtu(output);
+	//DataOutBase::write_pvd_record(pvd_output, times_and_names);
+}
+
+
+
+
+
+template <int dim>
+void Inelastic<dim>::do_timestep()
+{
+	present_time += present_timestep;
+	++timestep_no;
+	cout << "Timestep " << timestep_no << " at time " << present_time
+		<< std::endl;
+	if (present_time > end_time)
+	{
+		present_timestep -= (present_time - end_time);
+		present_time = end_time;
+	}
+	solve_timestep();
+	//time_integrator();
+	move_mesh();
+	output_results();
+	cout << std::endl;
+}
+
+
+
+
+// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
+template< int dim>
+void Inelastic<dim>::move_mesh()
+{
+	cout << "    Moving mesh..." << std::endl;
+	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
+	for (auto& cell : dof_handler.active_cell_iterators())
+		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
+			if (vertex_touched[cell->vertex_index(v)] == false)
 			{
-				cell->set_user_pointer(&quadrature_point_history[history_index]);
-				history_index += quadrature_formula.size();
-			}
+				vertex_touched[cell->vertex_index(v)] = true;
+				Point<dim> tmp_momentum;
+				Point<dim> tmp_loc = cell->vertex(v);
+				Point<dim> tmp;
 
-		Assert(history_index == quadrature_point_history.size(),
-			ExcInternalError());
-	}
+				for (unsigned int d = 0; d < dim; ++d) {
+					tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
 
-
-	//Provides an update to the stress tensor using previous gradient data. This is mainly used in the RHS of assemble_system
-	/*template<int dim>
-	void Inelastic<dim>::update_quadrature_point_history()
-	{
-		FEValues<dim> fe_values(mapping,
-			fe,
-			quadrature_formula,
-			update_values | update_gradients | update_quadrature_points);
-		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
-			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
-
-
-		for (auto& cell : dof_handler.active_cell_iterators())
-			if (cell->is_locally_owned())
-			{
-				PointHistory<dim>* local_quadrature_points_history =
-					reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-				Assert(local_quadrature_points_history >=
-					&quadrature_point_history.front(),
-					ExcInternalError());
-				Assert(local_quadrature_points_history <=
-					&quadrature_point_history.back(),
-					ExcInternalError());
-
-				fe_values.reinit(cell);
-				fe_values.get_function_gradients(incremental_displacement,
-					displacement_increment_grads);
-
-
-				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-				{
-					const SymmetricTensor<4, dim> stress_strain_tensor =
-						get_stress_strain_tensor<dim>(lambda_values[q], mu_values[q]);
-					const SymmetricTensor<2, dim> new_stress =
-						(local_quadrature_points_history[q].old_stress +
-							(stress_strain_tensor * get_strain(displacement_increment_grads[q])));
-					const Tensor<2, dim> rotation = get_rotation_matrix(displacement_increment_grads[q]);
-
-					const SymmetricTensor<2, dim> rotated_new_stress = symmetrize(transpose(rotation) *
-						static_cast<Tensor<2, dim>>(new_stress) *
-						rotation);
-
-					local_quadrature_points_history[q].old_stress = rotated_new_stress;
-
+					// SSPRK2 in here? 
+					//f^int
+					tmp[d] = tmp_loc[d] + present_timestep * tmp_momentum[d];
+					incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
+					//f^n+1
 				}
+				//cout << "Momentum" <<  tmp_momentum << std::endl;
+				//cout << "f^int" << tmp << std::endl;
+				cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
+
 			}
-	}*/
+
+}
+
+
+// This chunk of code allows for communication between current code state and quad point history
+template<int dim>
+void Inelastic<dim>::setup_quadrature_point_history()
+{
+	triangulation.clear_user_data();
+	{
+		std::vector<PointHistory<dim>> tmp;
+		quadrature_point_history.swap(tmp);
+	}
+	quadrature_point_history.resize(triangulation.n_locally_owned_active_cells()
+		* quadrature_formula.size());
+	unsigned int history_index = 0;
+	for (auto& cell : triangulation.active_cell_iterators())
+		if (cell->is_locally_owned())
+		{
+			cell->set_user_pointer(&quadrature_point_history[history_index]);
+			history_index += quadrature_formula.size();
+		}
+
+	Assert(history_index == quadrature_point_history.size(),
+		ExcInternalError());
+}
+
+
+//Provides an update to the stress tensor using previous gradient data. This is mainly used in the RHS of assemble_system
+/*template<int dim>
+void Inelastic<dim>::update_quadrature_point_history()
+{
+	FEValues<dim> fe_values(mapping,
+		fe,
+		quadrature_formula,
+		update_values | update_gradients | update_quadrature_points);
+	std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
+		quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+
+
+	for (auto& cell : dof_handler.active_cell_iterators())
+		if (cell->is_locally_owned())
+		{
+			PointHistory<dim>* local_quadrature_points_history =
+				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+			Assert(local_quadrature_points_history >=
+				&quadrature_point_history.front(),
+				ExcInternalError());
+			Assert(local_quadrature_points_history <=
+				&quadrature_point_history.back(),
+				ExcInternalError());
+
+			fe_values.reinit(cell);
+			fe_values.get_function_gradients(incremental_displacement,
+				displacement_increment_grads);
+
+
+			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+			{
+				const SymmetricTensor<4, dim> stress_strain_tensor =
+					get_stress_strain_tensor<dim>(lambda_values[q], mu_values[q]);
+				const SymmetricTensor<2, dim> new_stress =
+					(local_quadrature_points_history[q].old_stress +
+						(stress_strain_tensor * get_strain(displacement_increment_grads[q])));
+				const Tensor<2, dim> rotation = get_rotation_matrix(displacement_increment_grads[q]);
+
+				const SymmetricTensor<2, dim> rotated_new_stress = symmetrize(transpose(rotation) *
+					static_cast<Tensor<2, dim>>(new_stress) *
+					rotation);
+
+				local_quadrature_points_history[q].old_stress = rotated_new_stress;
+
+			}
+		}
+}*/
 }
 
 
