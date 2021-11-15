@@ -362,7 +362,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim)
-		, velocity(0.5)
+		, velocity(0.1)
 	{}
 
 	template <int dim>
@@ -370,7 +370,7 @@ namespace Project_attempt
 		InitialMomentum<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
-		Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+		Assert(values.size() == (dim+dim*dim+1), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
 		double rotator = velocity * std::sin(p[2] * M_PI / (4));
@@ -380,8 +380,9 @@ namespace Project_attempt
 		//std::cout << " Rotated Point: " << pnew << std::endl;
 		values(0) = -p[1] * rotator;
 		values(1) = p[0] * rotator;
-		values(2) = 0;
-
+		values(4) = 1;
+		values(8) = 1;
+		values(12) = 1;
 	}
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
@@ -511,7 +512,7 @@ namespace Project_attempt
 		cout << " I made it this far" << std::endl;
 
 		cout << " Applying initial momentum" << std::endl;
-		//VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), momentum);
+		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), solution);
 
 
 		homogeneous_constraints.clear();
@@ -594,7 +595,7 @@ namespace Project_attempt
 	template <int dim>
 	void Inelastic<dim>::assemble_system()
 	{
-		momentum_system_rhs = 0;
+		system_rhs = 0;
 		//constrained_mass_matrix = 0;
 
 		FEValues<dim> fe_values(mapping,
@@ -629,8 +630,11 @@ namespace Project_attempt
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
 		Tensor<2, dim> FF;
+		Tensor<2, dim> Cofactor;
+		double Jf;
+		Tensor<2, dim> pk1;
 		double vectorcounter;
-
+		double FF_counter;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -644,17 +648,33 @@ namespace Project_attempt
 				ExcInternalError());*/
 
 			FF = 0;
+			Cofactor = 0;
+			Jf = 0;
+			pk1 = 0;
+
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
+			std::vector<Vector<double>> FF_vec;
 
-			std::vector<Vector<double>> FF_vec(quadrature_formula.size(), Vector<double>(dim * dim));
-			fe_values.get_function_values(solution, sol_vec);
+			fe_values.get_function_values(solution, FF_vec);
 
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
+
+				FF_counter = dim+1;
+				for (unsigned int i = FF_counter; i < fe.dofs_per_cell(); i++) {
+					for (unsigned int j = FF_counter; j < fe.dofs_per_cell(); j++) {
+						FF[i][j] = FF_vec[q_point](FF_counter);
+						++FF_counter;
+					}
+				}
+				Jf = get_Jf(FF);
+				Cofactor = get_cofactorF(FF, Jf);
+				//auto Cofactor_operator = linear_operator(Cofactor);
+				pk1 = get_pk1(FF, mu, Jf, kappa, Cofactor);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					for (const unsigned int j : fe_values.dof_indices())
@@ -670,6 +690,9 @@ namespace Project_attempt
 							cell_mass_matrix(i, j) += 1 / kappa *
 								fe_values[Pressure].value(i, q_point) *
 								fe_values[Pressure].value(j, q_point) *
+								fe_values.JxW(q_point) +
+								scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
+								Cofactor * fe_values[Pressure].gradient(i,q_point)) *
 								fe_values.JxW(q_point);
 						}
 						else if ((i > dim && j > dim)) { 
@@ -683,8 +706,8 @@ namespace Project_attempt
 
 
 					// NEED TO REDO THESE LINES
-					fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
-					Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
+					//fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
+					//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
 					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
 						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
 
@@ -723,7 +746,7 @@ namespace Project_attempt
 
 
 		unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
-		momentum_system_rhs.add(local_dof_indices, cell_rhs);
+		system_rhs.add(local_dof_indices, cell_rhs);
 	}
 
 
@@ -744,7 +767,7 @@ void Inelastic<dim>::solve_timestep()
 {
 	cout << " Assembling system..." << std::flush;
 	assemble_system();
-	cout << "norm of rhs is " << momentum_system_rhs.l2_norm() << std::endl;
+	cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
 
 	const unsigned int n_iterations = solve();
 	cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
@@ -762,7 +785,7 @@ void Inelastic<dim>::solve_timestep()
 template <int dim>
 unsigned int Inelastic<dim>::solve()
 {
-	std::swap(old_momentum, momentum);
+	std::swap(old_solution, solution);
 
 	Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
 	/*VectorTools::create_right_hand_side(mapping,
@@ -770,9 +793,9 @@ unsigned int Inelastic<dim>::solve()
 		QGauss<dim>(fe.degree + 2),
 			momentum_system_rhs,
 			load_vector);*/
-	load_vector = momentum_system_rhs;
+	load_vector = system_rhs;
 	load_vector *= present_timestep;
-	unconstrained_mass_matrix.vmult_add(load_vector, old_momentum);
+	unconstrained_mass_matrix.vmult_add(load_vector, old_solution);
 
 	AffineConstraints<double> constraints;
 	dealii::VectorTools::interpolate_boundary_values(dof_handler,
@@ -788,18 +811,18 @@ unsigned int Inelastic<dim>::solve()
 	setup_constrained_rhs.apply(rhs);
 
 
-	SolverControl            solver_control(10000000, 1e-16 * momentum_system_rhs.l2_norm());
+	SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
 	SolverCG<Vector<double>>  solver(solver_control);
 
 	PreconditionJacobi<SparseMatrix<double>> preconditioner;
 	preconditioner.initialize(constrained_mass_matrix, 1.2);
 
 	solver.solve(constrained_mass_matrix,
-		momentum,
+		solution,
 		rhs,
 		preconditioner);
 	constraints.distribute(momentum);
-	Vector<double> dp = momentum - old_momentum;
+	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
 
 	return solver_control.last_step();
