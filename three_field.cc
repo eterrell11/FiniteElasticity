@@ -721,10 +721,7 @@ namespace Project_attempt
 				reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
 
 				//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
-		for (const unsigned int q_point : fe_values.quadrature_point_indices())
-		{
-
-		}
+		
 
 
 
