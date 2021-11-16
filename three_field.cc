@@ -630,11 +630,13 @@ namespace Project_attempt
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
 		Tensor<2, dim> FF;
+		Vector<double> temp_momentum;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
 		double vectorcounter;
-		double FF_counter;
+		double sol_counter;
+		double 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -651,24 +653,30 @@ namespace Project_attempt
 			Cofactor = 0;
 			Jf = 0;
 			pk1 = 0;
+			temp_momentum = 0;
+			vectorcounter = 0;
 
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
-			std::vector<Vector<double>> FF_vec;
+			std::vector<Vector<double>> sol_vec;
 
-			fe_values.get_function_values(solution, FF_vec);
+			fe_values.get_function_values(solution, sol_vec);
 
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
+				sol_counter = 0;
+				for (unsigned int i = 0; i < dim; i++) {
+					temp_momentum[i] = sol_vec[q_point](sol_counter);
+				}
 
-				FF_counter = dim+1;
-				for (unsigned int i = FF_counter; i < fe.dofs_per_cell(); i++) {
-					for (unsigned int j = FF_counter; j < fe.dofs_per_cell(); j++) {
-						FF[i][j] = FF_vec[q_point](FF_counter);
-						++FF_counter;
+				sol_counter += 1;
+				for (unsigned int i = sol_counter; i < fe.dofs_per_cell(); i++) {
+					for (unsigned int j = sol_counter; j < fe.dofs_per_cell(); j++) {
+						FF[i][j] = sol_vec[q_point](sol_counter);
+						++sol_counter;
 					}
 				}
 				Jf = get_Jf(FF);
@@ -708,9 +716,15 @@ namespace Project_attempt
 					// NEED TO REDO THESE LINES
 					//fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
 					//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
-					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
-						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
-
+					if (i < dim) {
+						cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
+							fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
+					}
+					else if (i > dim) {
+						cell_rhs(i) += temp_momentum[vectorcounter] *
+							fe_values[Def_Gradient].gradient(i, q_point) *
+							fe_values.JxW(q_point);
+					}
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 					}
