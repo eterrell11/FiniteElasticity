@@ -798,6 +798,16 @@ unsigned int Inelastic<dim>::solve()
 {
 	std::swap(old_solution, solution);
 
+	const auto M1 = unconstrained_mass_matrix.block(0, 0);
+	const auto M3 = unconstrained_mass_matrix.block(2, 2);
+
+	const auto u_rhs = system_rhs.block(0);
+	const auto F_rhs = system_rhs.block(2);
+
+	auto& momentum = solution.block(0);
+	auto& def_grad = solution.block(2);
+
+
 	Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
 	/*VectorTools::create_right_hand_side(mapping,
 		dof_handler,
