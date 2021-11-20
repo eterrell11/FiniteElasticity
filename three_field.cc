@@ -636,7 +636,6 @@ namespace Project_attempt
 		Tensor<2, dim> pk1;
 		double vectorcounter;
 		double sol_counter;
-		double 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -662,7 +661,7 @@ namespace Project_attempt
 			std::vector<Vector<double>> sol_vec;
 
 			fe_values.get_function_values(solution, sol_vec);
-
+			int dpc = fe.dofs_per_cell();
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
@@ -673,8 +672,9 @@ namespace Project_attempt
 				}
 
 				sol_counter += 1;
-				for (unsigned int i = sol_counter; i < fe.dofs_per_cell(); i++) {
-					for (unsigned int j = sol_counter; j < fe.dofs_per_cell(); j++) {
+				unsigned int fixed_sol_counter = sol_counter;
+				for (unsigned int i = fixed_sol_counter; i < dpc; i++) {
+					for (unsigned int j = fixed_sol_counter; j < dpc; j++) {
 						FF[i][j] = sol_vec[q_point](sol_counter);
 						++sol_counter;
 					}
@@ -798,25 +798,34 @@ unsigned int Inelastic<dim>::solve()
 {
 	std::swap(old_solution, solution);
 
-	const auto M1 = unconstrained_mass_matrix.block(0, 0);
-	const auto M3 = unconstrained_mass_matrix.block(2, 2);
+	const auto un_M0 = unconstrained_mass_matrix.block(0, 0);
+	const auto op_M0 = linear_operator(un_M0);
+	const auto un_M2 = unconstrained_mass_matrix.block(2, 2);
+	const auto op_M2 = linear_operator(un_M2);
 
-	const auto u_rhs = system_rhs.block(0);
-	const auto F_rhs = system_rhs.block(2);
+	const auto M0 = constrained_mass_matrix.block(0, 0);
+	const auto M2 = constrained_mass_matrix.block(2, 2);
+
+	 auto un_u_rhs = system_rhs.block(0);
+	 auto un_F_rhs = system_rhs.block(2);
 
 	auto& momentum = solution.block(0);
 	auto& def_grad = solution.block(2);
 
+	const auto old_momentum = old_solution.block(0);
+	const auto old_def_grad = old_solution.block(2);
 
-	Vector<double> load_vector(dof_handler.n_dofs()); // storage for unconstrained RHS
-	/*VectorTools::create_right_hand_side(mapping,
-		dof_handler,
-		QGauss<dim>(fe.degree + 2),
-			momentum_system_rhs,
-			load_vector);*/
-	load_vector = system_rhs;
-	load_vector *= present_timestep;
-	unconstrained_mass_matrix.vmult_add(load_vector, old_solution);
+	Vector<double> old_solution_vec;
+	old_solution_vec = old_solution;
+
+	// M * _^{n+1} = dt * RHS + M * _^n
+	//Scale by time step size
+	un_u_rhs *= present_timestep;
+	un_F_rhs *= present_timestep;
+
+	// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
+	un_u_rhs += op_M0 * old_momentum;
+	un_F_rhs += op_M2 * old_def_grad;
 
 	AffineConstraints<double> constraints;
 	dealii::VectorTools::interpolate_boundary_values(dof_handler,
@@ -825,26 +834,43 @@ unsigned int Inelastic<dim>::solve()
 		constraints);
 	constraints.close();
 
-	auto u_system_operator = linear_operator(unconstrained_mass_matrix);
-	auto setup_constrained_rhs = constrained_right_hand_side(
-		constraints, u_system_operator, load_vector);
-	Vector<double> rhs(dof_handler.n_dofs());
-	setup_constrained_rhs.apply(rhs);
+	auto setup_constrained_u_rhs = constrained_right_hand_side(
+		constraints, op_M0, un_u_rhs);
+	auto setup_constrained_F_rhs = constrained_right_hand_side(
+		constraints, op_M2, un_F_rhs);
+
+	const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+	const unsigned int n_u = dofs_per_component[0],
+					   n_F = dofs_per_component[dim + 1];
+
+	Vector<double> u_rhs(n_u);
+	setup_constrained_u_rhs.apply(u_rhs);
+	Vector<double> F_rhs(n_F);
+	setup_constrained_u_rhs.apply(F_rhs);
 
 
 	SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
 	SolverCG<Vector<double>>  solver(solver_control);
 
-	PreconditionJacobi<SparseMatrix<double>> preconditioner;
-	preconditioner.initialize(constrained_mass_matrix, 1.2);
+	PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
+	u_preconditioner.initialize(M0, 1.2);
 
-	solver.solve(constrained_mass_matrix,
-		solution,
-		rhs,
-		preconditioner);
+	PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
+	F_preconditioner.initialize(M2, 1.2);
+
+	solver.solve(M0,
+		momentum,
+		u_rhs,
+		u_preconditioner);
 	constraints.distribute(momentum);
 	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
+
+	solver.solve(M2,
+		def_grad,
+		F_rhs,
+		F_preconditioner);
+	constraints.distribute(def_grad);
 
 	return solver_control.last_step();
 }
@@ -864,7 +890,7 @@ void Inelastic<dim>::output_results() const
 {
 	DataOut<dim> data_out;
 	data_out.attach_dof_handler(dof_handler);
-
+	auto momentum = solution.block(0);
 	std::vector<std::string> solution_names;
 	switch (dim)
 	{
@@ -953,6 +979,8 @@ void Inelastic<dim>::do_timestep()
 template< int dim>
 void Inelastic<dim>::move_mesh()
 {
+	auto momentum = solution.block(0);
+
 	cout << "    Moving mesh..." << std::endl;
 	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
 	for (auto& cell : dof_handler.active_cell_iterators())
