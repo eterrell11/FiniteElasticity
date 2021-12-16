@@ -361,7 +361,7 @@ namespace Project_attempt
 
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
-		: Function<dim>(dim)
+		: Function<dim>(dim+dim*dim+1)
 		, velocity(0.1)
 	{}
 
@@ -390,8 +390,7 @@ namespace Project_attempt
 		std::vector<Vector<double>>& value_list) const
 	{
 		const unsigned int n_points = points.size();
-		Assert(value_list.size() == n_points,
-			ExcDimensionMismatch(value_list.size(), n_points));
+		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 		for (unsigned int p = 0; p < n_points; ++p)
 			InitialMomentum<dim>::vector_value(points[p], value_list[p]);
 	}
@@ -493,10 +492,11 @@ namespace Project_attempt
 		dof_handler.distribute_dofs(fe);
 		DoFRenumbering::component_wise(dof_handler);
 
-		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0],
+		const std::vector<types::global_dof_index> dofs_per_component =
+			DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim,
 			n_p = dofs_per_component[dim],
-			n_f = dofs_per_component[dim + 1];
+			n_f = dofs_per_component[dim + 1] * dim*dim;
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
@@ -509,22 +509,20 @@ namespace Project_attempt
 
 
 
-		cout << " I made it this far" << std::endl;
 
-		cout << " Applying initial momentum" << std::endl;
-		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), solution);
-
-
+		
+		std::cout << "Setting up zero boundary conditions" << std::endl;
 		homogeneous_constraints.clear();
 		VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim),
+			Functions::ZeroFunction<dim>(dim+1+dim*dim),
 			homogeneous_constraints); //Establishes zero BCs, 
 		DoFTools::make_hanging_node_constraints(dof_handler,
 			homogeneous_constraints);
 		homogeneous_constraints.close();
 
+		std::cout << "Setting up block sparsity patterns" << std::endl;
 		//DynamicSparsityPattern dsp_constrained(dof_handler.n_dofs());
 		BlockDynamicSparsityPattern dsp_constrained(3, 3);
 		dsp_constrained.block(0, 0).reinit(n_u, n_u);
@@ -536,6 +534,7 @@ namespace Project_attempt
 		dsp_constrained.block(2, 2).reinit(n_f, n_f);
 		dsp_constrained.block(1, 2).reinit(n_p, n_f);
 		dsp_constrained.block(2, 1).reinit(n_f, n_p);
+		dsp_constrained.collect_sizes();
 		DoFTools::make_sparsity_pattern(dof_handler,
 			dsp_constrained,
 			homogeneous_constraints,
@@ -559,11 +558,13 @@ namespace Project_attempt
 		dsp_unconstrained.block(2, 2).reinit(n_f, n_f);
 		dsp_unconstrained.block(1, 2).reinit(n_p, n_f);
 		dsp_unconstrained.block(2, 1).reinit(n_f, n_p);
+		dsp_unconstrained.collect_sizes();
 		DoFTools::make_sparsity_pattern(dof_handler, dsp_unconstrained);
 		unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
 		unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
 
 
+		std::cout << "Setting up block vectors patterns" << std::endl;
 
 		solution.reinit(3);
 		solution.block(0).reinit(n_u);
@@ -583,7 +584,8 @@ namespace Project_attempt
 		system_rhs.block(2).reinit(n_f);
 		system_rhs.collect_sizes();
 
-
+		cout << " Applying initial conditions" << std::endl;
+		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), solution);
 
 
 		//No longer need to pass matrices and vectors through MPI communication object
@@ -606,6 +608,11 @@ namespace Project_attempt
 			update_quadrature_points |
 			update_JxW_values);
 
+		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim+1+dim*dim));
+
+		const unsigned int dpc = fe.dofs_per_cell;
+
+
 		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
 			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
 
@@ -625,12 +632,14 @@ namespace Project_attempt
 		RightHandSide<dim> right_hand_side;
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
+
 		const FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
+
 		Tensor<2, dim> FF;
-		Vector<double> temp_momentum;
+		Vector<double> temp_momentum(dim);
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
@@ -658,27 +667,32 @@ namespace Project_attempt
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
-			std::vector<Vector<double>> sol_vec;
 
 			fe_values.get_function_values(solution, sol_vec);
-			int dpc = fe.dofs_per_cell();
+
 
 			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
+
 				sol_counter = 0;
 				for (unsigned int i = 0; i < dim; i++) {
+
 					temp_momentum[i] = sol_vec[q_point](sol_counter);
+
+					++sol_counter;
 				}
 
-				sol_counter += 1;
-				unsigned int fixed_sol_counter = sol_counter;
-				for (unsigned int i = fixed_sol_counter; i < dpc; i++) {
-					for (unsigned int j = fixed_sol_counter; j < dpc; j++) {
+				sol_counter += 1; //Add one to skip over pressure
+
+				// unsigned int fixed_sol_counter = sol_counter;
+				for (unsigned int i = 0; i < dim; i++) {
+					for (unsigned int j = 0; j < dim; j++) {
 						FF[i][j] = sol_vec[q_point](sol_counter);
 						++sol_counter;
 					}
 				}
+
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
 				//auto Cofactor_operator = linear_operator(Cofactor);
@@ -693,6 +707,7 @@ namespace Project_attempt
 								fe_values[Momentum].value(i, q_point) *
 								fe_values[Momentum].value(j, q_point) *
 								fe_values.JxW(q_point);
+
 						}
 						else if (i == dim && j == dim) {
 							cell_mass_matrix(i, j) += 1 / kappa *
@@ -700,13 +715,13 @@ namespace Project_attempt
 								fe_values[Pressure].value(j, q_point) *
 								fe_values.JxW(q_point) +
 								scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
-								Cofactor * fe_values[Pressure].gradient(i,q_point)) *
+								Cofactor * fe_values[Pressure].gradient(j,q_point)) *
 								fe_values.JxW(q_point);
 						}
-						else if ((i > dim && j > dim)) { 
-							cell_mass_matrix(i,j) += 
-								fe_values[Def_Gradient].value(i, q_point) *
-								fe_values[Def_Gradient].value(j, q_point) *
+						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
+							cell_mass_matrix(i,j) += scalar_product(
+								fe_values[Def_Gradient].value(i, q_point),
+								fe_values[Def_Gradient].value(j, q_point)) *
 								fe_values.JxW(q_point);
 					}
 
@@ -721,9 +736,10 @@ namespace Project_attempt
 							fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
 					}
 					else if (i > dim) {
-						cell_rhs(i) += temp_momentum[vectorcounter] *
+						cell_rhs(i) += /*temp_momentum[vectorcounter] *
 							fe_values[Def_Gradient].gradient(i, q_point) *
-							fe_values.JxW(q_point);
+							fe_values.JxW(q_point);*/
+							0;
 					}
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
@@ -754,9 +770,12 @@ namespace Project_attempt
 		//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
 		/*MatrixTools::apply_boundary_values(boundary_values,
 			system_matrix, incremental_displacement, momentum_system_rhs,false);*/
-
-
-		unconstrained_mass_matrix.add(local_dof_indices, cell_mass_matrix);
+		for (unsigned int i = 0; i < dpc; ++i) {
+			for (unsigned int j = 0; j < dpc; ++j) {
+				unconstrained_mass_matrix.add(local_dof_indices[i],local_dof_indices[j], cell_mass_matrix(i,j));
+			}
+			system_rhs(local_dof_indices[i]) += cell_rhs(i);
+		}
 		system_rhs.add(local_dof_indices, cell_rhs);
 	}
 
@@ -780,6 +799,7 @@ void Inelastic<dim>::solve_timestep()
 	assemble_system();
 	cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
 
+	cout << "Attempting to solve system..." << std::endl;
 	const unsigned int n_iterations = solve();
 	cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
 
@@ -798,16 +818,18 @@ unsigned int Inelastic<dim>::solve()
 {
 	std::swap(old_solution, solution);
 
-	const auto un_M0 = unconstrained_mass_matrix.block(0, 0);
+	const auto &un_M0 = unconstrained_mass_matrix.block(0, 0);
 	const auto op_M0 = linear_operator(un_M0);
-	const auto un_M2 = unconstrained_mass_matrix.block(2, 2);
+	const auto &un_M2 = unconstrained_mass_matrix.block(2, 2);
 	const auto op_M2 = linear_operator(un_M2);
 
-	const auto M0 = constrained_mass_matrix.block(0, 0);
-	const auto M2 = constrained_mass_matrix.block(2, 2);
 
-	 auto un_u_rhs = system_rhs.block(0);
-	 auto un_F_rhs = system_rhs.block(2);
+	const auto &M0 = constrained_mass_matrix.block(0, 0);
+	const auto &M2 = constrained_mass_matrix.block(2, 2);
+
+	 auto &un_u_rhs = system_rhs.block(0);
+	 auto &un_F_rhs = system_rhs.block(2);
+
 
 	auto& momentum = solution.block(0);
 	auto& def_grad = solution.block(2);
@@ -830,9 +852,10 @@ unsigned int Inelastic<dim>::solve()
 	AffineConstraints<double> constraints;
 	dealii::VectorTools::interpolate_boundary_values(dof_handler,
 		4,
-		Functions::ZeroFunction<dim>(dim),
+		Functions::ZeroFunction<dim>(dim+1+dim*dim),
 		constraints);
 	constraints.close();
+
 
 	auto setup_constrained_u_rhs = constrained_right_hand_side(
 		constraints, op_M0, un_u_rhs);
@@ -840,13 +863,20 @@ unsigned int Inelastic<dim>::solve()
 		constraints, op_M2, un_F_rhs);
 
 	const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-	const unsigned int n_u = dofs_per_component[0],
-					   n_F = dofs_per_component[dim + 1];
+	const unsigned int n_u = dofs_per_component[0] * dim,
+					   n_F = dofs_per_component[dim + 1] * dim * dim;
 
+
+	cout << "this is the problem spot!" << std::endl;
 	Vector<double> u_rhs(n_u);
+	cout << "u_rhs size: " << u_rhs.size() << std::endl;
+	cout << "un_r_rhs size: " << un_u_rhs.size() << std::endl;
 	setup_constrained_u_rhs.apply(u_rhs);
+	cout << "It works now!" << std::endl;
+
 	Vector<double> F_rhs(n_F);
-	setup_constrained_u_rhs.apply(F_rhs);
+	setup_constrained_F_rhs.apply(F_rhs);
+
 
 
 	SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
@@ -871,7 +901,6 @@ unsigned int Inelastic<dim>::solve()
 		F_rhs,
 		F_preconditioner);
 	constraints.distribute(def_grad);
-
 	return solver_control.last_step();
 }
 
