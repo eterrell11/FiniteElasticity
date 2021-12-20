@@ -849,33 +849,46 @@ unsigned int Inelastic<dim>::solve()
 	un_u_rhs += op_M0 * old_momentum;
 	un_F_rhs += op_M2 * old_def_grad;
 
-	AffineConstraints<double> constraints;
+	 FEValuesExtractors::Vector Momentum(0);
+	const FEValuesExtractors::Scalar Pressure(dim);
+	const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+
+	AffineConstraints<double> u_constraints;
 	dealii::VectorTools::interpolate_boundary_values(dof_handler,
 		4,
 		Functions::ZeroFunction<dim>(dim+1+dim*dim),
-		constraints);
-	constraints.close();
+		u_constraints,
+		fe.component_mask(Momentum));
+	u_constraints.close();
 
+	AffineConstraints<double> F_constraints;
+	dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		4,
+		Functions::ZeroFunction<dim>(dim * dim+1+dim),
+		F_constraints,
+		fe.component_mask(Def_Gradient));
+	F_constraints.close();
 
 	auto setup_constrained_u_rhs = constrained_right_hand_side(
-		constraints, op_M0, un_u_rhs);
+		u_constraints, op_M0, un_u_rhs);
 	auto setup_constrained_F_rhs = constrained_right_hand_side(
-		constraints, op_M2, un_F_rhs);
+		F_constraints, op_M2, un_F_rhs);
 
 	const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
 	const unsigned int n_u = dofs_per_component[0] * dim,
 					   n_F = dofs_per_component[dim + 1] * dim * dim;
 
 
-	cout << "this is the problem spot!" << std::endl;
 	Vector<double> u_rhs(n_u);
-	cout << "u_rhs size: " << u_rhs.size() << std::endl;
-	cout << "un_r_rhs size: " << un_u_rhs.size() << std::endl;
 	setup_constrained_u_rhs.apply(u_rhs);
-	cout << "It works now!" << std::endl;
+	cout << "momentum constraints work now!" << std::endl;
 
+	cout << "this is the problem spot!" << std::endl;
 	Vector<double> F_rhs(n_F);
+	cout << "F_rhs size: " << F_rhs.size() << std::endl;
+	cout << "un_F_rhs size: " << un_F_rhs.size() << std::endl;
 	setup_constrained_F_rhs.apply(F_rhs);
+	cout << "Def Grad constraints work now!" << std::endl;
 
 
 
@@ -892,7 +905,8 @@ unsigned int Inelastic<dim>::solve()
 		momentum,
 		u_rhs,
 		u_preconditioner);
-	constraints.distribute(momentum);
+	u_constraints.distribute(momentum);
+	cout << "Intermediate Momentum solved for" << std::endl;
 	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
 
@@ -900,7 +914,8 @@ unsigned int Inelastic<dim>::solve()
 		def_grad,
 		F_rhs,
 		F_preconditioner);
-	constraints.distribute(def_grad);
+	F_constraints.distribute(def_grad);
+	cout << "Deformation Gradient solved for" << std::endl;
 	return solver_control.last_step();
 }
 
