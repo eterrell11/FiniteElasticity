@@ -704,14 +704,14 @@ namespace Project_attempt
 					for (const unsigned int j : fe_values.dof_indices())
 					{
 						// For all the diagonal mass matrices
-						if ((i < dim && j < dim)) {
+//						if ((i < dim && j < dim)) {
 							cell_mass_matrix(i, j) +=
 								fe_values[Momentum].value(i, q_point) *
 								fe_values[Momentum].value(j, q_point) *
 								fe_values.JxW(q_point);
 
-						}
-						else if (i == dim && j == dim) {
+//						}
+//						else if (i == dim && j == dim) {
 							cell_mass_matrix(i, j) += 1 / kappa *
 								fe_values[Pressure].value(i, q_point) *
 								fe_values[Pressure].value(j, q_point) *
@@ -719,13 +719,13 @@ namespace Project_attempt
 								scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
 								Cofactor * fe_values[Pressure].gradient(j,q_point)) *
 								fe_values.JxW(q_point);
-						}
-						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
+//						}
+//						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
 							cell_mass_matrix(i,j) += scalar_product(
 								fe_values[Def_Gradient].value(i, q_point),
 								fe_values[Def_Gradient].value(j, q_point)) *
 								fe_values.JxW(q_point);
-					}
+//					}
 
 					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 
