@@ -381,8 +381,8 @@ namespace Project_attempt
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) = -p[1] * rotator;
-		values(1) = p[0] * rotator;
+		values(0) = 0;//-p[1] * rotator;
+		values(1) = 0;// p[0] * rotator;
 		values(4) = 1;
 		values(8) = 1;
 		values(12) = 1;
@@ -461,9 +461,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 2;
-		repetitions[1] = 2;
-		repetitions[2] = 2;
+		repetitions[0] = 10;
+		repetitions[1] = 10;
+		repetitions[2] = 10;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
 			p1,
@@ -918,13 +918,7 @@ unsigned int Inelastic<dim>::solve()
 	return solver_control.last_step();
 }
 
-//template<int dim>
-//void Inelastic<dim>::time_integrator()
-//{
-//	//for now, use FE1 integrator, later make it into SSPRK2
-//	Vector<double> tmp = incremental_displacement + present_timestep * momentum;
-//	incremental_displacement = 0.5 * ( incremental_displacement +  tmp + present_timestep * momentum ) ;
-//}
+
 
 
 //Spits out solution into vectors then into .vtks
@@ -934,7 +928,11 @@ void Inelastic<dim>::output_results() const
 	DataOut<dim> data_out;
 	data_out.attach_dof_handler(dof_handler);
 	auto momentum = solution.block(0);
-	std::vector<std::string> solution_names;
+
+	// Do I really need a displacement output? I don't think so
+	/*std::vector<std::string> solution_names;
+
+
 	switch (dim)
 	{
 	case 1:
@@ -952,17 +950,42 @@ void Inelastic<dim>::output_results() const
 	default:
 		Assert(false, ExcInternalError());
 	}
-	data_out.add_data_vector(incremental_displacement, solution_names);
+	cout << "I get to here" << std::endl;
 
-	std::vector<std::string> solution_names2(dim, "momentum");
+	data_out.add_data_vector(incremental_displacement, solution_names);
+	cout << "I did not get to here" << std::endl;*/
+
+	std::vector<std::string> solution_names(dim, "momentum");
+	solution_names.emplace_back("pressure");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+	solution_names.emplace_back("F");
+
 	std::vector<DataComponentInterpretation::DataComponentInterpretation>
 		data_component_interpretation(
-			dim, DataComponentInterpretation::component_is_part_of_vector);
-	data_out.add_data_vector(momentum,
-		solution_names2,
+			dim,
+			DataComponentInterpretation::component_is_part_of_vector);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
+
+	data_out.add_data_vector(solution,
+		solution_names,
 		DataOut<dim>::type_dof_data,
 		data_component_interpretation);
-
 	Vector<double> norm_of_pk1(triangulation.n_active_cells());
 	{
 		for (auto& cell : triangulation.active_cell_iterators()) {
