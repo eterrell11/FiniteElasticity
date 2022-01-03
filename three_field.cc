@@ -65,6 +65,9 @@
 #include <deal.II/lac/block_sparse_matrix.h>
 #include <deal.II/lac/block_vector.h>
 
+//For sparse direct solvers
+#include <deal.II/lac/sparse_direct.h>
+
 namespace Project_attempt
 {
 	using namespace dealii;
@@ -458,9 +461,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 5;
-		repetitions[1] = 5;
-		repetitions[2] = 5;
+		repetitions[0] = 2;
+		repetitions[1] = 2;
+		repetitions[2] = 2;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
 			p1,
@@ -676,7 +679,7 @@ namespace Project_attempt
 			{
 
 				sol_counter = 0;
-				for (unsigned int i = 0; i < dim; i++) {
+				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
 					temp_momentum[i] = sol_vec[q_point](sol_counter);
 
@@ -685,9 +688,8 @@ namespace Project_attempt
 
 				sol_counter += 1; //Add one to skip over pressure
 
-				// unsigned int fixed_sol_counter = sol_counter;
 				for (unsigned int i = 0; i < dim; i++) {
-					for (unsigned int j = 0; j < dim; j++) {
+					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
 						FF[i][j] = sol_vec[q_point](sol_counter);
 						++sol_counter;
 					}
@@ -881,30 +883,27 @@ unsigned int Inelastic<dim>::solve()
 
 	Vector<double> u_rhs(n_u);
 	setup_constrained_u_rhs.apply(u_rhs);
-	cout << "momentum constraints work now!" << std::endl;
-
-	cout << "this is the problem spot!" << std::endl;
 	Vector<double> F_rhs(n_F);
-	cout << "F_rhs size: " << F_rhs.size() << std::endl;
-	cout << "un_F_rhs size: " << un_F_rhs.size() << std::endl;
 	setup_constrained_F_rhs.apply(F_rhs);
-	cout << "Def Grad constraints work now!" << std::endl;
 
 
 
 	SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
-	SolverCG<Vector<double>>  solver(solver_control);
+	SolverCG<Vector<double>> solver(solver_control);
 
-	PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
-	u_preconditioner.initialize(M0, 1.2);
+	/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
+	u_preconditioner.initialize(M0, 1.2);*/
 
 	PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 	F_preconditioner.initialize(M2, 1.2);
 
-	solver.solve(M0,
+	SparseDirectUMFPACK M0_direct;
+	M0_direct.initialize(M0); 
+	M0_direct.vmult(momentum, u_rhs);
+	/*solver.solve(M0,
 		momentum,
-		u_rhs,
-		u_preconditioner);
+		u_rhs
+		u_preconditioner);*/
 	u_constraints.distribute(momentum);
 	cout << "Intermediate Momentum solved for" << std::endl;
 	//Vector<double> dp = momentum - old_momentum;
