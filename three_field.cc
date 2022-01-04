@@ -461,8 +461,8 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 10;
-		repetitions[1] = 10;
+		repetitions[0] = 5;
+		repetitions[1] = 5;
 		repetitions[2] = 10;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
@@ -685,7 +685,6 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
-
 				sol_counter += 1; //Add one to skip over pressure
 
 				for (unsigned int i = 0; i < dim; i++) {
@@ -694,7 +693,7 @@ namespace Project_attempt
 						++sol_counter;
 					}
 				}
-
+				//cout << "deformation gradient values : " << FF << std::endl;
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
 				//auto Cofactor_operator = linear_operator(Cofactor);
@@ -705,81 +704,83 @@ namespace Project_attempt
 					{
 						// For all the diagonal mass matrices
 //						if ((i < dim && j < dim)) {
-							cell_mass_matrix(i, j) +=
-								fe_values[Momentum].value(i, q_point) *
-								fe_values[Momentum].value(j, q_point) *
-								fe_values.JxW(q_point);
+						cell_mass_matrix(i, j) +=
+							fe_values[Momentum].value(i, q_point) *
+							fe_values[Momentum].value(j, q_point) *
+							fe_values.JxW(q_point);
 
-//						}
-//						else if (i == dim && j == dim) {
-							cell_mass_matrix(i, j) += 1 / kappa *
-								fe_values[Pressure].value(i, q_point) *
-								fe_values[Pressure].value(j, q_point) *
-								fe_values.JxW(q_point) +
-								scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
-								Cofactor * fe_values[Pressure].gradient(j,q_point)) *
-								fe_values.JxW(q_point);
-//						}
-//						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
-							cell_mass_matrix(i,j) += scalar_product(
-								fe_values[Def_Gradient].value(i, q_point),
-								fe_values[Def_Gradient].value(j, q_point)) *
-								fe_values.JxW(q_point);
-//					}
+						//						}
+						//						else if (i == dim && j == dim) {
+													/*cell_mass_matrix(i, j) += 1 / kappa *
+														fe_values[Pressure].value(i, q_point) *
+														fe_values[Pressure].value(j, q_point) *
+														fe_values.JxW(q_point) +
+														scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
+														Cofactor * fe_values[Pressure].gradient(j,q_point)) *
+														fe_values.JxW(q_point);*/
+														//						}
+														//						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
+																					/*cell_mass_matrix(i,j) += scalar_product(
+																						fe_values[Def_Gradient].value(i, q_point),
+																						fe_values[Def_Gradient].value(j, q_point)) *
+																						fe_values.JxW(q_point);*/
+																						//					}
 
-					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
+						right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 
 
-					// NEED TO REDO THESE LINES
-					//fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
-					//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
-					if (i < dim) {
-						cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
-							fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
+						// NEED TO REDO THESE LINES
+						//fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
+						//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
+
 					}
-					else if (i > dim) {
-						cell_rhs(i) += /*temp_momentum[vectorcounter] *
-							fe_values[Def_Gradient].gradient(i, q_point) *
-							fe_values.JxW(q_point);*/
-							0;
-					}
+					//					if (i < dim) {
+					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
+						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
+					//					}
+					//					else if (i > dim) {
+					cell_rhs(i) += /*temp_momentum[vectorcounter] *
+						fe_values[Def_Gradient].gradient(i, q_point) *
+						fe_values.JxW(q_point);*/
+						0;
+
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 					}
 				}
 			}
-		}
-		/*	const PointHistory<dim>* local_quadrature_points_data =
-				reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
 
-				//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
-		
+			/*	const PointHistory<dim>* local_quadrature_points_data =
+					reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
 
+					//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
 
 
 
-		cell->get_dof_indices(local_dof_indices);
 
 
-		homogeneous_constraints.distribute_local_to_global(
-			cell_mass_matrix,
-			local_dof_indices,
-			constrained_mass_matrix);
+			cell->get_dof_indices(local_dof_indices);
+
+
+			homogeneous_constraints.distribute_local_to_global(
+				cell_mass_matrix,
+				local_dof_indices,
+				constrained_mass_matrix);
 
 
 
-		//Remove in favor of old fashioned dl2g
-		//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
-		/*MatrixTools::apply_boundary_values(boundary_values,
-			system_matrix, incremental_displacement, momentum_system_rhs,false);*/
-		for (unsigned int i = 0; i < dpc; ++i) {
-			for (unsigned int j = 0; j < dpc; ++j) {
-				unconstrained_mass_matrix.add(local_dof_indices[i],local_dof_indices[j], cell_mass_matrix(i,j));
+			//Remove in favor of old fashioned dl2g
+			//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
+			/*MatrixTools::apply_boundary_values(boundary_values,
+				system_matrix, incremental_displacement, momentum_system_rhs,false);*/
+			for (unsigned int i = 0; i < dpc; ++i) {
+				for (unsigned int j = 0; j < dpc; ++j) {
+					unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+				}
+				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
-			system_rhs(local_dof_indices[i]) += cell_rhs(i);
+			system_rhs.add(local_dof_indices, cell_rhs);
 		}
-		system_rhs.add(local_dof_indices, cell_rhs);
-	}
 
 
 	FEValuesExtractors::Scalar x_component(dim - 3);
@@ -790,7 +791,7 @@ namespace Project_attempt
 
 
 
-}
+	}
 
 
 //Assembles system, solves system, updates quad data.
@@ -905,7 +906,6 @@ unsigned int Inelastic<dim>::solve()
 		u_rhs
 		u_preconditioner);*/
 	u_constraints.distribute(momentum);
-	cout << "Intermediate Momentum solved for" << std::endl;
 	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
 
@@ -914,7 +914,6 @@ unsigned int Inelastic<dim>::solve()
 		F_rhs,
 		F_preconditioner);
 	F_constraints.distribute(def_grad);
-	cout << "Deformation Gradient solved for" << std::endl;
 	return solver_control.last_step();
 }
 
@@ -1067,8 +1066,9 @@ void Inelastic<dim>::move_mesh()
 					incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
 					//f^n+1
 				}
-				//cout << "Momentum" <<  tmp_momentum << std::endl;
-				//cout << "f^int" << tmp << std::endl;
+				//cout << "Momentum : " <<  tmp_momentum << std::endl;
+				//cout << "f^int : " << tmp << std::endl;
+				//cout << "difference : " << tmp - tmp_loc << std::endl;
 				cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
 
 			}

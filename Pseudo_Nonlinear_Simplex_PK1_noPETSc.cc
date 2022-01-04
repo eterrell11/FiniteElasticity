@@ -388,8 +388,8 @@ namespace Project_attempt
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) = -p[1]*rotator;
-		values(1) = p[0]*rotator;
+		values(0) = 0; //-p[1]*rotator;
+		values(1) = 0; // p[0] * rotator;
 		values(2) = 0;
 
 	}
@@ -415,7 +415,7 @@ namespace Project_attempt
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
-		, end_time(0.2)
+		, end_time(0.002)
 		, timestep_no(0)
 	{}
 
@@ -467,9 +467,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 10;
-		repetitions[1] = 10;
-		repetitions[2] = 20;
+		repetitions[0] = 5;
+		repetitions[1] = 5;
+		repetitions[2] = 10;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
 			p1,
