@@ -55,6 +55,7 @@
 #include <iomanip>
 
 #include <deal.II/lac/linear_operator.h>
+#include <deal.II/lac/linear_operator_tools.h>
 #include <deal.II/lac/packaged_operation.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
@@ -381,7 +382,7 @@ namespace Project_attempt
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) = 0;//-p[1] * rotator;
+		values(0) = 0;// -p[1] * rotator;
 		values(1) = 0;// p[0] * rotator;
 		values(4) = 1;
 		values(8) = 1;
@@ -507,13 +508,6 @@ namespace Project_attempt
 			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
 			<< " (" << n_u << '+' << n_p << '+' << n_f << ')' << std::endl;
 
-
-
-
-
-
-
-		
 		std::cout << "Setting up zero boundary conditions" << std::endl;
 		homogeneous_constraints.clear();
 		VectorTools::interpolate_boundary_values(mapping,
@@ -640,14 +634,14 @@ namespace Project_attempt
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
-
 		Tensor<2, dim> FF;
 		Tensor<1,dim> temp_momentum;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
-		double vectorcounter;
 		double sol_counter;
+
+		Tensor<3, dim> temp_momentum_tensor;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -665,7 +659,7 @@ namespace Project_attempt
 			Jf = 0;
 			pk1 = 0;
 			temp_momentum = 0;
-			vectorcounter = 0;
+			temp_momentum_tensor = 0;
 
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
@@ -674,7 +668,6 @@ namespace Project_attempt
 			fe_values.get_function_values(solution, sol_vec);
 
 
-			//creates stiffness matrix for solving linearized, isotropic elasticity equation in weak form
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
 
@@ -685,6 +678,13 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
+				//for (int l = 0 : l < dim; l++) {
+				//	for (int m = 0 : m < dim; m++) {
+				//		for (int n = 0 : n < dim; n++) {
+
+				//		}
+				//	}
+				//}
 				sol_counter += 1; //Add one to skip over pressure
 
 				for (unsigned int i = 0; i < dim; i++) {
@@ -708,6 +708,9 @@ namespace Project_attempt
 						cell_mass_matrix(i, j) +=
 							fe_values[Momentum].value(i, q_point) *
 							fe_values[Momentum].value(j, q_point) *
+							fe_values.JxW(q_point)+ scalar_product(
+							fe_values[Def_Gradient].value(i, q_point),
+							fe_values[Def_Gradient].value(j, q_point)) *
 							fe_values.JxW(q_point);
 
 						//						}
@@ -742,8 +745,11 @@ namespace Project_attempt
 //					else if (i>dim)
 //					{
 //						cout << "temporary momentum : " << temp_momentum[i%3] << std::endl;
-						cell_rhs(i) += -temp_momentum[i%3]*
-							fe_values.shape_grad(i, q_point)[i%3] *
+
+
+
+						cell_rhs(i) += -temp_momentum*
+							fe_values[Def_Gradient].divergence(i, q_point) *
 							fe_values.JxW(q_point);
 //					}
 					if (i == 0) {
@@ -752,42 +758,20 @@ namespace Project_attempt
 				}
 			}
 
-			/*	const PointHistory<dim>* local_quadrature_points_data =
-					reinterpret_cast<PointHistory<dim>*>(cell->user_pointer());*/
-
-					//for calculating the RHS with DBC: f_j^K = (f_compj,phi_j)_K - (sigma, epsilon(delta u))_K
-
-
-
-
-
 			cell->get_dof_indices(local_dof_indices);
-
-
 			homogeneous_constraints.distribute_local_to_global(
 				cell_mass_matrix,
 				local_dof_indices,
 				constrained_mass_matrix);
-
-
-
-			//Remove in favor of old fashioned dl2g
-			//VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim), boundary_values);
-			/*MatrixTools::apply_boundary_values(boundary_values,
-				system_matrix, incremental_displacement, momentum_system_rhs,false);*/
 			for (unsigned int i = 0; i < dpc; ++i) {
 				for (unsigned int j = 0; j < dpc; ++j) {
 					unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 				}
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
-			system_rhs.add(local_dof_indices, cell_rhs);
+			//system_rhs.add(local_dof_indices, cell_rhs);
 		}
 
-
-	FEValuesExtractors::Scalar x_component(dim - 3);
-	FEValuesExtractors::Scalar y_component(dim - 2);
-	FEValuesExtractors::Scalar z_component(dim - 1);
 
 
 
@@ -823,17 +807,17 @@ unsigned int Inelastic<dim>::solve()
 {
 	std::swap(old_solution, solution);
 
-	const auto &un_M0 = unconstrained_mass_matrix.block(0, 0);
-	const auto op_M0 = linear_operator(un_M0);
-	const auto &un_M2 = unconstrained_mass_matrix.block(2, 2);
-	const auto op_M2 = linear_operator(un_M2);
+	SparseMatrix<double> &un_M0 = unconstrained_mass_matrix.block(0, 0);
+	const auto op_un_M0 = linear_operator(un_M0);
+	SparseMatrix<double> &un_M2 = unconstrained_mass_matrix.block(2, 2);
+	const auto op_un_M2 = linear_operator(un_M2);
 
 
 	const auto &M0 = constrained_mass_matrix.block(0, 0);
 	const auto &M2 = constrained_mass_matrix.block(2, 2);
 
-	 auto &un_u_rhs = system_rhs.block(0);
-	 auto &un_F_rhs = system_rhs.block(2);
+	Vector<double> un_u_rhs = system_rhs.block(0);
+	Vector<double> un_F_rhs = system_rhs.block(2);
 
 
 	auto& momentum = solution.block(0);
@@ -847,19 +831,19 @@ unsigned int Inelastic<dim>::solve()
 	Vector<double> old_solution_vec;
 	old_solution_vec = old_solution;
 
-	cout << "Old solution that's being used to integrate in time : " << old_def_grad << std::endl;
 
 	// M * _^{n+1} = dt * RHS + M * _^n
-	//Scale by time step size
-	un_u_rhs *= present_timestep;
-	un_F_rhs *= present_timestep;
 
-	cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;;
+	//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
+	//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
 	// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
-	un_u_rhs += op_M0 * old_momentum;
-	un_F_rhs += op_M2 * old_def_grad;
+	un_u_rhs *= present_timestep;
+	un_M0.vmult_add(un_u_rhs, old_momentum);
 
-	cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
+	un_F_rhs *= present_timestep;
+	un_M2.vmult_add(un_F_rhs, old_def_grad);
+
+	//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
 
 
 	 FEValuesExtractors::Vector Momentum(0);
@@ -883,9 +867,10 @@ unsigned int Inelastic<dim>::solve()
 	F_constraints.close();
 
 	auto setup_constrained_u_rhs = constrained_right_hand_side(
-		u_constraints, op_M0, un_u_rhs);
+		u_constraints, op_un_M0, un_u_rhs);
 	auto setup_constrained_F_rhs = constrained_right_hand_side(
-		F_constraints, op_M2, un_F_rhs);
+		F_constraints, op_un_M2, un_F_rhs);
+
 
 	const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
 	const unsigned int n_u = dofs_per_component[0] * dim,
@@ -899,8 +884,7 @@ unsigned int Inelastic<dim>::solve()
 
 
 
-	SolverControl            solver_control(10000000, 1e-16 * system_rhs.l2_norm());
-	SolverCG<Vector<double>> solver(solver_control);
+
 
 	/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
 	u_preconditioner.initialize(M0, 1.2);*/
@@ -908,23 +892,21 @@ unsigned int Inelastic<dim>::solve()
 	PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 	F_preconditioner.initialize(M2, 1.2);
 
+	cout << "Beginning to actually solve" << std::endl;
 	SparseDirectUMFPACK M0_direct;
 	M0_direct.initialize(M0); 
 	M0_direct.vmult(momentum, u_rhs);
-	/*solver.solve(M0,
-		momentum,
-		u_rhs
-		u_preconditioner);*/
 	u_constraints.distribute(momentum);
+	cout << "Momentum is successfully solved for" << std::endl;
+
 	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
-	cout << "Constrained F_rhs : " << F_rhs << std::endl;
-	solver.solve(M2,
-		def_grad,
-		F_rhs,
-		F_preconditioner);
+	SparseDirectUMFPACK M2_direct;
+	M2_direct.initialize(M2);
+	M2_direct.vmult(momentum, u_rhs);
 	F_constraints.distribute(def_grad);
-	return solver_control.last_step();
+	cout << "Def Grad is successfully solved for" << std::endl;
+
 }
 
 
@@ -936,7 +918,6 @@ void Inelastic<dim>::output_results() const
 {
 	DataOut<dim> data_out;
 	data_out.attach_dof_handler(dof_handler);
-	auto momentum = solution.block(0);
 
 	// Do I really need a displacement output? I don't think so
 	/*std::vector<std::string> solution_names;
@@ -976,6 +957,7 @@ void Inelastic<dim>::output_results() const
 	solution_names.emplace_back("F");
 	solution_names.emplace_back("F");
 
+
 	std::vector<DataComponentInterpretation::DataComponentInterpretation>
 		data_component_interpretation(
 			dim,
@@ -991,10 +973,13 @@ void Inelastic<dim>::output_results() const
 	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
 	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
 
+
 	data_out.add_data_vector(solution,
 		solution_names,
 		DataOut<dim>::type_dof_data,
 		data_component_interpretation);
+
+
 	Vector<double> norm_of_pk1(triangulation.n_active_cells());
 	{
 		for (auto& cell : triangulation.active_cell_iterators()) {
@@ -1012,15 +997,17 @@ void Inelastic<dim>::output_results() const
 
 	//Deals with partitioning data
 
-
 	data_out.build_patches(mapping);
-
 
 	DataOutBase::VtkFlags vtk_flags;
 	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
 	data_out.set_flags(vtk_flags);
+	cout << "I got to here" << std::endl;
+
 	std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
 	data_out.write_vtu(output);
+
+
 	//DataOutBase::write_pvd_record(pvd_output, times_and_names);
 }
 
@@ -1082,7 +1069,7 @@ void Inelastic<dim>::move_mesh()
 				cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
 
 			}
-
+	cout << "Mesh was successfully moved " << std::endl;
 }
 
 
