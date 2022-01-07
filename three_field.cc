@@ -461,9 +461,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 5;
-		repetitions[1] = 5;
-		repetitions[2] = 10;
+		repetitions[0] = 2;
+		repetitions[1] = 2;
+		repetitions[2] = 4;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			repetitions,
 			p1,
@@ -642,7 +642,7 @@ namespace Project_attempt
 
 
 		Tensor<2, dim> FF;
-		Vector<double> temp_momentum(dim);
+		Tensor<1,dim> temp_momentum;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
@@ -691,6 +691,7 @@ namespace Project_attempt
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
 						FF[i][j] = sol_vec[q_point](sol_counter);
 						++sol_counter;
+
 					}
 				}
 				//cout << "deformation gradient values : " << FF << std::endl;
@@ -726,7 +727,6 @@ namespace Project_attempt
 																						fe_values.JxW(q_point);*/
 																						//					}
 
-						right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 
 
 						// NEED TO REDO THESE LINES
@@ -734,16 +734,18 @@ namespace Project_attempt
 						//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
 
 					}
-					//					if (i < dim) {
-					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
-						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
-					//					}
-					//					else if (i > dim) {
-					cell_rhs(i) += /*temp_momentum[vectorcounter] *
-						fe_values[Def_Gradient].gradient(i, q_point) *
-						fe_values.JxW(q_point);*/
-						0;
-
+					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
+//					if (i < dim) {
+						cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
+							fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
+//					}
+//					else if (i>dim)
+//					{
+//						cout << "temporary momentum : " << temp_momentum[i%3] << std::endl;
+						cell_rhs(i) += -temp_momentum[i%3]*
+							fe_values.shape_grad(i, q_point)[i%3] *
+							fe_values.JxW(q_point);
+//					}
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 					}
@@ -837,20 +839,28 @@ unsigned int Inelastic<dim>::solve()
 	auto& momentum = solution.block(0);
 	auto& def_grad = solution.block(2);
 
-	const auto old_momentum = old_solution.block(0);
-	const auto old_def_grad = old_solution.block(2);
+	Vector<double> old_momentum;
+	old_momentum = old_solution.block(0);
+	Vector<double> old_def_grad; 
+	old_def_grad = old_solution.block(2);
 
 	Vector<double> old_solution_vec;
 	old_solution_vec = old_solution;
+
+	cout << "Old solution that's being used to integrate in time : " << old_def_grad << std::endl;
 
 	// M * _^{n+1} = dt * RHS + M * _^n
 	//Scale by time step size
 	un_u_rhs *= present_timestep;
 	un_F_rhs *= present_timestep;
 
+	cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;;
 	// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
 	un_u_rhs += op_M0 * old_momentum;
 	un_F_rhs += op_M2 * old_def_grad;
+
+	cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
+
 
 	 FEValuesExtractors::Vector Momentum(0);
 	const FEValuesExtractors::Scalar Pressure(dim);
@@ -908,7 +918,7 @@ unsigned int Inelastic<dim>::solve()
 	u_constraints.distribute(momentum);
 	//Vector<double> dp = momentum - old_momentum;
 	//cout << "change in momentum: " << dp << std::endl;
-
+	cout << "Constrained F_rhs : " << F_rhs << std::endl;
 	solver.solve(M2,
 		def_grad,
 		F_rhs,
