@@ -408,7 +408,7 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.001)
+		, present_timestep(0.0001)
 		, end_time(1)
 		, timestep_no(0)
 	{}
@@ -435,8 +435,8 @@ namespace Project_attempt
 		create_coarse_grid();
 		//cout << "    Number of active cells:       "
 		//<< triangulation.n_active_cells() << std::endl;
-
 		setup_system();
+		output_results();
 
 		//cout << "    Number of degrees of freedom:     " << dof_handler.n_dofs() << std::endl;
 
@@ -461,12 +461,12 @@ namespace Project_attempt
 		const Point<dim> p1(-1, -1, 0);
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
-		std::vector<unsigned int> repetitions(dim);
-		repetitions[0] = 2;
-		repetitions[1] = 2;
-		repetitions[2] = 4;
+		std::vector<unsigned int> refinements(dim);
+		refinements[0] = 10;
+		refinements[1] = 10;
+		refinements[2] = 15;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
-			repetitions,
+			refinements,
 			p1,
 			p2,
 			false);
@@ -706,11 +706,18 @@ namespace Project_attempt
 						// For all the diagonal mass matrices
 //						if ((i < dim && j < dim)) {
 						cell_mass_matrix(i, j) +=
-							fe_values[Momentum].value(i, q_point) *
+							fe_values[Momentum].value(i, q_point) * //Momentum terms
 							fe_values[Momentum].value(j, q_point) *
-							fe_values.JxW(q_point)+ scalar_product(
-							fe_values[Def_Gradient].value(i, q_point),
+							fe_values.JxW(q_point) +
+							scalar_product(fe_values[Def_Gradient].value(i, q_point), //Deformation Gradient terms
 							fe_values[Def_Gradient].value(j, q_point)) *
+							fe_values.JxW(q_point) +
+							1 / kappa * // Pressure terms
+							fe_values[Pressure].value(i, q_point) *
+							fe_values[Pressure].value(j, q_point) *
+							fe_values.JxW(q_point) +
+							scalar_product(Cofactor * fe_values[Pressure].gradient(i, q_point),
+								Cofactor * fe_values[Pressure].gradient(j, q_point)) *
 							fe_values.JxW(q_point);
 
 						//						}
@@ -903,7 +910,7 @@ unsigned int Inelastic<dim>::solve()
 	//cout << "change in momentum: " << dp << std::endl;
 	SparseDirectUMFPACK M2_direct;
 	M2_direct.initialize(M2);
-	M2_direct.vmult(momentum, u_rhs);
+	M2_direct.vmult(def_grad, F_rhs);
 	F_constraints.distribute(def_grad);
 	cout << "Def Grad is successfully solved for" << std::endl;
 
@@ -919,65 +926,40 @@ void Inelastic<dim>::output_results() const
 	DataOut<dim> data_out;
 	data_out.attach_dof_handler(dof_handler);
 
-	// Do I really need a displacement output? I don't think so
-	/*std::vector<std::string> solution_names;
+	Vector<double> Momentum = solution.block(0);
 
 
-	switch (dim)
-	{
-	case 1:
-		solution_names.emplace_back("displacement");
-		break;
-	case 2:
-		solution_names.emplace_back("x_displacement");
-		solution_names.emplace_back("y_displacement");
-		break;
-	case 3:
-		solution_names.emplace_back("x_displacement");
-		solution_names.emplace_back("y_displacement");
-		solution_names.emplace_back("z_displacement");
-		break;
-	default:
-		Assert(false, ExcInternalError());
-	}
-	cout << "I get to here" << std::endl;
 
-	data_out.add_data_vector(incremental_displacement, solution_names);
-	cout << "I did not get to here" << std::endl;*/
-
-	std::vector<std::string> solution_names(dim, "momentum");
-	solution_names.emplace_back("pressure");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-	solution_names.emplace_back("F");
-
-
+	std::vector<std::string> solution_names1(dim, "momentum");
 	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-		data_component_interpretation(
+		interpretation1(
 			dim,
 			DataComponentInterpretation::component_is_part_of_vector);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
-	data_component_interpretation.push_back(DataComponentInterpretation::component_is_part_of_tensor);
 
+
+	std::vector<std::string> solution_names2(1, "pressure");
+	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+		interpretation2(
+			1,
+			DataComponentInterpretation::component_is_scalar);
+
+
+	std::vector<std::string> solution_names3(dim*dim, "deformation_gradient");
+	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+		interpretation3(
+			dim*dim,
+			DataComponentInterpretation::component_is_part_of_tensor);
+
+	solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
+	solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
+
+	interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
+	interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
 
 	data_out.add_data_vector(solution,
-		solution_names,
+		solution_names1,
 		DataOut<dim>::type_dof_data,
-		data_component_interpretation);
+		interpretation1);
 
 
 	Vector<double> norm_of_pk1(triangulation.n_active_cells());
@@ -1002,7 +984,6 @@ void Inelastic<dim>::output_results() const
 	DataOutBase::VtkFlags vtk_flags;
 	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
 	data_out.set_flags(vtk_flags);
-	cout << "I got to here" << std::endl;
 
 	std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
 	data_out.write_vtu(output);
