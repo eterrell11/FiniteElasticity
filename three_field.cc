@@ -231,8 +231,12 @@ namespace Project_attempt
 		void         create_coarse_grid();
 		void         setup_system();
 		void         assemble_system();
+		void		 assemble_pressure_rhs();
+		void		 assemble_momentum_rhs();
 		void         solve_timestep();
-		unsigned int solve();
+		unsigned int solve_mint_F();
+		unsigned int solve_p();
+		unsigned int solve_m();
 		void         output_results() const;
 
 		/* void time_integrator();
@@ -365,7 +369,7 @@ namespace Project_attempt
 
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
-		: Function<dim>(dim+dim*dim+1)
+		: Function<dim>(dim + dim * dim + 1)
 		, velocity(0.1)
 	{}
 
@@ -374,7 +378,7 @@ namespace Project_attempt
 		InitialMomentum<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
-		Assert(values.size() == (dim+dim*dim+1), ExcDimensionMismatch(values.size(), dim));
+		Assert(values.size() == (dim + dim * dim + 1), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
 		double rotator = velocity * std::sin(p[2] * M_PI / (4));
@@ -408,7 +412,7 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.0001)
+		, present_timestep(0.001)
 		, end_time(1)
 		, timestep_no(0)
 	{}
@@ -433,13 +437,8 @@ namespace Project_attempt
 	void Inelastic<dim>::run()
 	{
 		create_coarse_grid();
-		//cout << "    Number of active cells:       "
-		//<< triangulation.n_active_cells() << std::endl;
 		setup_system();
 		output_results();
-
-		//cout << "    Number of degrees of freedom:     " << dof_handler.n_dofs() << std::endl;
-
 		while (present_time < end_time)
 			do_timestep();
 	}
@@ -462,9 +461,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 10;
-		refinements[1] = 10;
-		refinements[2] = 15;
+		refinements[0] = 5;
+		refinements[1] = 5;
+		refinements[2] = 10;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
 			p1,
@@ -500,7 +499,7 @@ namespace Project_attempt
 			DoFTools::count_dofs_per_fe_component(dof_handler);
 		const unsigned int n_u = dofs_per_component[0] * dim,
 			n_p = dofs_per_component[dim],
-			n_f = dofs_per_component[dim + 1] * dim*dim;
+			n_f = dofs_per_component[dim + 1] * dim * dim;
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
@@ -513,7 +512,7 @@ namespace Project_attempt
 		VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim+1+dim*dim),
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
 			homogeneous_constraints); //Establishes zero BCs, 
 		DoFTools::make_hanging_node_constraints(dof_handler,
 			homogeneous_constraints);
@@ -605,7 +604,7 @@ namespace Project_attempt
 			update_quadrature_points |
 			update_JxW_values);
 
-		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim+1+dim*dim));
+		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
 
 		const unsigned int dpc = fe.dofs_per_cell;
 
@@ -635,7 +634,7 @@ namespace Project_attempt
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
 		Tensor<2, dim> FF;
-		Tensor<1,dim> temp_momentum;
+		Tensor<1, dim> temp_momentum;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
@@ -678,13 +677,6 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
-				//for (int l = 0 : l < dim; l++) {
-				//	for (int m = 0 : m < dim; m++) {
-				//		for (int n = 0 : n < dim; n++) {
-
-				//		}
-				//	}
-				//}
 				sol_counter += 1; //Add one to skip over pressure
 
 				for (unsigned int i = 0; i < dim; i++) {
@@ -703,14 +695,12 @@ namespace Project_attempt
 				{
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						// For all the diagonal mass matrices
-//						if ((i < dim && j < dim)) {
 						cell_mass_matrix(i, j) +=
 							fe_values[Momentum].value(i, q_point) * //Momentum terms
 							fe_values[Momentum].value(j, q_point) *
 							fe_values.JxW(q_point) +
 							scalar_product(fe_values[Def_Gradient].value(i, q_point), //Deformation Gradient terms
-							fe_values[Def_Gradient].value(j, q_point)) *
+								fe_values[Def_Gradient].value(j, q_point)) *
 							fe_values.JxW(q_point) +
 							1 / kappa * // Pressure terms
 							fe_values[Pressure].value(i, q_point) *
@@ -719,46 +709,16 @@ namespace Project_attempt
 							scalar_product(Cofactor * fe_values[Pressure].gradient(i, q_point),
 								Cofactor * fe_values[Pressure].gradient(j, q_point)) *
 							fe_values.JxW(q_point);
-
-						//						}
-						//						else if (i == dim && j == dim) {
-													/*cell_mass_matrix(i, j) += 1 / kappa *
-														fe_values[Pressure].value(i, q_point) *
-														fe_values[Pressure].value(j, q_point) *
-														fe_values.JxW(q_point) +
-														scalar_product(Cofactor * fe_values[Pressure].gradient(i,q_point),
-														Cofactor * fe_values[Pressure].gradient(j,q_point)) *
-														fe_values.JxW(q_point);*/
-														//						}
-														//						else if ((i > dim && j > dim)) {  // THIS SECTION NEEDS TO BE REVISED FOR MATHEMATICAL PROPRIETY
-																					/*cell_mass_matrix(i,j) += scalar_product(
-																						fe_values[Def_Gradient].value(i, q_point),
-																						fe_values[Def_Gradient].value(j, q_point)) *
-																						fe_values.JxW(q_point);*/
-																						//					}
-
-
-
-						// NEED TO REDO THESE LINES
-						//fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
-						//Tensor<2, dim> pk1 = get_pk1_all(FF, mu, kappa);
-
 					}
 					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
-//					if (i < dim) {
-						cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
-							fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point);
-//					}
-//					else if (i>dim)
-//					{
-//						cout << "temporary momentum : " << temp_momentum[i%3] << std::endl;
-
-
-
-						cell_rhs(i) += -temp_momentum*
-							fe_values[Def_Gradient].divergence(i, q_point) *
-							fe_values.JxW(q_point);
-//					}
+					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) *
+						fe_values.JxW(q_point) +
+						fe_values[Momentum].value(i, q_point) *
+						rhs_values[q_point] *
+						fe_values.JxW(q_point) +
+						-temp_momentum *
+						fe_values[Def_Gradient].divergence(i, q_point) *
+						fe_values.JxW(q_point);
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 					}
@@ -778,353 +738,351 @@ namespace Project_attempt
 			}
 			//system_rhs.add(local_dof_indices, cell_rhs);
 		}
+	}
+
+
+	//Assembles system, solves system, updates quad data.
+	template<int dim>
+	void Inelastic<dim>::solve_timestep()
+	{
+		cout << " Assembling system..." << std::flush;
+		assemble_system();
+		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve system..." << std::endl;
+		const unsigned int n_iterations = solve_m_F();
+		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
+		assemble_pressure_rhs();
+		const unsigned int n_iterations = solve_p();
+		assemble_momentum_rhs();
+		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
+		const unsigned int n_iterations = solve_m();
+
+		//cout << "  Updating quadrature point data..." << std::flush;
+		//update_quadrature_point_history();
+		cout << std::endl;
+	}
 
 
 
 
 
+	//solves system using CG
+	template <int dim>
+	unsigned int Inelastic<dim>::solve_m_F()
+	{
+		std::swap(old_solution, solution);
+
+		SparseMatrix<double>& un_M0 = unconstrained_mass_matrix.block(0, 0);
+		const auto op_un_M0 = linear_operator(un_M0);
+		SparseMatrix<double>& un_M2 = unconstrained_mass_matrix.block(2, 2);
+		const auto op_un_M2 = linear_operator(un_M2);
+
+
+		const auto& M0 = constrained_mass_matrix.block(0, 0);
+		const auto& M2 = constrained_mass_matrix.block(2, 2);
+
+		Vector<double> un_u_rhs = system_rhs.block(0);
+		Vector<double> un_F_rhs = system_rhs.block(2);
+
+
+		auto& momentum = solution.block(0);
+		auto& def_grad = solution.block(2);
+
+		Vector<double> old_momentum;
+		old_momentum = old_solution.block(0);
+		Vector<double> old_def_grad;
+		old_def_grad = old_solution.block(2);
+
+		Vector<double> old_solution_vec;
+		old_solution_vec = old_solution;
+
+
+		// M * _^{n+1} = dt * RHS + M * _^n
+
+		//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
+		//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
+		// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
+		un_u_rhs *= present_timestep;
+		un_M0.vmult_add(un_u_rhs, old_momentum);
+
+		un_F_rhs *= present_timestep;
+		un_M2.vmult_add(un_F_rhs, old_def_grad);
+
+		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
+
+
+		FEValuesExtractors::Vector Momentum(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+
+		AffineConstraints<double> u_constraints;
+		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			u_constraints,
+			fe.component_mask(Momentum));
+		u_constraints.close();
+
+		AffineConstraints<double> F_constraints;
+		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim * dim + 1 + dim),
+			F_constraints,
+			fe.component_mask(Def_Gradient));
+		F_constraints.close();
+
+		auto setup_constrained_u_rhs = constrained_right_hand_side(
+			u_constraints, op_un_M0, un_u_rhs);
+		auto setup_constrained_F_rhs = constrained_right_hand_side(
+			F_constraints, op_un_M2, un_F_rhs);
+
+
+		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim,
+			n_F = dofs_per_component[dim + 1] * dim * dim;
+
+
+		Vector<double> u_rhs(n_u);
+		setup_constrained_u_rhs.apply(u_rhs);
+		Vector<double> F_rhs(n_F);
+		setup_constrained_F_rhs.apply(F_rhs);
+
+
+
+
+
+		/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
+		u_preconditioner.initialize(M0, 1.2);*/
+
+		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
+		F_preconditioner.initialize(M2, 1.2);
+
+		cout << "Beginning to actually solve" << std::endl;
+		SparseDirectUMFPACK M0_direct;
+		M0_direct.initialize(M0);
+		M0_direct.vmult(momentum, u_rhs);
+		u_constraints.distribute(momentum);
+		cout << "Momentum is successfully solved for" << std::endl;
+
+		//Vector<double> dp = momentum - old_momentum;
+		//cout << "change in momentum: " << dp << std::endl;
+		SparseDirectUMFPACK M2_direct;
+		M2_direct.initialize(M2);
+		M2_direct.vmult(def_grad, F_rhs);
+		F_constraints.distribute(def_grad);
+		cout << "Def Grad is successfully solved for" << std::endl;
 
 	}
 
 
-//Assembles system, solves system, updates quad data.
-template<int dim>
-void Inelastic<dim>::solve_timestep()
-{
-	cout << " Assembling system..." << std::flush;
-	assemble_system();
-	cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
-
-	cout << "Attempting to solve system..." << std::endl;
-	const unsigned int n_iterations = solve();
-	cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
-
-	//cout << "  Updating quadrature point data..." << std::flush;
-	//update_quadrature_point_history();
-	cout << std::endl;
-}
 
 
-
-
-
-//solves system using CG
-template <int dim>
-unsigned int Inelastic<dim>::solve()
-{
-	std::swap(old_solution, solution);
-
-	SparseMatrix<double> &un_M0 = unconstrained_mass_matrix.block(0, 0);
-	const auto op_un_M0 = linear_operator(un_M0);
-	SparseMatrix<double> &un_M2 = unconstrained_mass_matrix.block(2, 2);
-	const auto op_un_M2 = linear_operator(un_M2);
-
-
-	const auto &M0 = constrained_mass_matrix.block(0, 0);
-	const auto &M2 = constrained_mass_matrix.block(2, 2);
-
-	Vector<double> un_u_rhs = system_rhs.block(0);
-	Vector<double> un_F_rhs = system_rhs.block(2);
-
-
-	auto& momentum = solution.block(0);
-	auto& def_grad = solution.block(2);
-
-	Vector<double> old_momentum;
-	old_momentum = old_solution.block(0);
-	Vector<double> old_def_grad; 
-	old_def_grad = old_solution.block(2);
-
-	Vector<double> old_solution_vec;
-	old_solution_vec = old_solution;
-
-
-	// M * _^{n+1} = dt * RHS + M * _^n
-
-	//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
-	//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
-	// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
-	un_u_rhs *= present_timestep;
-	un_M0.vmult_add(un_u_rhs, old_momentum);
-
-	un_F_rhs *= present_timestep;
-	un_M2.vmult_add(un_F_rhs, old_def_grad);
-
-	//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
-
-
-	 FEValuesExtractors::Vector Momentum(0);
-	const FEValuesExtractors::Scalar Pressure(dim);
-	const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
-
-	AffineConstraints<double> u_constraints;
-	dealii::VectorTools::interpolate_boundary_values(dof_handler,
-		4,
-		Functions::ZeroFunction<dim>(dim+1+dim*dim),
-		u_constraints,
-		fe.component_mask(Momentum));
-	u_constraints.close();
-
-	AffineConstraints<double> F_constraints;
-	dealii::VectorTools::interpolate_boundary_values(dof_handler,
-		4,
-		Functions::ZeroFunction<dim>(dim * dim+1+dim),
-		F_constraints,
-		fe.component_mask(Def_Gradient));
-	F_constraints.close();
-
-	auto setup_constrained_u_rhs = constrained_right_hand_side(
-		u_constraints, op_un_M0, un_u_rhs);
-	auto setup_constrained_F_rhs = constrained_right_hand_side(
-		F_constraints, op_un_M2, un_F_rhs);
-
-
-	const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-	const unsigned int n_u = dofs_per_component[0] * dim,
-					   n_F = dofs_per_component[dim + 1] * dim * dim;
-
-
-	Vector<double> u_rhs(n_u);
-	setup_constrained_u_rhs.apply(u_rhs);
-	Vector<double> F_rhs(n_F);
-	setup_constrained_F_rhs.apply(F_rhs);
-
-
-
-
-
-	/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
-	u_preconditioner.initialize(M0, 1.2);*/
-
-	PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
-	F_preconditioner.initialize(M2, 1.2);
-
-	cout << "Beginning to actually solve" << std::endl;
-	SparseDirectUMFPACK M0_direct;
-	M0_direct.initialize(M0); 
-	M0_direct.vmult(momentum, u_rhs);
-	u_constraints.distribute(momentum);
-	cout << "Momentum is successfully solved for" << std::endl;
-
-	//Vector<double> dp = momentum - old_momentum;
-	//cout << "change in momentum: " << dp << std::endl;
-	SparseDirectUMFPACK M2_direct;
-	M2_direct.initialize(M2);
-	M2_direct.vmult(def_grad, F_rhs);
-	F_constraints.distribute(def_grad);
-	cout << "Def Grad is successfully solved for" << std::endl;
-
-}
-
-
-
-
-//Spits out solution into vectors then into .vtks
-template<int dim>
-void Inelastic<dim>::output_results() const
-{
-	DataOut<dim> data_out;
-	data_out.attach_dof_handler(dof_handler);
-
-	Vector<double> Momentum = solution.block(0);
-
-
-
-	std::vector<std::string> solution_names1(dim, "momentum");
-	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-		interpretation1(
-			dim,
-			DataComponentInterpretation::component_is_part_of_vector);
-
-
-	std::vector<std::string> solution_names2(1, "pressure");
-	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-		interpretation2(
-			1,
-			DataComponentInterpretation::component_is_scalar);
-
-
-	std::vector<std::string> solution_names3(dim*dim, "deformation_gradient");
-	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-		interpretation3(
-			dim*dim,
-			DataComponentInterpretation::component_is_part_of_tensor);
-
-	solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
-	solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
-
-	interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
-	interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
-
-	data_out.add_data_vector(solution,
-		solution_names1,
-		DataOut<dim>::type_dof_data,
-		interpretation1);
-
-
-	Vector<double> norm_of_pk1(triangulation.n_active_cells());
+	//Spits out solution into vectors then into .vtks
+	template<int dim>
+	void Inelastic<dim>::output_results() const
 	{
-		for (auto& cell : triangulation.active_cell_iterators()) {
-			Tensor<2, dim> accumulated_stress;
-			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-				accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-			norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();;
+		DataOut<dim> data_out;
+		data_out.attach_dof_handler(dof_handler);
+
+		Vector<double> Momentum = solution.block(0);
+
+
+
+		std::vector<std::string> solution_names1(dim, "momentum");
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>
+			interpretation1(
+				dim,
+				DataComponentInterpretation::component_is_part_of_vector);
+
+
+		std::vector<std::string> solution_names2(1, "pressure");
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>
+			interpretation2(
+				1,
+				DataComponentInterpretation::component_is_scalar);
+
+
+		std::vector<std::string> solution_names3(dim * dim, "deformation_gradient");
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>
+			interpretation3(
+				dim * dim,
+				DataComponentInterpretation::component_is_part_of_tensor);
+
+		solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
+		solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
+
+		interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
+		interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
+
+		data_out.add_data_vector(solution,
+			solution_names1,
+			DataOut<dim>::type_dof_data,
+			interpretation1);
+
+
+		Vector<double> norm_of_pk1(triangulation.n_active_cells());
+		{
+			for (auto& cell : triangulation.active_cell_iterators()) {
+				Tensor<2, dim> accumulated_stress;
+				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
+				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();;
+			}
 		}
+		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
+
+		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
+		GridTools::get_subdomain_association(triangulation, partition_int);
+
+
+		//Deals with partitioning data
+
+		data_out.build_patches(mapping);
+
+		DataOutBase::VtkFlags vtk_flags;
+		vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
+		data_out.set_flags(vtk_flags);
+
+		std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
+		data_out.write_vtu(output);
+
+
+		//DataOutBase::write_pvd_record(pvd_output, times_and_names);
 	}
-	data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-
-	std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
-	GridTools::get_subdomain_association(triangulation, partition_int);
-
-
-	//Deals with partitioning data
-
-	data_out.build_patches(mapping);
-
-	DataOutBase::VtkFlags vtk_flags;
-	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
-	data_out.set_flags(vtk_flags);
-
-	std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
-	data_out.write_vtu(output);
-
-
-	//DataOutBase::write_pvd_record(pvd_output, times_and_names);
-}
 
 
 
 
 
-template <int dim>
-void Inelastic<dim>::do_timestep()
-{
-	present_time += present_timestep;
-	++timestep_no;
-	cout << "Timestep " << timestep_no << " at time " << present_time
-		<< std::endl;
-	if (present_time > end_time)
+	template <int dim>
+	void Inelastic<dim>::do_timestep()
 	{
-		present_timestep -= (present_time - end_time);
-		present_time = end_time;
+		present_time += present_timestep;
+		++timestep_no;
+		cout << "Timestep " << timestep_no << " at time " << present_time
+			<< std::endl;
+		if (present_time > end_time)
+		{
+			present_timestep -= (present_time - end_time);
+			present_time = end_time;
+		}
+		solve_timestep();
+		//time_integrator();
+		move_mesh();
+		output_results();
+		cout << std::endl;
 	}
-	solve_timestep();
-	//time_integrator();
-	move_mesh();
-	output_results();
-	cout << std::endl;
-}
 
 
 
 
-// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
-template< int dim>
-void Inelastic<dim>::move_mesh()
-{
-	auto momentum = solution.block(0);
+	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
+	template< int dim>
+	void Inelastic<dim>::move_mesh()
+	{
+		auto momentum = solution.block(0);
 
-	cout << "    Moving mesh..." << std::endl;
-	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-	for (auto& cell : dof_handler.active_cell_iterators())
-		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-			if (vertex_touched[cell->vertex_index(v)] == false)
-			{
-				vertex_touched[cell->vertex_index(v)] = true;
-				Point<dim> tmp_momentum;
-				Point<dim> tmp_loc = cell->vertex(v);
-				Point<dim> tmp;
+		cout << "    Moving mesh..." << std::endl;
+		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
+		for (auto& cell : dof_handler.active_cell_iterators())
+			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
+				if (vertex_touched[cell->vertex_index(v)] == false)
+				{
+					vertex_touched[cell->vertex_index(v)] = true;
+					Point<dim> tmp_momentum;
+					Point<dim> tmp_loc = cell->vertex(v);
+					Point<dim> tmp;
 
-				for (unsigned int d = 0; d < dim; ++d) {
-					tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
+					for (unsigned int d = 0; d < dim; ++d) {
+						tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
 
-					// SSPRK2 in here? 
-					//f^int
-					tmp[d] = tmp_loc[d] + present_timestep * tmp_momentum[d];
-					incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
-					//f^n+1
+						// SSPRK2 in here? 
+						//f^int
+						tmp[d] = tmp_loc[d] + present_timestep * tmp_momentum[d];
+						incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
+						//f^n+1
+					}
+					//cout << "Momentum : " <<  tmp_momentum << std::endl;
+					//cout << "f^int : " << tmp << std::endl;
+					//cout << "difference : " << tmp - tmp_loc << std::endl;
+					cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
+
 				}
-				//cout << "Momentum : " <<  tmp_momentum << std::endl;
-				//cout << "f^int : " << tmp << std::endl;
-				//cout << "difference : " << tmp - tmp_loc << std::endl;
-				cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
-
-			}
-	cout << "Mesh was successfully moved " << std::endl;
-}
-
-
-// This chunk of code allows for communication between current code state and quad point history
-template<int dim>
-void Inelastic<dim>::setup_quadrature_point_history()
-{
-	triangulation.clear_user_data();
-	{
-		std::vector<PointHistory<dim>> tmp;
-		quadrature_point_history.swap(tmp);
+		cout << "Mesh was successfully moved " << std::endl;
 	}
-	quadrature_point_history.resize(triangulation.n_locally_owned_active_cells()
-		* quadrature_formula.size());
-	unsigned int history_index = 0;
-	for (auto& cell : triangulation.active_cell_iterators())
-		if (cell->is_locally_owned())
+
+
+	// This chunk of code allows for communication between current code state and quad point history
+	template<int dim>
+	void Inelastic<dim>::setup_quadrature_point_history()
+	{
+		triangulation.clear_user_data();
 		{
-			cell->set_user_pointer(&quadrature_point_history[history_index]);
-			history_index += quadrature_formula.size();
+			std::vector<PointHistory<dim>> tmp;
+			quadrature_point_history.swap(tmp);
 		}
-
-	Assert(history_index == quadrature_point_history.size(),
-		ExcInternalError());
-}
-
-
-//Provides an update to the stress tensor using previous gradient data. This is mainly used in the RHS of assemble_system
-/*template<int dim>
-void Inelastic<dim>::update_quadrature_point_history()
-{
-	FEValues<dim> fe_values(mapping,
-		fe,
-		quadrature_formula,
-		update_values | update_gradients | update_quadrature_points);
-	std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
-		quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
-
-
-	for (auto& cell : dof_handler.active_cell_iterators())
-		if (cell->is_locally_owned())
-		{
-			PointHistory<dim>* local_quadrature_points_history =
-				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-			Assert(local_quadrature_points_history >=
-				&quadrature_point_history.front(),
-				ExcInternalError());
-			Assert(local_quadrature_points_history <=
-				&quadrature_point_history.back(),
-				ExcInternalError());
-
-			fe_values.reinit(cell);
-			fe_values.get_function_gradients(incremental_displacement,
-				displacement_increment_grads);
-
-
-			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+		quadrature_point_history.resize(triangulation.n_locally_owned_active_cells()
+			* quadrature_formula.size());
+		unsigned int history_index = 0;
+		for (auto& cell : triangulation.active_cell_iterators())
+			if (cell->is_locally_owned())
 			{
-				const SymmetricTensor<4, dim> stress_strain_tensor =
-					get_stress_strain_tensor<dim>(lambda_values[q], mu_values[q]);
-				const SymmetricTensor<2, dim> new_stress =
-					(local_quadrature_points_history[q].old_stress +
-						(stress_strain_tensor * get_strain(displacement_increment_grads[q])));
-				const Tensor<2, dim> rotation = get_rotation_matrix(displacement_increment_grads[q]);
-
-				const SymmetricTensor<2, dim> rotated_new_stress = symmetrize(transpose(rotation) *
-					static_cast<Tensor<2, dim>>(new_stress) *
-					rotation);
-
-				local_quadrature_points_history[q].old_stress = rotated_new_stress;
-
+				cell->set_user_pointer(&quadrature_point_history[history_index]);
+				history_index += quadrature_formula.size();
 			}
-		}
-}*/
+
+		Assert(history_index == quadrature_point_history.size(),
+			ExcInternalError());
+	}
+
+
+	//Provides an update to the stress tensor using previous gradient data. This is mainly used in the RHS of assemble_system
+	/*template<int dim>
+	void Inelastic<dim>::update_quadrature_point_history()
+	{
+		FEValues<dim> fe_values(mapping,
+			fe,
+			quadrature_formula,
+			update_values | update_gradients | update_quadrature_points);
+		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
+			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+
+
+		for (auto& cell : dof_handler.active_cell_iterators())
+			if (cell->is_locally_owned())
+			{
+				PointHistory<dim>* local_quadrature_points_history =
+					reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+				Assert(local_quadrature_points_history >=
+					&quadrature_point_history.front(),
+					ExcInternalError());
+				Assert(local_quadrature_points_history <=
+					&quadrature_point_history.back(),
+					ExcInternalError());
+
+				fe_values.reinit(cell);
+				fe_values.get_function_gradients(incremental_displacement,
+					displacement_increment_grads);
+
+
+				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+				{
+					const SymmetricTensor<4, dim> stress_strain_tensor =
+						get_stress_strain_tensor<dim>(lambda_values[q], mu_values[q]);
+					const SymmetricTensor<2, dim> new_stress =
+						(local_quadrature_points_history[q].old_stress +
+							(stress_strain_tensor * get_strain(displacement_increment_grads[q])));
+					const Tensor<2, dim> rotation = get_rotation_matrix(displacement_increment_grads[q]);
+
+					const SymmetricTensor<2, dim> rotated_new_stress = symmetrize(transpose(rotation) *
+						static_cast<Tensor<2, dim>>(new_stress) *
+						rotation);
+
+					local_quadrature_points_history[q].old_stress = rotated_new_stress;
+
+				}
+			}
+	}*/
 }
 
 
