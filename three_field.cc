@@ -139,21 +139,6 @@ namespace Project_attempt
 	}
 
 
-	/*template <int dim>
-	Tensor<2, dim>
-		get_FF(const std::vector<Tensor<1, dim>>& grad_p)
-	{
-		Tensor<2, dim> FF;
-		Tensor<2, dim> I = unit_symmetric_tensor<dim>();
-		for (unsigned int i = 0; i < dim; ++i) {
-			for (unsigned int j = 0; j < dim; ++j) {
-				FF[i][j] = I[i][j] + grad_p[i][j];
-			}
-		}
-		return FF;
-	}*/
-
-
 	template< int dim>
 	double get_Jf(Tensor<2, dim>& FF)
 	{
@@ -461,9 +446,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 5;
-		refinements[1] = 5;
-		refinements[2] = 10;
+		refinements[0] = 2;
+		refinements[1] = 2;
+		refinements[2] = 4;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
 			p1,
@@ -640,25 +625,17 @@ namespace Project_attempt
 		Tensor<2, dim> pk1;
 		double sol_counter;
 
-		Tensor<3, dim> temp_momentum_tensor;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			PointHistory<dim>* local_quadrature_points_history =
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-			/*Assert(local_quadrature_points_history >=
-				&quadrature_point_history.front(),
-				ExcInternalError());
-			Assert(local_quadrature_points_history <=
-				&quadrature_point_history.back(),
-				ExcInternalError());*/
 
 			FF = 0;
 			Cofactor = 0;
 			Jf = 0;
 			pk1 = 0;
 			temp_momentum = 0;
-			temp_momentum_tensor = 0;
 
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
@@ -740,6 +717,201 @@ namespace Project_attempt
 		}
 	}
 
+	template <int dim>
+	void Inelastic<dim>::assemble_pressure_rhs()
+	{
+		system_rhs = 0;
+
+		FEValues<dim> fe_values(mapping,
+			fe,
+			quadrature_formula,
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
+
+		const unsigned int dpc = fe.dofs_per_cell;
+
+
+		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
+			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+
+		const unsigned int dofs_per_cell = fe.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula.size();
+
+
+		Vector<double>     cell_rhs(dofs_per_cell);
+
+
+		//Defines vectors to contain values for physical parameters
+
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+
+		Tensor<2, dim> FF;
+		Tensor<1, dim> temp_momentum;
+		Tensor<2, dim> Cofactor;
+		double Jf;
+		double sol_counter;
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			PointHistory<dim>* local_quadrature_points_history =
+				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+
+			FF = 0;
+			Cofactor = 0;
+			Jf = 0;
+			temp_momentum = 0;
+
+			cell_rhs = 0;
+			fe_values.reinit(cell);
+
+			fe_values.get_function_values(solution, sol_vec);
+
+
+			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			{
+
+				sol_counter = 0;
+				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
+
+					temp_momentum[i] = sol_vec[q_point](sol_counter);
+
+					++sol_counter;
+				}
+				sol_counter += 1; //Add one to skip over pressure
+
+				for (unsigned int i = 0; i < dim; i++) {
+					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
+						FF[i][j] = sol_vec[q_point](sol_counter);
+						++sol_counter;
+
+					}
+				}
+				//cout << "deformation gradient values : " << FF << std::endl;
+				Jf = get_Jf(FF);
+				Cofactor = get_cofactorF(FF, Jf);
+				//auto Cofactor_operator = linear_operator(Cofactor);
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					cell_rhs(i) += -scalar_product(temp_momentum *
+						Cofactor,
+						fe_values[Pressure].gradient(i, q_point)) *
+						fe_values.JxW(q_point);
+				}
+			}
+
+			cell->get_dof_indices(local_dof_indices);
+			for (unsigned int i = 0; i < dpc; ++i) {
+				system_rhs(local_dof_indices[i]) += cell_rhs(i);
+			}
+			//system_rhs.add(local_dof_indices, cell_rhs);
+		}
+	}
+
+	template <int dim>
+	void Inelastic<dim>::assemble_momentum_rhs()
+	{
+		system_rhs = 0;
+
+		FEValues<dim> fe_values(mapping,
+			fe,
+			quadrature_formula,
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
+
+		const unsigned int dpc = fe.dofs_per_cell;
+
+
+		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
+			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+
+		const unsigned int dofs_per_cell = fe.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula.size();
+
+
+		Vector<double>     cell_rhs(dofs_per_cell);
+
+
+		//Defines vectors to contain values for physical parameters
+
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+
+		Tensor<2, dim> FF;
+		Tensor<1, dim> temp_momentum;
+		Tensor<2, dim> Cofactor;
+		double Jf;
+		double sol_counter;
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			PointHistory<dim>* local_quadrature_points_history =
+				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+
+			FF = 0;
+			Cofactor = 0;
+			Jf = 0;
+			temp_momentum = 0;
+
+			cell_rhs = 0;
+			fe_values.reinit(cell);
+
+			fe_values.get_function_values(solution, sol_vec);
+
+
+			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			{
+
+				sol_counter = 0;
+				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
+
+					temp_momentum[i] = sol_vec[q_point](sol_counter);
+
+					++sol_counter;
+				}
+				sol_counter += 1; //Add one to skip over pressure
+
+				for (unsigned int i = 0; i < dim; i++) {
+					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
+						FF[i][j] = sol_vec[q_point](sol_counter);
+						++sol_counter;
+
+					}
+				}
+				//cout << "deformation gradient values : " << FF << std::endl;
+				Jf = get_Jf(FF);
+				Cofactor = get_cofactorF(FF, Jf);
+				//auto Cofactor_operator = linear_operator(Cofactor);
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					cell_rhs(i) += 0;
+				}
+			}
+
+			cell->get_dof_indices(local_dof_indices);
+			for (unsigned int i = 0; i < dpc; ++i) {
+				system_rhs(local_dof_indices[i]) += cell_rhs(i);
+			}
+			//system_rhs.add(local_dof_indices, cell_rhs);
+		}
+	}
+
 
 	//Assembles system, solves system, updates quad data.
 	template<int dim>
@@ -749,26 +921,21 @@ namespace Project_attempt
 		assemble_system();
 		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
 		cout << "Attempting to solve system..." << std::endl;
-		const unsigned int n_iterations = solve_m_F();
-		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
+		const unsigned int n_iterations1 = solve_mint_F();
+		cout << "  Solver converged in " << n_iterations1 << " iterations." << std::endl;
 		assemble_pressure_rhs();
-		const unsigned int n_iterations = solve_p();
+		const unsigned int n_iterations2 = solve_p();
 		assemble_momentum_rhs();
-		cout << "  Solver converged in " << n_iterations << " iterations." << std::endl;
-		const unsigned int n_iterations = solve_m();
+		cout << "  Solver converged in " << n_iterations2 << " iterations." << std::endl;
+		const unsigned int n_iterations3 = solve_m();
 
 		//cout << "  Updating quadrature point data..." << std::flush;
 		//update_quadrature_point_history();
-		cout << std::endl;
 	}
-
-
-
-
 
 	//solves system using CG
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_m_F()
+	unsigned int Inelastic<dim>::solve_mint_F()
 	{
 		std::swap(old_solution, solution);
 
@@ -791,10 +958,7 @@ namespace Project_attempt
 		Vector<double> old_momentum;
 		old_momentum = old_solution.block(0);
 		Vector<double> old_def_grad;
-		old_def_grad = old_solution.block(2);
-
-		Vector<double> old_solution_vec;
-		old_solution_vec = old_solution;
+		old_def_grad = old_solution.block(2);;
 
 
 		// M * _^{n+1} = dt * RHS + M * _^n
@@ -838,8 +1002,7 @@ namespace Project_attempt
 
 
 		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim,
-			n_F = dofs_per_component[dim + 1] * dim * dim;
+		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
 
 
 		Vector<double> u_rhs(n_u);
@@ -857,7 +1020,6 @@ namespace Project_attempt
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
 
-		cout << "Beginning to actually solve" << std::endl;
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);
@@ -873,6 +1035,137 @@ namespace Project_attempt
 		cout << "Def Grad is successfully solved for" << std::endl;
 
 	}
+
+	//solves system using CG
+	template <int dim>
+	unsigned int Inelastic<dim>::solve_p()
+	{
+
+		SparseMatrix<double>& un_M1 = unconstrained_mass_matrix.block(1, 1);
+		const auto op_un_M1 = linear_operator(un_M1);;
+
+
+		const auto& M1 = constrained_mass_matrix.block(1, 1);
+
+		Vector<double> un_p_rhs = system_rhs.block(1);
+
+
+		auto& pressure = solution.block(1);
+
+		Vector<double> old_pressure = old_solution.block(1);
+
+
+
+		// M * _^{n+1} = dt * RHS + M * _^n
+
+		//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
+		//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
+		// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
+		un_p_rhs *= present_timestep;
+		un_M1.vmult_add(un_p_rhs, old_pressure);
+
+		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
+
+
+		const FEValuesExtractors::Vector Momentum(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Def_Gradient(dim + 1);
+
+		AffineConstraints<double> p_constraints;
+		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim*dim+1+dim),
+			p_constraints,
+			fe.component_mask(Pressure));
+		p_constraints.close();
+
+
+		auto setup_constrained_p_rhs = constrained_right_hand_side(
+			p_constraints, op_un_M1, un_p_rhs);
+
+
+		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
+
+		cout << "n_p : " << n_p << std::endl;
+		cout << "M1 size : " << un_M1.m() << std::endl;
+
+		Vector<double> p_rhs(n_p);
+		cout << "I got to here" << std::endl;
+		setup_constrained_p_rhs.apply(p_rhs);
+
+		cout << "I got here too" << std::endl;
+		PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
+		p_preconditioner.initialize(M1, 1.2);
+		SparseDirectUMFPACK M1_direct;
+		M1_direct.initialize(M1);
+		M1_direct.vmult(pressure, p_rhs);
+		p_constraints.distribute(pressure);
+		cout << "Pressure is successfully solved for" << std::endl;
+	}
+
+
+	//solves system using CG
+	template <int dim>
+	unsigned int Inelastic<dim>::solve_m()
+	{
+
+		SparseMatrix<double>& un_M0 = unconstrained_mass_matrix.block(0, 0);
+		const auto op_un_M0 = linear_operator(un_M0);
+
+
+		const auto& M0 = constrained_mass_matrix.block(0, 0);
+
+		Vector<double> un_u_rhs = system_rhs.block(0);
+
+
+		auto& momentum = solution.block(0);
+
+
+		Vector<double> old_momentum;
+		old_momentum = solution.block(0);
+
+		un_u_rhs *= present_timestep;
+		un_M0.vmult_add(un_u_rhs, old_momentum);
+
+		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
+
+
+		FEValuesExtractors::Vector Momentum(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+
+		AffineConstraints<double> u_constraints;
+		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			u_constraints,
+			fe.component_mask(Momentum));
+		u_constraints.close();
+
+		auto setup_constrained_u_rhs = constrained_right_hand_side(
+			u_constraints, op_un_M0, un_u_rhs);
+
+
+		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim;
+
+
+		Vector<double> u_rhs(n_u);
+		setup_constrained_u_rhs.apply(u_rhs);
+
+		SparseDirectUMFPACK M0_direct;
+		M0_direct.initialize(M0);
+		M0_direct.vmult(momentum, u_rhs);
+		u_constraints.distribute(momentum);
+		cout << "Final momentum is successfully solved for" << std::endl;
+
+	}
+
+
+	
+
+
 
 
 
