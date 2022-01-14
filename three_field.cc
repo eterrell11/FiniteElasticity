@@ -944,6 +944,28 @@ namespace Project_attempt
 		SparseMatrix<double>& un_M2 = unconstrained_mass_matrix.block(2, 2);
 		const auto op_un_M2 = linear_operator(un_M2);
 
+		/*SparseMatrix<double>& un_M = unconstrained_mass_matrix;
+		const auto op_un_M = linear_operator(un_M);
+		const auto& M = constrained_mass_matrix;
+		Vector<double> un_rhs = system_rhs;
+		auto& sol = solution;
+		Vector<double> old_sol = old_solution;
+
+		un_rhs *= present_timestep;
+		un_M.vmult_add(un_rhs, old_sol);
+
+		AffineConstraints<double> all_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			all_constraints);
+		all_constraints.close();
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			all_constraints, op_un_M, un_rhs);
+		Vector<double> rhs;
+		setup_constrained_rhs.apply(rhs);*/
+
 
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
 		const auto& M2 = constrained_mass_matrix.block(2, 2);
@@ -974,13 +996,20 @@ namespace Project_attempt
 
 		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
 
+		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
+
 
 		FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		std::vector<bool> Def_Gradient(dim*dim+1+dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
+			Def_Gradient[i] = "true";
+		}
 
 		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
 			u_constraints,
@@ -988,12 +1017,15 @@ namespace Project_attempt
 		u_constraints.close();
 
 		AffineConstraints<double> F_constraints;
-		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		F_constraints.shift(n_u + n_p);
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim * dim + 1 + dim),
 			F_constraints,
 			fe.component_mask(Def_Gradient));
 		F_constraints.close();
+
 
 		auto setup_constrained_u_rhs = constrained_right_hand_side(
 			u_constraints, op_un_M0, un_u_rhs);
@@ -1001,14 +1033,19 @@ namespace Project_attempt
 			F_constraints, op_un_M2, un_F_rhs);
 
 
-		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
 
+
+		cout << "Number of momentum constraints : " << u_constraints.n_constraints() << std::endl;
+		cout << "Number of dofs for momentum: " << n_u << std::endl;
+		cout << "Number of def grad constraints : " << F_constraints.n_constraints() << std::endl;
+		cout << "Number of dofs for def grad : " << n_F << std::endl;
 
 		Vector<double> u_rhs(n_u);
 		setup_constrained_u_rhs.apply(u_rhs);
+
 		Vector<double> F_rhs(n_F);
 		setup_constrained_F_rhs.apply(F_rhs);
+		cout << "The problem is no longer here" << std::endl;
 
 
 
@@ -1086,7 +1123,8 @@ namespace Project_attempt
 
 		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
 		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
-
+		
+		cout << "Number of pressure constraints : " << p_constraints.n_constraints() << std::endl;
 		cout << "n_p : " << n_p << std::endl;
 		cout << "M1 size : " << un_M1.m() << std::endl;
 
