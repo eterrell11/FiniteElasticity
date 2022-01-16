@@ -944,12 +944,12 @@ namespace Project_attempt
 		SparseMatrix<double>& un_M2 = unconstrained_mass_matrix.block(2, 2);
 		const auto op_un_M2 = linear_operator(un_M2);
 
-		/*SparseMatrix<double>& un_M = unconstrained_mass_matrix;
-		const auto op_un_M = linear_operator(un_M);
+		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
+		const auto op_un_M = block_operator(un_M);
 		const auto& M = constrained_mass_matrix;
-		Vector<double> un_rhs = system_rhs;
+		BlockVector<double> un_rhs = system_rhs;
 		auto& sol = solution;
-		Vector<double> old_sol = old_solution;
+		BlockVector<double> old_sol = old_solution;
 
 		un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, old_sol);
@@ -963,8 +963,9 @@ namespace Project_attempt
 		all_constraints.close();
 		auto setup_constrained_rhs = constrained_right_hand_side(
 			all_constraints, op_un_M, un_rhs);
-		Vector<double> rhs;
-		setup_constrained_rhs.apply(rhs);*/
+		BlockVector<double> rhs;
+		rhs.reinit(old_sol);
+		setup_constrained_rhs.apply(rhs);
 
 
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
@@ -1017,7 +1018,6 @@ namespace Project_attempt
 		u_constraints.close();
 
 		AffineConstraints<double> F_constraints;
-		F_constraints.shift(n_u + n_p);
 		dealii::VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
@@ -1026,7 +1026,8 @@ namespace Project_attempt
 			fe.component_mask(Def_Gradient));
 		F_constraints.close();
 
-
+		/*cout << "Size of unconstrained F_rhs : " << un_F_rhs.size() << std::endl;
+		cout << "M and N of unconstrained M2 : " << un_M2.m() << " and " << un_M2.n() << std::endl;
 		auto setup_constrained_u_rhs = constrained_right_hand_side(
 			u_constraints, op_un_M0, un_u_rhs);
 		auto setup_constrained_F_rhs = constrained_right_hand_side(
@@ -1044,8 +1045,9 @@ namespace Project_attempt
 		setup_constrained_u_rhs.apply(u_rhs);
 
 		Vector<double> F_rhs(n_F);
+		cout << "Size of F_rhs vector : " << F_rhs.size() << std::endl;
 		setup_constrained_F_rhs.apply(F_rhs);
-		cout << "The problem is no longer here" << std::endl;
+		cout << "The problem is no longer here" << std::endl;*/
 
 
 
@@ -1054,13 +1056,16 @@ namespace Project_attempt
 		/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
 		u_preconditioner.initialize(M0, 1.2);*/
 
+		Vector<double> u_rhs = rhs.block(0);
+		Vector<double> F_rhs = rhs.block(2);
+
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
 
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);
-		u_constraints.distribute(momentum);
+		//u_constraints.distribute(momentum);
 		cout << "Momentum is successfully solved for" << std::endl;
 
 		//Vector<double> dp = momentum - old_momentum;
@@ -1068,7 +1073,8 @@ namespace Project_attempt
 		SparseDirectUMFPACK M2_direct;
 		M2_direct.initialize(M2);
 		M2_direct.vmult(def_grad, F_rhs);
-		F_constraints.distribute(def_grad);
+		//F_constraints.distribute(def_grad);
+		all_constraints.distribute(solution);
 		cout << "Def Grad is successfully solved for" << std::endl;
 
 	}
