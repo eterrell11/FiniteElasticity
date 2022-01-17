@@ -939,10 +939,6 @@ namespace Project_attempt
 	{
 		std::swap(old_solution, solution);
 
-		SparseMatrix<double>& un_M0 = unconstrained_mass_matrix.block(0, 0);
-		const auto op_un_M0 = linear_operator(un_M0);
-		SparseMatrix<double>& un_M2 = unconstrained_mass_matrix.block(2, 2);
-		const auto op_un_M2 = linear_operator(un_M2);
 
 		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
 		const auto op_un_M = block_operator(un_M);
@@ -971,35 +967,9 @@ namespace Project_attempt
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
 		const auto& M2 = constrained_mass_matrix.block(2, 2);
 
-		Vector<double> un_u_rhs = system_rhs.block(0);
-		Vector<double> un_F_rhs = system_rhs.block(2);
-
 
 		auto& momentum = solution.block(0);
 		auto& def_grad = solution.block(2);
-
-		Vector<double> old_momentum;
-		old_momentum = old_solution.block(0);
-		Vector<double> old_def_grad;
-		old_def_grad = old_solution.block(2);;
-
-
-		// M * _^{n+1} = dt * RHS + M * _^n
-
-		//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
-		//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
-		// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
-		un_u_rhs *= present_timestep;
-		un_M0.vmult_add(un_u_rhs, old_momentum);
-
-		un_F_rhs *= present_timestep;
-		un_M2.vmult_add(un_F_rhs, old_def_grad);
-
-		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
-
-		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
-
 
 		FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
@@ -1026,41 +996,8 @@ namespace Project_attempt
 			fe.component_mask(Def_Gradient));
 		F_constraints.close();
 
-		/*cout << "Size of unconstrained F_rhs : " << un_F_rhs.size() << std::endl;
-		cout << "M and N of unconstrained M2 : " << un_M2.m() << " and " << un_M2.n() << std::endl;
-		auto setup_constrained_u_rhs = constrained_right_hand_side(
-			u_constraints, op_un_M0, un_u_rhs);
-		auto setup_constrained_F_rhs = constrained_right_hand_side(
-			F_constraints, op_un_M2, un_F_rhs);
-
-
-
-
-		cout << "Number of momentum constraints : " << u_constraints.n_constraints() << std::endl;
-		cout << "Number of dofs for momentum: " << n_u << std::endl;
-		cout << "Number of def grad constraints : " << F_constraints.n_constraints() << std::endl;
-		cout << "Number of dofs for def grad : " << n_F << std::endl;
-
-		Vector<double> u_rhs(n_u);
-		setup_constrained_u_rhs.apply(u_rhs);
-
-		Vector<double> F_rhs(n_F);
-		cout << "Size of F_rhs vector : " << F_rhs.size() << std::endl;
-		setup_constrained_F_rhs.apply(F_rhs);
-		cout << "The problem is no longer here" << std::endl;*/
-
-
-
-
-
-		/*PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
-		u_preconditioner.initialize(M0, 1.2);*/
-
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
-
-		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
-		F_preconditioner.initialize(M2, 1.2);
 
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
@@ -1079,73 +1016,66 @@ namespace Project_attempt
 
 	}
 
-	//solves system using CG
+	
+
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_p()
 	{
+		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
+		const auto op_un_M = block_operator(un_M);
+		const auto& M = constrained_mass_matrix;
+		BlockVector<double> un_rhs = system_rhs;
+		auto& sol = solution;
+		BlockVector<double> old_sol = old_solution;
 
-		SparseMatrix<double>& un_M1 = unconstrained_mass_matrix.block(1, 1);
-		const auto op_un_M1 = linear_operator(un_M1);;
+		un_rhs *= present_timestep;
+		un_M.vmult_add(un_rhs, old_sol);
+
+		AffineConstraints<double> all_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			all_constraints);
+		all_constraints.close();
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			all_constraints, op_un_M, un_rhs);
+		BlockVector<double> rhs;
+		rhs.reinit(old_sol);
+		setup_constrained_rhs.apply(rhs);
 
 
 		const auto& M1 = constrained_mass_matrix.block(1, 1);
 
-		Vector<double> un_p_rhs = system_rhs.block(1);
-
 
 		auto& pressure = solution.block(1);
 
-		Vector<double> old_pressure = old_solution.block(1);
-
-
-
-		// M * _^{n+1} = dt * RHS + M * _^n
-
-		//cout << "number of nonzero entries in M0 for comparison : " << M0.n_nonzero_elements() << std::endl;
-		//cout << "number of nonzero entries in M2 : " << M2.n_nonzero_elements() << std::endl;
-		// Add on respective mass matrix * old_ momentum to respective unconstrained RHS vector
-		un_p_rhs *= present_timestep;
-		un_M1.vmult_add(un_p_rhs, old_pressure);
-
-		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
-
-
-		const FEValuesExtractors::Vector Momentum(0);
+		FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Vector Def_Gradient(dim + 1);
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
+			Def_Gradient[i] = "true";
+		}
 
-		AffineConstraints<double> p_constraints;
-		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		AffineConstraints<double> u_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim*dim+1+dim),
-			p_constraints,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			u_constraints,
 			fe.component_mask(Pressure));
-		p_constraints.close();
+		u_constraints.close();
 
+		Vector<double> p_rhs = rhs.block(1);
 
-		auto setup_constrained_p_rhs = constrained_right_hand_side(
-			p_constraints, op_un_M1, un_p_rhs);
-
-
-		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim, n_p = dofs_per_component[dim], n_F = dofs_per_component[dim + 1] * dim * dim;
-		
-		cout << "Number of pressure constraints : " << p_constraints.n_constraints() << std::endl;
-		cout << "n_p : " << n_p << std::endl;
-		cout << "M1 size : " << un_M1.m() << std::endl;
-
-		Vector<double> p_rhs(n_p);
-		cout << "I got to here" << std::endl;
-		setup_constrained_p_rhs.apply(p_rhs);
-
-		cout << "I got here too" << std::endl;
-		PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
-		p_preconditioner.initialize(M1, 1.2);
 		SparseDirectUMFPACK M1_direct;
 		M1_direct.initialize(M1);
 		M1_direct.vmult(pressure, p_rhs);
-		p_constraints.distribute(pressure);
+		all_constraints.distribute(solution);
+
 		cout << "Pressure is successfully solved for" << std::endl;
+
+
 	}
 
 
@@ -1153,56 +1083,60 @@ namespace Project_attempt
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_m()
 	{
+		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
+		const auto op_un_M = block_operator(un_M);
+		const auto& M = constrained_mass_matrix;
+		BlockVector<double> un_rhs = system_rhs;
+		auto& sol = solution;
+		BlockVector<double> old_sol = old_solution;
 
-		SparseMatrix<double>& un_M0 = unconstrained_mass_matrix.block(0, 0);
-		const auto op_un_M0 = linear_operator(un_M0);
+		un_rhs *= present_timestep;
+		un_M.vmult_add(un_rhs, old_sol);
+
+		AffineConstraints<double> all_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			all_constraints);
+		all_constraints.close();
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			all_constraints, op_un_M, un_rhs);
+		BlockVector<double> rhs;
+		rhs.reinit(old_sol);
+		setup_constrained_rhs.apply(rhs);
 
 
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
 
-		Vector<double> un_u_rhs = system_rhs.block(0);
-
 
 		auto& momentum = solution.block(0);
 
-
-		Vector<double> old_momentum;
-		old_momentum = solution.block(0);
-
-		un_u_rhs *= present_timestep;
-		un_M0.vmult_add(un_u_rhs, old_momentum);
-
-		//cout << " unconstrained F_rhs: " << un_F_rhs << std::endl;
-
-
 		FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Vector Def_Gradient(dim + 1); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
+			Def_Gradient[i] = "true";
+		}
 
 		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(dof_handler,
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
 			u_constraints,
 			fe.component_mask(Momentum));
 		u_constraints.close();
 
-		auto setup_constrained_u_rhs = constrained_right_hand_side(
-			u_constraints, op_un_M0, un_u_rhs);
-
-
-		const std::vector<types::global_dof_index> dofs_per_component = DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim;
-
-
-		Vector<double> u_rhs(n_u);
-		setup_constrained_u_rhs.apply(u_rhs);
+		Vector<double> u_rhs = rhs.block(0);
 
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);
-		u_constraints.distribute(momentum);
-		cout << "Final momentum is successfully solved for" << std::endl;
+		all_constraints.distribute(solution);
+
+		cout << "Pressure is successfully solved for" << std::endl;
+
 
 	}
 
