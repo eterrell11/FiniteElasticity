@@ -76,7 +76,7 @@ namespace Project_attempt
 	/// <summary>
 	/// SPACE FOR DEFINING GLOBAL VARIABLES. REPLACE WITH "PARAMETERS" ENVIRONMENT
 	/// </summary>
-	static double nu = 0.3;
+	static double nu = 0.4;
 	static double E = 7500;
 
 
@@ -86,6 +86,8 @@ namespace Project_attempt
 	struct PointHistory
 	{
 		Tensor<2, dim> pk1_store;
+		double pressure_store;
+		Tensor<2, dim> Cofactor_store;
 	};
 
 	//Class for defining Kappa
@@ -160,10 +162,10 @@ namespace Project_attempt
 
 	template <int dim>
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
-		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, const double& kappa, Tensor<2, dim>& CofactorF)
+		get_pk1(Tensor<2, dim>& FF, const double& mu,double& Jf, double& pressure, const double& kappa, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (kappa * (Jf - 1) * CofactorF);
+		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (pressure * CofactorF);
 		return strain;
 	}
 
@@ -312,7 +314,6 @@ namespace Project_attempt
 
 	// Creates RHS forcing function that pushes tissue downward depending on its distance from the y-z plane
 	// i.e. "downward" gravitational force applied everywhere except at bottom of hemisphere
-	// Unused in the current code, but could be implemented for gravity, or other currently irrelevant body forces
 	template<int dim>
 	class RightHandSide : public Function<dim>
 	{
@@ -336,8 +337,7 @@ namespace Project_attempt
 	};
 
 
-	// Provides an incremental boundary displacement to faces on the "en-face" margin of the hemisphere.
-	// Simply put, the displacements will split the displacement linearly from p0 to 0 over n timesteps
+	
 	template <int dim>
 	class InitialMomentum : public Function<dim>
 	{
@@ -380,13 +380,31 @@ namespace Project_attempt
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
 		const std::vector<Point<dim>>& points,
-		std::vector<Vector<double>>& value_list) const
+		std::vector<Vector<double>>& value_list) const 
 	{
 		const unsigned int n_points = points.size();
 		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 		for (unsigned int p = 0; p < n_points; ++p)
 			InitialMomentum<dim>::vector_value(points[p], value_list[p]);
 	}
+
+	template <int dim>
+	class Def_Grad_bound : public Function<dim>
+	{
+	public:
+		Def_Grad_bound() : Function<dim>(dim + dim * dim + 1)
+		{}
+		void
+			vector_value(const Point<dim>& p,
+				Vector<double>& values) const override
+		{
+			values = 0;
+			values(4) = 1;
+			values(8) = 1;
+			values(12) = 1;
+		}
+	};
+
 
 
 	template<int dim> // Constructor for the main class, provides values for global variables
@@ -398,17 +416,15 @@ namespace Project_attempt
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
 		, present_timestep(0.001)
-		, end_time(1)
+		, end_time(0.01)
 		, timestep_no(0)
 	{}
 
 	template <int dim>
-	const double Inelastic<dim>::kappa =
-		get_kappa<dim>(E, nu);
+	const double Inelastic<dim>::kappa = get_kappa<dim>(E, nu);
 
 	template <int dim>
-	const double Inelastic<dim>::mu =
-		get_mu<dim>(E, nu);
+	const double Inelastic<dim>::mu = get_mu<dim>(E, nu);
 
 	//This is a destructor.
 	template <int dim>
@@ -446,9 +462,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 2;
-		refinements[1] = 2;
-		refinements[2] = 4;
+		refinements[0] = 3;
+		refinements[1] = 3;
+		refinements[2] = 6;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
 			p1,
@@ -493,14 +509,44 @@ namespace Project_attempt
 			<< " (" << n_u << '+' << n_p << '+' << n_f << ')' << std::endl;
 
 		std::cout << "Setting up zero boundary conditions" << std::endl;
+
+		FEValuesExtractors::Vector Momentum(0);
+		FEValuesExtractors::Scalar Pressure(dim);
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
+			Def_Gradient[i] = "true";
+		}
 		homogeneous_constraints.clear();
-		VectorTools::interpolate_boundary_values(mapping,
+
+		AffineConstraints<double> u_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			homogeneous_constraints); //Establishes zero BCs, 
-		DoFTools::make_hanging_node_constraints(dof_handler,
-			homogeneous_constraints);
+			u_constraints,
+			fe.component_mask(Momentum));
+		u_constraints.close();
+
+		AffineConstraints<double> p_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
+			4,
+			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			p_constraints,
+			fe.component_mask(Pressure));
+		p_constraints.close();
+
+		AffineConstraints<double> F_constraints;
+		dealii::VectorTools::interpolate_boundary_values(mapping,
+			dof_handler,
+			4,
+			Def_Grad_bound<dim>(),
+			F_constraints,
+			fe.component_mask(Def_Gradient));
+		F_constraints.close();
+		homogeneous_constraints.merge(u_constraints);
+		homogeneous_constraints.merge(p_constraints);
+		homogeneous_constraints.merge(F_constraints);
 		homogeneous_constraints.close();
 
 		std::cout << "Setting up block sparsity patterns" << std::endl;
@@ -620,6 +666,7 @@ namespace Project_attempt
 
 		Tensor<2, dim> FF;
 		Tensor<1, dim> temp_momentum;
+		double         temp_pressure;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		Tensor<2, dim> pk1;
@@ -636,6 +683,7 @@ namespace Project_attempt
 			Jf = 0;
 			pk1 = 0;
 			temp_momentum = 0;
+			temp_pressure = 0;
 
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
@@ -654,6 +702,8 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
+
+				temp_pressure = sol_vec[q_point](sol_counter);
 				sol_counter += 1; //Add one to skip over pressure
 
 				for (unsigned int i = 0; i < dim; i++) {
@@ -663,11 +713,12 @@ namespace Project_attempt
 
 					}
 				}
+				
 				//cout << "deformation gradient values : " << FF << std::endl;
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
 				//auto Cofactor_operator = linear_operator(Cofactor);
-				pk1 = get_pk1(FF, mu, Jf, kappa, Cofactor);
+				pk1 = get_pk1(FF, mu, Jf, temp_pressure, kappa, Cofactor);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					for (const unsigned int j : fe_values.dof_indices())
@@ -698,6 +749,8 @@ namespace Project_attempt
 						fe_values.JxW(q_point);
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
+						local_quadrature_points_history[q_point].pressure_store = temp_pressure;
+						local_quadrature_points_history[q_point].Cofactor_store = Cofactor;
 					}
 				}
 			}
@@ -850,13 +903,15 @@ namespace Project_attempt
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
-		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Momentum(0);
 
 		Tensor<2, dim> FF;
 		Tensor<1, dim> temp_momentum;
+		double temp_pressure;
 		Tensor<2, dim> Cofactor;
 		double Jf;
 		double sol_counter;
+		double old_pressure;
 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -866,8 +921,10 @@ namespace Project_attempt
 
 			FF = 0;
 			Cofactor = 0;
-			Jf = 0;
+			//Jf = 0;
 			temp_momentum = 0;
+			temp_pressure = 0;
+			old_pressure = 0;
 
 			cell_rhs = 0;
 			fe_values.reinit(cell);
@@ -877,7 +934,8 @@ namespace Project_attempt
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
-
+				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
+				old_pressure = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].pressure_store;
 				sol_counter = 0;
 				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
@@ -885,6 +943,7 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
+				temp_pressure = sol_vec[q_point](sol_counter);
 				sol_counter += 1; //Add one to skip over pressure
 
 				for (unsigned int i = 0; i < dim; i++) {
@@ -895,12 +954,13 @@ namespace Project_attempt
 					}
 				}
 				//cout << "deformation gradient values : " << FF << std::endl;
-				Jf = get_Jf(FF);
-				Cofactor = get_cofactorF(FF, Jf);
+				/*Jf = get_Jf(FF);
+				Cofactor = get_cofactorF(FF, Jf);*/
 				//auto Cofactor_operator = linear_operator(Cofactor);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_rhs(i) += 0;
+					cell_rhs(i) += -scalar_product((temp_pressure - old_pressure) * Cofactor, fe_values[Momentum].gradient(i, q_point)) *
+						fe_values.JxW(q_point);
 				}
 			}
 
@@ -951,29 +1011,10 @@ namespace Project_attempt
 		un_M.vmult_add(un_rhs, old_sol);
 
 		AffineConstraints<double> all_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping,
-			dof_handler,
-			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			all_constraints);
-		all_constraints.close();
-		auto setup_constrained_rhs = constrained_right_hand_side(
-			all_constraints, op_un_M, un_rhs);
-		BlockVector<double> rhs;
-		rhs.reinit(old_sol);
-		setup_constrained_rhs.apply(rhs);
-
-
-		const auto& M0 = constrained_mass_matrix.block(0, 0);
-		const auto& M2 = constrained_mass_matrix.block(2, 2);
-
-
-		auto& momentum = solution.block(0);
-		auto& def_grad = solution.block(2);
 
 		FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim*dim+1+dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		FEValuesExtractors::Scalar Pressure(dim);
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
 			Def_Gradient[i] = "true";
 		}
@@ -991,10 +1032,29 @@ namespace Project_attempt
 		dealii::VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim * dim + 1 + dim),
+			Def_Grad_bound<dim>(),
 			F_constraints,
 			fe.component_mask(Def_Gradient));
 		F_constraints.close();
+		all_constraints.merge(u_constraints);
+		all_constraints.merge(F_constraints);
+		all_constraints.close();
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			all_constraints, op_un_M, un_rhs);
+
+		BlockVector<double> rhs;
+		rhs.reinit(old_sol);
+		setup_constrained_rhs.apply(rhs);
+
+
+		const auto& M0 = constrained_mass_matrix.block(0, 0);
+		const auto& M2 = constrained_mass_matrix.block(2, 2);
+
+
+		auto& momentum = solution.block(0);
+		auto& def_grad = solution.block(2);
+
+		
 
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
@@ -1031,15 +1091,25 @@ namespace Project_attempt
 		un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, old_sol);
 
-		AffineConstraints<double> all_constraints;
+
+		FEValuesExtractors::Vector Momentum(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
+			Def_Gradient[i] = "true";
+		}
+
+		AffineConstraints<double> p_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping,
 			dof_handler,
 			4,
 			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			all_constraints);
-		all_constraints.close();
+			p_constraints,
+			fe.component_mask(Pressure));
+		p_constraints.close();
+
 		auto setup_constrained_rhs = constrained_right_hand_side(
-			all_constraints, op_un_M, un_rhs);
+			p_constraints, op_un_M, un_rhs);
 		BlockVector<double> rhs;
 		rhs.reinit(old_sol);
 		setup_constrained_rhs.apply(rhs);
@@ -1050,28 +1120,14 @@ namespace Project_attempt
 
 		auto& pressure = solution.block(1);
 
-		FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
-		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = "true";
-		}
 
-		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping,
-			dof_handler,
-			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			u_constraints,
-			fe.component_mask(Pressure));
-		u_constraints.close();
 
 		Vector<double> p_rhs = rhs.block(1);
 
 		SparseDirectUMFPACK M1_direct;
 		M1_direct.initialize(M1);
 		M1_direct.vmult(pressure, p_rhs);
-		all_constraints.distribute(solution);
+		p_constraints.distribute(solution);
 
 		cout << "Pressure is successfully solved for" << std::endl;
 
@@ -1093,18 +1149,8 @@ namespace Project_attempt
 		un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, old_sol);
 
-		AffineConstraints<double> all_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping,
-			dof_handler,
-			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			all_constraints);
-		all_constraints.close();
-		auto setup_constrained_rhs = constrained_right_hand_side(
-			all_constraints, op_un_M, un_rhs);
-		BlockVector<double> rhs;
-		rhs.reinit(old_sol);
-		setup_constrained_rhs.apply(rhs);
+
+
 
 
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
@@ -1128,14 +1174,20 @@ namespace Project_attempt
 			fe.component_mask(Momentum));
 		u_constraints.close();
 
+		auto setup_constrained_rhs = constrained_right_hand_side(
+			u_constraints, op_un_M, un_rhs);
+		BlockVector<double> rhs;
+		rhs.reinit(old_sol);
+		setup_constrained_rhs.apply(rhs);
+
 		Vector<double> u_rhs = rhs.block(0);
 
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);
-		all_constraints.distribute(solution);
+		u_constraints.distribute(solution);
 
-		cout << "Pressure is successfully solved for" << std::endl;
+		cout << "Updated Momentum is successfully solved for" << std::endl;
 
 
 	}
@@ -1197,7 +1249,7 @@ namespace Project_attempt
 				Tensor<2, dim> accumulated_stress;
 				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
 					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();;
+				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
 			}
 		}
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
@@ -1292,8 +1344,7 @@ namespace Project_attempt
 			std::vector<PointHistory<dim>> tmp;
 			quadrature_point_history.swap(tmp);
 		}
-		quadrature_point_history.resize(triangulation.n_locally_owned_active_cells()
-			* quadrature_formula.size());
+		quadrature_point_history.resize(triangulation.n_locally_owned_active_cells() * quadrature_formula.size());
 		unsigned int history_index = 0;
 		for (auto& cell : triangulation.active_cell_iterators())
 			if (cell->is_locally_owned())
