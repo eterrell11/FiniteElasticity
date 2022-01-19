@@ -76,8 +76,8 @@ namespace Project_attempt
 	/// <summary>
 	/// SPACE FOR DEFINING GLOBAL VARIABLES. REPLACE WITH "PARAMETERS" ENVIRONMENT
 	/// </summary>
-	static double nu = 0.4;
-	static double E = 7500;
+	static double nu = 0.45;
+	static double E = 1000;
 
 
 
@@ -355,7 +355,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(0.1)
+		, velocity(0.5)
 	{}
 
 	template <int dim>
@@ -371,8 +371,8 @@ namespace Project_attempt
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) = 0;// -p[1] * rotator;
-		values(1) = 0;// p[0] * rotator;
+		values(0) =  -p[1] * rotator;
+		values(1) =  p[0] * rotator;
 		values(4) = 1;
 		values(8) = 1;
 		values(12) = 1;
@@ -415,8 +415,8 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.001)
-		, end_time(0.01)
+		, present_timestep(0.01)
+		, end_time(0.99)
 		, timestep_no(0)
 	{}
 
@@ -449,22 +449,13 @@ namespace Project_attempt
 	template <int dim>
 	void Inelastic<dim>::create_coarse_grid()
 	{
-		;
-		/*if (dim == 3) {
-			const Point<dim> p1( -1, -1, -1 );
-			const Point<dim> p2(1, 1, 1);
-		}
-		else {
-			const Point<dim> p1(-1, 1);
-			const Point<dim> p2( 1, 1 );
-		}*/
 		const Point<dim> p1(-1, -1, 0);
 		const Point<dim> p2(1, 1, 2);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 3;
-		refinements[1] = 3;
-		refinements[2] = 6;
+		refinements[0] = 4;
+		refinements[1] = 4;
+		refinements[2] = 8;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
 			p1,
