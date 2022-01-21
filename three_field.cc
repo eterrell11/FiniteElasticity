@@ -77,7 +77,7 @@ namespace Project_attempt
 	/// SPACE FOR DEFINING GLOBAL VARIABLES. REPLACE WITH "PARAMETERS" ENVIRONMENT
 	/// </summary>
 	static double nu = 0.5;
-	static double E = 21;
+	static double E = 2100;
 
 
 
@@ -376,8 +376,8 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.001)
-		, end_time(2)
+		, present_timestep(0.0001)
+		, end_time(.5)
 		, timestep_no(0)
 	{}
 
@@ -841,7 +841,6 @@ namespace Project_attempt
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 
 			Cofactor = 0;
-			//Jf = 0;
 			temp_pressure = 0;
 			old_pressure = 0;
 			sol_counter = dim;
@@ -869,7 +868,6 @@ namespace Project_attempt
 			for (unsigned int i = 0; i < dpc; ++i) {
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
-			//system_rhs.add(local_dof_indices, cell_rhs);
 		}
 	}
 
@@ -889,9 +887,6 @@ namespace Project_attempt
 		assemble_momentum_rhs();
 		cout << "  Solver converged in " << n_iterations2 << " iterations." << std::endl;
 		const unsigned int n_iterations3 = solve_m();
-
-		//cout << "  Updating quadrature point data..." << std::flush;
-		//update_quadrature_point_history();
 	}
 
 	//solves system using direct solver
