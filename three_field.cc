@@ -76,12 +76,12 @@ namespace Project_attempt
 	/// <summary>
 	/// SPACE FOR DEFINING GLOBAL VARIABLES. REPLACE WITH "PARAMETERS" ENVIRONMENT
 	/// </summary>
-	static double nu = 0.45;
-	static double E = 1000;
+	static double nu = 0.5;
+	static double E = 21;
 
 
 
-	//Class for storing old Cauchy stress tensors
+	//Class for storing pk1 tensor values, pressure values, and cofactor values
 	template <int dim>
 	struct PointHistory
 	{
@@ -99,6 +99,7 @@ namespace Project_attempt
 		return tmp;
 	}
 
+	//Class for defining mu
 	template <int dim>
 	double get_mu(const double E, const double nu) {
 		double tmp = E / (2 * (1 + nu));
@@ -108,37 +109,7 @@ namespace Project_attempt
 
 
 
-	//Template for the rank-2 strain tensor for the trial functions
-	template <int dim>
-	inline SymmetricTensor<2, dim> get_strain(const FEValues<dim>& fe_values,
-		const unsigned int shape_func,
-		const unsigned int q_point)
-	{
-		SymmetricTensor<2, dim> tmp;
-		for (unsigned int i = 0; i < dim; ++i)
-			tmp[i][i] = fe_values.shape_grad_component(shape_func, q_point, i)[i];
-
-		for (unsigned int i = 0; i < dim; ++i)
-			for (unsigned int j = 0; j < dim; ++j)
-				tmp[i][j] = (fe_values.shape_grad_component(shape_func, q_point, i)[j] +
-					fe_values.shape_grad_component(shape_func, q_point, j)[i]) / 2;
-		return tmp;
-	}
-
-	//Get strain tensor for the gradient of a vector-valued field
-	template <int dim>
-	inline SymmetricTensor<2, dim>
-		get_strain(const std::vector<Tensor<1, dim>>& grad)
-	{
-		Assert(grad.size() == dim, ExcInternalError());
-		SymmetricTensor<2, dim> strain;
-		for (unsigned int i = 0; i < dim; ++i)
-			strain[i][i] = grad[i][i];
-		for (unsigned int i = 0; i < dim; ++i)
-			for (unsigned int j = i + 1; j < dim; ++j)
-				strain[i][j] = (grad[i][j] + grad[j][i]) / 2;
-		return strain;
-	}
+	
 
 
 	template< int dim>
@@ -226,22 +197,11 @@ namespace Project_attempt
 		unsigned int solve_m();
 		void         output_results() const;
 
-		/* void time_integrator();
-		void time_integrator_final(); */
-
 		void do_timestep();
-
-		//void time_integrator();
 
 		void move_mesh();
 
 		void setup_quadrature_point_history();
-
-		//void update_quadrature_point_history();
-
-
-		//allow for communication and identification in "parallel world"
-
 
 		parallel::shared::Triangulation<dim> triangulation;
 		DoFHandler<dim>    dof_handler;
@@ -355,7 +315,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(0.5)
+		, velocity(0.1)
 	{}
 
 	template <int dim>
@@ -366,13 +326,14 @@ namespace Project_attempt
 		Assert(values.size() == (dim + dim * dim + 1), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
-		double rotator = velocity * std::sin(p[2] * M_PI / (4));
+		double rotator = velocity * std::sin(p[2] * M_PI / (2));
 
 		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
 		//std::cout << " Original point: " << p << std::endl;
 		//std::cout << " Rotated Point: " << pnew << std::endl;
-		values(0) =  -p[1] * rotator;
-		values(1) =  p[0] * rotator;
+		values(0) = 0;// -p[1] * rotator;
+		values(1) = 0;// p[0] * rotator;
+		values(2) = rotator;
 		values(4) = 1;
 		values(8) = 1;
 		values(12) = 1;
@@ -415,8 +376,8 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.01)
-		, end_time(0.99)
+		, present_timestep(0.001)
+		, end_time(2)
 		, timestep_no(0)
 	{}
 
@@ -449,12 +410,12 @@ namespace Project_attempt
 	template <int dim>
 	void Inelastic<dim>::create_coarse_grid()
 	{
-		const Point<dim> p1(-1, -1, 0);
-		const Point<dim> p2(1, 1, 2);
+		const Point<dim> p1(0, 0, 0);
+		const Point<dim> p2(1, 1, 1);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 4;
-		refinements[1] = 4;
+		refinements[0] = 8;
+		refinements[1] = 8;
 		refinements[2] = 8;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
@@ -468,8 +429,6 @@ namespace Project_attempt
 					const Point<dim> face_center = face->center();
 					if (face_center[2] == -side) {
 						face->set_boundary_id(4);
-						//else if (face_center[2] == side) // Serves to disable top incremental fixed displacements. => body forces dominate
-							//face->set_boundary_id(5);
 					}
 				}
 		setup_quadrature_point_history();
@@ -541,7 +500,6 @@ namespace Project_attempt
 		homogeneous_constraints.close();
 
 		std::cout << "Setting up block sparsity patterns" << std::endl;
-		//DynamicSparsityPattern dsp_constrained(dof_handler.n_dofs());
 		BlockDynamicSparsityPattern dsp_constrained(3, 3);
 		dsp_constrained.block(0, 0).reinit(n_u, n_u);
 		dsp_constrained.block(1, 0).reinit(n_p, n_u);
@@ -560,11 +518,6 @@ namespace Project_attempt
 		constrained_sparsity_pattern.copy_from(dsp_constrained);
 		constrained_mass_matrix.reinit(constrained_sparsity_pattern);
 
-		//DynamicSparsityPattern dsp_unconstrained(dof_handler.n_dofs());
-		//DoFTools::make_sparsity_pattern(dof_handler,
-		//	dsp_unconstrained);
-		//unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
-		//unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
 
 		BlockDynamicSparsityPattern dsp_unconstrained(3, 3);
 		dsp_unconstrained.block(0, 0).reinit(n_u, n_u);
@@ -605,10 +558,6 @@ namespace Project_attempt
 		cout << " Applying initial conditions" << std::endl;
 		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), solution);
 
-
-		//No longer need to pass matrices and vectors through MPI communication object
-
-		//momentum_system_rhs.reinit(dof_handler.n_dofs());
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
 
@@ -616,7 +565,6 @@ namespace Project_attempt
 	void Inelastic<dim>::assemble_system()
 	{
 		system_rhs = 0;
-		//constrained_mass_matrix = 0;
 
 		FEValues<dim> fe_values(mapping,
 			fe,
@@ -642,7 +590,6 @@ namespace Project_attempt
 		Vector<double>     cell_rhs(dofs_per_cell);
 
 
-		//Defines vectors to contain values for physical parameters
 
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -695,7 +642,7 @@ namespace Project_attempt
 				}
 
 				temp_pressure = sol_vec[q_point](sol_counter);
-				sol_counter += 1; //Add one to skip over pressure
+				sol_counter += 1;
 
 				for (unsigned int i = 0; i < dim; i++) {
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
@@ -730,14 +677,9 @@ namespace Project_attempt
 							fe_values.JxW(q_point);
 					}
 					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
-					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) *
-						fe_values.JxW(q_point) +
-						fe_values[Momentum].value(i, q_point) *
-						rhs_values[q_point] *
-						fe_values.JxW(q_point) +
-						-temp_momentum *
-						fe_values[Def_Gradient].divergence(i, q_point) *
-						fe_values.JxW(q_point);
+					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
+						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point) +
+						-temp_momentum * fe_values[Def_Gradient].divergence(i, q_point) * fe_values.JxW(q_point);
 					if (i == 0) {
 						local_quadrature_points_history[q_point].pk1_store = pk1;
 						local_quadrature_points_history[q_point].pressure_store = temp_pressure;
@@ -757,7 +699,6 @@ namespace Project_attempt
 				}
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
-			//system_rhs.add(local_dof_indices, cell_rhs);
 		}
 	}
 
@@ -789,7 +730,6 @@ namespace Project_attempt
 		Vector<double>     cell_rhs(dofs_per_cell);
 
 
-		//Defines vectors to contain values for physical parameters
 
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -810,10 +750,8 @@ namespace Project_attempt
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 
 			FF = 0;
-			Cofactor = 0;
 			Jf = 0;
 			temp_momentum = 0;
-
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
@@ -822,7 +760,6 @@ namespace Project_attempt
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
-
 				sol_counter = 0;
 				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
@@ -830,8 +767,6 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
-				sol_counter += 1; //Add one to skip over pressure
-
 				for (unsigned int i = 0; i < dim; i++) {
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
 						FF[i][j] = sol_vec[q_point](sol_counter);
@@ -839,10 +774,8 @@ namespace Project_attempt
 
 					}
 				}
-				//cout << "deformation gradient values : " << FF << std::endl;
 				Jf = get_Jf(FF);
-				Cofactor = get_cofactorF(FF, Jf);
-				//auto Cofactor_operator = linear_operator(Cofactor);
+				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					cell_rhs(i) += -scalar_product(temp_momentum *
@@ -856,7 +789,6 @@ namespace Project_attempt
 			for (unsigned int i = 0; i < dpc; ++i) {
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
-			//system_rhs.add(local_dof_indices, cell_rhs);
 		}
 	}
 
@@ -896,8 +828,6 @@ namespace Project_attempt
 
 		const FEValuesExtractors::Vector Momentum(0);
 
-		Tensor<2, dim> FF;
-		Tensor<1, dim> temp_momentum;
 		double temp_pressure;
 		Tensor<2, dim> Cofactor;
 		double Jf;
@@ -910,13 +840,11 @@ namespace Project_attempt
 			PointHistory<dim>* local_quadrature_points_history =
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 
-			FF = 0;
 			Cofactor = 0;
 			//Jf = 0;
-			temp_momentum = 0;
 			temp_pressure = 0;
 			old_pressure = 0;
-
+			sol_counter = dim;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
@@ -927,27 +855,9 @@ namespace Project_attempt
 			{
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
 				old_pressure = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].pressure_store;
-				sol_counter = 0;
-				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
-					temp_momentum[i] = sol_vec[q_point](sol_counter);
-
-					++sol_counter;
-				}
 				temp_pressure = sol_vec[q_point](sol_counter);
-				sol_counter += 1; //Add one to skip over pressure
 
-				for (unsigned int i = 0; i < dim; i++) {
-					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
-						FF[i][j] = sol_vec[q_point](sol_counter);
-						++sol_counter;
-
-					}
-				}
-				//cout << "deformation gradient values : " << FF << std::endl;
-				/*Jf = get_Jf(FF);
-				Cofactor = get_cofactorF(FF, Jf);*/
-				//auto Cofactor_operator = linear_operator(Cofactor);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					cell_rhs(i) += -scalar_product((temp_pressure - old_pressure) * Cofactor, fe_values[Momentum].gradient(i, q_point)) *
@@ -984,7 +894,7 @@ namespace Project_attempt
 		//update_quadrature_point_history();
 	}
 
-	//solves system using CG
+	//solves system using direct solver
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_mint_F()
 	{
@@ -1053,22 +963,19 @@ namespace Project_attempt
 		SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);
-		//u_constraints.distribute(momentum);
 		cout << "Momentum is successfully solved for" << std::endl;
 
-		//Vector<double> dp = momentum - old_momentum;
-		//cout << "change in momentum: " << dp << std::endl;
+
 		SparseDirectUMFPACK M2_direct;
 		M2_direct.initialize(M2);
 		M2_direct.vmult(def_grad, F_rhs);
-		//F_constraints.distribute(def_grad);
 		all_constraints.distribute(solution);
 		cout << "Def Grad is successfully solved for" << std::endl;
 
 	}
 
 	
-
+	//solves system using direct solver
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_p()
 	{
@@ -1126,7 +1033,7 @@ namespace Project_attempt
 	}
 
 
-	//solves system using CG
+	//solves system using direct solver
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_m()
 	{
@@ -1135,10 +1042,10 @@ namespace Project_attempt
 		const auto& M = constrained_mass_matrix;
 		BlockVector<double> un_rhs = system_rhs;
 		auto& sol = solution;
-		BlockVector<double> old_sol = old_solution;
+		//BlockVector<double> old_sol = old_solution;
 
 		un_rhs *= present_timestep;
-		un_M.vmult_add(un_rhs, old_sol);
+		un_M.vmult_add(un_rhs, solution);
 
 
 
@@ -1168,7 +1075,7 @@ namespace Project_attempt
 		auto setup_constrained_rhs = constrained_right_hand_side(
 			u_constraints, op_un_M, un_rhs);
 		BlockVector<double> rhs;
-		rhs.reinit(old_sol);
+		rhs.reinit(sol);
 		setup_constrained_rhs.apply(rhs);
 
 		Vector<double> u_rhs = rhs.block(0);
@@ -1179,8 +1086,6 @@ namespace Project_attempt
 		u_constraints.distribute(solution);
 
 		cout << "Updated Momentum is successfully solved for" << std::endl;
-
-
 	}
 
 
@@ -1198,7 +1103,6 @@ namespace Project_attempt
 		DataOut<dim> data_out;
 		data_out.attach_dof_handler(dof_handler);
 
-		Vector<double> Momentum = solution.block(0);
 
 
 
@@ -1249,19 +1153,14 @@ namespace Project_attempt
 		GridTools::get_subdomain_association(triangulation, partition_int);
 
 
-		//Deals with partitioning data
-
 		data_out.build_patches(mapping);
 
 		DataOutBase::VtkFlags vtk_flags;
 		vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
 		data_out.set_flags(vtk_flags);
 
-		std::ofstream output("output-" + std::to_string(present_time) + ".vtu");
+		std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
 		data_out.write_vtu(output);
-
-
-		//DataOutBase::write_pvd_record(pvd_output, times_and_names);
 	}
 
 
@@ -1349,53 +1248,6 @@ namespace Project_attempt
 	}
 
 
-	//Provides an update to the stress tensor using previous gradient data. This is mainly used in the RHS of assemble_system
-	/*template<int dim>
-	void Inelastic<dim>::update_quadrature_point_history()
-	{
-		FEValues<dim> fe_values(mapping,
-			fe,
-			quadrature_formula,
-			update_values | update_gradients | update_quadrature_points);
-		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
-			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
-
-
-		for (auto& cell : dof_handler.active_cell_iterators())
-			if (cell->is_locally_owned())
-			{
-				PointHistory<dim>* local_quadrature_points_history =
-					reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-				Assert(local_quadrature_points_history >=
-					&quadrature_point_history.front(),
-					ExcInternalError());
-				Assert(local_quadrature_points_history <=
-					&quadrature_point_history.back(),
-					ExcInternalError());
-
-				fe_values.reinit(cell);
-				fe_values.get_function_gradients(incremental_displacement,
-					displacement_increment_grads);
-
-
-				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-				{
-					const SymmetricTensor<4, dim> stress_strain_tensor =
-						get_stress_strain_tensor<dim>(lambda_values[q], mu_values[q]);
-					const SymmetricTensor<2, dim> new_stress =
-						(local_quadrature_points_history[q].old_stress +
-							(stress_strain_tensor * get_strain(displacement_increment_grads[q])));
-					const Tensor<2, dim> rotation = get_rotation_matrix(displacement_increment_grads[q]);
-
-					const SymmetricTensor<2, dim> rotated_new_stress = symmetrize(transpose(rotation) *
-						static_cast<Tensor<2, dim>>(new_stress) *
-						rotation);
-
-					local_quadrature_points_history[q].old_stress = rotated_new_stress;
-
-				}
-			}
-	}*/
 }
 
 
