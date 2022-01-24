@@ -192,7 +192,7 @@ namespace Project_attempt
 		void		 assemble_pressure_rhs();
 		void		 assemble_momentum_rhs();
 		void         solve_timestep();
-		unsigned int solve_mint_F();
+		Vector<double> solve_mint_F();
 		unsigned int solve_p();
 		unsigned int solve_m();
 		void         output_results() const;
@@ -376,8 +376,8 @@ namespace Project_attempt
 		, fe(FE_SimplexP<dim>(1), dim, FE_SimplexP<dim>(1), 1, FE_SimplexP<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, present_time(0.0)
-		, present_timestep(0.0001)
-		, end_time(.5)
+		, present_timestep(0.0005)
+		, end_time(.02)
 		, timestep_no(0)
 	{}
 
@@ -499,7 +499,6 @@ namespace Project_attempt
 		homogeneous_constraints.merge(F_constraints);
 		homogeneous_constraints.close();
 
-		std::cout << "Setting up block sparsity patterns" << std::endl;
 		BlockDynamicSparsityPattern dsp_constrained(3, 3);
 		dsp_constrained.block(0, 0).reinit(n_u, n_u);
 		dsp_constrained.block(1, 0).reinit(n_p, n_u);
@@ -535,7 +534,6 @@ namespace Project_attempt
 		unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
 
 
-		std::cout << "Setting up block vectors patterns" << std::endl;
 
 		solution.reinit(3);
 		solution.block(0).reinit(n_u);
@@ -555,7 +553,7 @@ namespace Project_attempt
 		system_rhs.block(2).reinit(n_f);
 		system_rhs.collect_sizes();
 
-		cout << " Applying initial conditions" << std::endl;
+		cout << "Applying initial conditions" << std::endl;
 		VectorTools::interpolate(mapping, dof_handler, InitialMomentum<dim>(), solution);
 
 		incremental_displacement.reinit(dof_handler.n_dofs());
@@ -611,6 +609,12 @@ namespace Project_attempt
 		double sol_counter;
 
 
+		Tensor<1,dim> fe_val_Momentum_i;
+		double fe_val_Pressure_i;
+		Tensor<1,dim> fe_grad_Pressure_i;
+		Tensor<2, dim> fe_val_Def_Grad_i;
+
+
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			PointHistory<dim>* local_quadrature_points_history =
@@ -628,6 +632,7 @@ namespace Project_attempt
 			fe_values.reinit(cell);
 
 			fe_values.get_function_values(solution, sol_vec);
+			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
 
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
@@ -652,39 +657,40 @@ namespace Project_attempt
 					}
 				}
 				
-				//cout << "deformation gradient values : " << FF << std::endl;
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
-				//auto Cofactor_operator = linear_operator(Cofactor);
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, kappa, Cofactor);
+
+				local_quadrature_points_history[q_point].pk1_store = pk1;
+				local_quadrature_points_history[q_point].pressure_store = temp_pressure;
+				local_quadrature_points_history[q_point].Cofactor_store = Cofactor;
+
 				for (const unsigned int i : fe_values.dof_indices())
 				{
+					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
+					fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
+					fe_val_Def_Grad_i = fe_values[Def_Gradient].value(i, q_point);
+					fe_grad_Pressure_i = fe_values[Pressure].gradient(i, q_point);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
 						cell_mass_matrix(i, j) +=
-							fe_values[Momentum].value(i, q_point) * //Momentum terms
+							fe_val_Momentum_i * //Momentum terms
 							fe_values[Momentum].value(j, q_point) *
 							fe_values.JxW(q_point) +
-							scalar_product(fe_values[Def_Gradient].value(i, q_point), //Deformation Gradient terms
+							scalar_product(fe_val_Def_Grad_i, //Deformation Gradient terms
 								fe_values[Def_Gradient].value(j, q_point)) *
 							fe_values.JxW(q_point) +
 							1 / kappa * // Pressure terms
-							fe_values[Pressure].value(i, q_point) *
+							fe_val_Pressure_i *
 							fe_values[Pressure].value(j, q_point) *
 							fe_values.JxW(q_point) +
-							scalar_product(Cofactor * fe_values[Pressure].gradient(i, q_point),
+							scalar_product(Cofactor * fe_grad_Pressure_i,
 								Cofactor * fe_values[Pressure].gradient(j, q_point)) *
 							fe_values.JxW(q_point);
 					}
-					right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
-					cell_rhs(i) += -scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) * fe_values.JxW(q_point) +
-						fe_values[Momentum].value(i, q_point) * rhs_values[q_point] * fe_values.JxW(q_point) +
-						-temp_momentum * fe_values[Def_Gradient].divergence(i, q_point) * fe_values.JxW(q_point);
-					if (i == 0) {
-						local_quadrature_points_history[q_point].pk1_store = pk1;
-						local_quadrature_points_history[q_point].pressure_store = temp_pressure;
-						local_quadrature_points_history[q_point].Cofactor_store = Cofactor;
-					}
+					cell_rhs(i) += (-scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) +
+						fe_val_Momentum_i * rhs_values[q_point] +
+						-temp_momentum * fe_values[Def_Gradient].divergence(i, q_point)) * fe_values.JxW(q_point);
 				}
 			}
 
@@ -880,19 +886,23 @@ namespace Project_attempt
 		assemble_system();
 		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
 		cout << "Attempting to solve system..." << std::endl;
-		const unsigned int n_iterations1 = solve_mint_F();
-		cout << "  Solver converged in " << n_iterations1 << " iterations." << std::endl;
+		const Vector<double> it_count = solve_mint_F();
+		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count[1] << " iterations." << std::endl;
 		assemble_pressure_rhs();
 		const unsigned int n_iterations2 = solve_p();
 		assemble_momentum_rhs();
-		cout << "  Solver converged in " << n_iterations2 << " iterations." << std::endl;
+		cout << "  Pressure solver converged in " << n_iterations2 << " iterations." << std::endl;
 		const unsigned int n_iterations3 = solve_m();
+		cout << "  Updated momentum solver converged in " << n_iterations3 << " iterations." << std::endl;
 	}
 
 	//solves system using direct solver
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_mint_F()
+	Vector<double> Inelastic<dim>::solve_mint_F()
 	{
+
+		Vector<double> it_count(2);
 		std::swap(old_solution, solution);
 
 
@@ -955,18 +965,29 @@ namespace Project_attempt
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
 
-		SparseDirectUMFPACK M0_direct;
+		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
-		M0_direct.vmult(momentum, u_rhs);
-		cout << "Momentum is successfully solved for" << std::endl;
+		M0_direct.vmult(momentum, u_rhs);*/
+		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverCG<Vector<double>>  solver(solver_control);
 
+		PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
+		u_preconditioner.initialize(M0, 1.2);
 
-		SparseDirectUMFPACK M2_direct;
+		solver.solve(M0, momentum, u_rhs, u_preconditioner);
+		it_count[0] = solver_control.last_step();
+
+		/*SparseDirectUMFPACK M2_direct;
 		M2_direct.initialize(M2);
-		M2_direct.vmult(def_grad, F_rhs);
-		all_constraints.distribute(solution);
-		cout << "Def Grad is successfully solved for" << std::endl;
+		M2_direct.vmult(def_grad, F_rhs);*/
 
+		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
+		F_preconditioner.initialize(M2, 1.2);
+
+		solver.solve(M2, def_grad, F_rhs, F_preconditioner);
+		all_constraints.distribute(solution);
+		it_count[1] = solver_control.last_step();
+		return it_count;
 	}
 
 	
@@ -1017,13 +1038,21 @@ namespace Project_attempt
 
 		Vector<double> p_rhs = rhs.block(1);
 
-		SparseDirectUMFPACK M1_direct;
+		/*SparseDirectUMFPACK M1_direct;
 		M1_direct.initialize(M1);
-		M1_direct.vmult(pressure, p_rhs);
+		M1_direct.vmult(pressure, p_rhs);*/
+		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverCG<Vector<double>>  solver(solver_control);
+
+		PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
+		p_preconditioner.initialize(M1, 1.2);
+
+		solver.solve(M1, pressure, p_rhs, p_preconditioner);
+
 		p_constraints.distribute(solution);
 
-		cout << "Pressure is successfully solved for" << std::endl;
 
+		return solver_control.last_step();
 
 	}
 
@@ -1075,12 +1104,19 @@ namespace Project_attempt
 
 		Vector<double> u_rhs = rhs.block(0);
 
-		SparseDirectUMFPACK M0_direct;
+		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
-		M0_direct.vmult(momentum, u_rhs);
+		M0_direct.vmult(momentum, u_rhs);*/
+		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverCG<Vector<double>>  solver(solver_control);
+
+		PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
+		u_preconditioner.initialize(M0, 1.2);
+
+		solver.solve(M0, momentum, u_rhs, u_preconditioner);
 		u_constraints.distribute(solution);
 
-		cout << "Updated Momentum is successfully solved for" << std::endl;
+		return solver_control.last_step();
 	}
 
 
