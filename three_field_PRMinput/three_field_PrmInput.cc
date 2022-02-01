@@ -84,7 +84,6 @@ namespace Project_attempt
 			double nu;
 			double E;
 			static void declare_parameters(ParameterHandler& prm);
-
 			void parse_parameters(ParameterHandler& prm);
 		};
 		void Materials::declare_parameters(ParameterHandler& prm)
@@ -142,9 +141,41 @@ namespace Project_attempt
 			}
 			prm.leave_subsection();
 		}
+		struct Numerical
+		{
+			double alpha;
+			double beta;
+			static void declare_parameters(ParameterHandler& prm);
+			void parse_parameters(ParameterHandler& prm);
+		};
+		void Numerical::declare_parameters(ParameterHandler& prm)
+		{
+			prm.enter_subsection("Numerical parameters");
+			{
+				prm.declare_entry("alpha",
+					"0.0",
+					Patterns::Double(),
+					"alpha");
+				prm.declare_entry("beta",
+					"0.0",
+					Patterns::Double(),
+					"beta");
+			}
+			prm.leave_subsection();
+		}
+		void Numerical::parse_parameters(ParameterHandler& prm)
+		{
+			prm.enter_subsection("Numerical parameters");
+			{
+				alpha = prm.get_double("alpha");
+				beta = prm.get_double("beta");
+			}
+			prm.leave_subsection();
+		}
 		struct AllParameters :
 			public Materials,
-			public Time
+			public Time,
+			public Numerical
 		{
 			AllParameters(const std::string& input_file);
 
@@ -164,11 +195,13 @@ namespace Project_attempt
 		{
 			Materials::declare_parameters(prm);
 			Time::declare_parameters(prm);
+			Numerical::declare_parameters(prm);
 		}
 		void AllParameters::parse_parameters(ParameterHandler& prm)
 		{
 			Materials::parse_parameters(prm);
 			Time::parse_parameters(prm);
+			Numerical::parse_parameters(prm);
 		}
 	} // namespace Parameters
 
@@ -345,37 +378,6 @@ namespace Project_attempt
 		double mu;
 	};
 
-	//template<int dim> //Provides function that defines lambda as a function of tissue depth 
-	//class Mu : public Function<dim>
-	//{
-	//public:
-	//	Mu() : Function<dim>(1) {}
-	//	virtual
-	//		double value(const Point<dim>& /*p*/, unsigned int component = 0) const override
-	//	{
-	//		(void)component;
-	//		double nu = 0.45;
-	//		double E = 1000;
-	//		double return_value = E / (2 * (1 + nu)); //definition of lambda using E and nu
-	//		return return_value;
-	//	}
-	//};
-
-	//template<int dim> //Provides function that defines mu as a function of tissue depth
-	//class Lambda : public Function<dim>
-	//{
-	//public:
-	//	Lambda() : Function<dim>(1) {}
-	//	virtual
-	//		double value(const Point<dim>& /*p*/, unsigned int component = 0) const override
-	//	{
-	//		(void)component;
-	//		double nu = 0.45;
-	//		double E = 1000;
-	//		double return_value = E * nu / ((1 + nu) * (1 - 2 * nu)); //definition of mu using E and nu
-	//		return return_value;
-	//	}
-	//};
 
 	// Creates RHS forcing function that pushes tissue downward depending on its distance from the y-z plane
 	// i.e. "downward" gravitational force applied everywhere except at bottom of hemisphere
@@ -733,9 +735,8 @@ namespace Project_attempt
 		Tensor<2, dim> fe_val_Def_Grad_i;
 
 		//Stability parameters 
-		double alpha = 0.0;
-		double beta = 0.0;
-
+		double alpha = parameters.alpha;
+		double beta = parameters.beta;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{

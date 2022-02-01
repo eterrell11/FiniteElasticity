@@ -8,3 +8,7 @@ subsection Time
   set Timestep = 0.0005
   set End time = 0.02
 end
+subsection Numerical parameters
+  set alpha = 0.2
+  set beta  = 0.5
+end
