@@ -146,14 +146,14 @@ namespace Project_attempt
 			public Materials,
 			public Time
 		{
-			AllParameters(const std::string &input_file);
+			AllParameters(const std::string& input_file);
 
 			static void declare_parameters(ParameterHandler& prm);
 
 			void parse_parameters(ParameterHandler& prm);
 		};
 
-		AllParameters::AllParameters(const std::string &input_file)
+		AllParameters::AllParameters(const std::string& input_file)
 		{
 			ParameterHandler prm;
 			declare_parameters(prm);
@@ -172,11 +172,7 @@ namespace Project_attempt
 		}
 	} // namespace Parameters
 
-	/// <summary>
-	/// SPACE FOR DEFINING GLOBAL VARIABLES. REPLACE WITH "PARAMETERS" ENVIRONMENT
-	/// </summary>
-	//static double nu = 0.5;
-	//static double E = 2100;
+
 
 
 
@@ -206,6 +202,20 @@ namespace Project_attempt
 		return tmp;
 	}
 
+	template <int dim>
+	Tensor<2, dim>
+		get_realFF(const std::vector<Tensor<1, dim>>& grad_p)
+	{
+		Tensor<2, dim> FF;
+		Tensor<2, dim> I = unit_symmetric_tensor<dim>();
+		for (unsigned int i = 0; i < dim; ++i) {
+			for (unsigned int j = 0; j < dim; ++j) {
+				FF[i][j] = I[i][j] + grad_p[i][j];
+			}
+		}
+		return FF;
+	}
+
 	template< int dim>
 	double get_Jf(Tensor<2, dim>& FF)
 	{
@@ -226,7 +236,7 @@ namespace Project_attempt
 
 	template <int dim>
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
-		get_pk1(Tensor<2, dim>& FF, const double& mu,double& Jf, double& pressure, const double& kappa, Tensor<2, dim>& CofactorF)
+		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, const double& kappa, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
 		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (pressure * CofactorF);
@@ -235,7 +245,7 @@ namespace Project_attempt
 
 	template <int dim>
 	inline Tensor<2, dim> //Provides construction of PK1 stress tensor
-		get_pk1_all(Tensor<2, dim> FF, const double mu,const double kappa)
+		get_pk1_all(Tensor<2, dim> FF, const double mu, const double kappa)
 	{
 		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
@@ -274,7 +284,7 @@ namespace Project_attempt
 	class Inelastic
 	{
 	public:
-		Inelastic(const std::string &input_file);
+		Inelastic(const std::string& input_file);
 		~Inelastic();
 		void run();
 
@@ -392,7 +402,7 @@ namespace Project_attempt
 	};
 
 
-	
+
 	template <int dim>
 	class InitialMomentum : public Function<dim>
 	{
@@ -410,7 +420,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(0.1)
+		, velocity(0)
 	{}
 
 	template <int dim>
@@ -436,7 +446,7 @@ namespace Project_attempt
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
 		const std::vector<Point<dim>>& points,
-		std::vector<Vector<double>>& value_list) const 
+		std::vector<Vector<double>>& value_list) const
 	{
 		const unsigned int n_points = points.size();
 		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
@@ -464,7 +474,7 @@ namespace Project_attempt
 
 
 	template<int dim> // Constructor for the main class
-	Inelastic<dim>::Inelastic(const std::string &input_file)
+	Inelastic<dim>::Inelastic(const std::string& input_file)
 		: parameters(input_file)
 		, triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
@@ -679,8 +689,7 @@ namespace Project_attempt
 		const unsigned int dpc = fe.dofs_per_cell;
 
 
-		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
-			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+
 
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
@@ -702,6 +711,7 @@ namespace Project_attempt
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
+		Tensor<2, dim> realFF;
 		Tensor<2, dim> FF;
 		Tensor<1, dim> temp_momentum;
 		double         temp_pressure;
@@ -710,18 +720,28 @@ namespace Project_attempt
 		Tensor<2, dim> pk1;
 		double sol_counter;
 
+		const std::vector<types::global_dof_index> dofs_per_component =
+			DoFTools::count_dofs_per_fe_component(dof_handler);
+		const unsigned int n_u = dofs_per_component[0] * dim;
 
-		Tensor<1,dim> fe_val_Momentum_i;
+		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
+			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim + 1 + dim * dim));
+
+		Tensor<1, dim> fe_val_Momentum_i;
 		double fe_val_Pressure_i;
-		Tensor<1,dim> fe_grad_Pressure_i;
+		Tensor<1, dim> fe_grad_Pressure_i;
 		Tensor<2, dim> fe_val_Def_Grad_i;
+
+		//Stability parameters 
+		double alpha = 0.0;
+		double beta = 0.0;
 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			PointHistory<dim>* local_quadrature_points_history =
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-
+			realFF = 0;
 			FF = 0;
 			Cofactor = 0;
 			Jf = 0;
@@ -755,10 +775,12 @@ namespace Project_attempt
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
 						FF[i][j] = sol_vec[q_point](sol_counter);
 						++sol_counter;
-
 					}
 				}
-				
+
+				realFF = get_realFF(displacement_increment_grads[q_point]);
+				FF += alpha * (realFF - FF);
+				temp_pressure += beta * mu * (determinant(realFF) - 1 - temp_pressure / kappa);
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, kappa, Cofactor);
@@ -1062,7 +1084,7 @@ namespace Project_attempt
 		auto& momentum = solution.block(0);
 		auto& def_grad = solution.block(2);
 
-		
+
 
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
@@ -1092,7 +1114,7 @@ namespace Project_attempt
 		return it_count;
 	}
 
-	
+
 	//solves system using direct solver
 	template <int dim>
 	unsigned int Inelastic<dim>::solve_p()
@@ -1222,7 +1244,7 @@ namespace Project_attempt
 	}
 
 
-	
+
 
 
 
