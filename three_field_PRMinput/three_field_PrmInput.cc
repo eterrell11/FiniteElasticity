@@ -256,6 +256,7 @@ namespace Project_attempt
 		Jf = determinant(FF);
 		return Jf;
 	}
+
 	template <int dim>
 	Tensor<2, dim>
 		get_cofactorF(Tensor<2, dim>& FF, double& Jf)
@@ -269,7 +270,7 @@ namespace Project_attempt
 
 	template <int dim>
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
-		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, const double& kappa, Tensor<2, dim>& CofactorF)
+		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, Tensor<2, dim>& CofactorF)
 	{
 		Tensor<2, dim> strain;
 		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (pressure * CofactorF);
@@ -278,12 +279,12 @@ namespace Project_attempt
 
 	template <int dim>
 	inline Tensor<2, dim> //Provides construction of PK1 stress tensor
-		get_pk1_all(Tensor<2, dim> FF, const double mu, const double kappa)
+		get_pk1_all(Tensor<2, dim> FF, const double mu)
 	{
 		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
 		Tensor<2, dim> CofactorF = get_cofactorF(FF, Jf);
-		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, kappa, CofactorF);
+		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, CofactorF);
 
 		return pk1;
 	}
@@ -422,7 +423,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(0)
+		, velocity(.01)
 	{}
 
 	template <int dim>
@@ -784,7 +785,7 @@ namespace Project_attempt
 				temp_pressure += beta * mu * (determinant(realFF) - 1 - temp_pressure / kappa);
 				Jf = get_Jf(FF);
 				Cofactor = get_cofactorF(FF, Jf);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, kappa, Cofactor);
+				pk1 = get_pk1(FF, mu, Jf, temp_pressure, Cofactor);
 
 				local_quadrature_points_history[q_point].pk1_store = pk1;
 				local_quadrature_points_history[q_point].pressure_store = temp_pressure;
@@ -1045,7 +1046,7 @@ namespace Project_attempt
 
 		FEValuesExtractors::Vector Momentum(0);
 		FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); 
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
 			Def_Gradient[i] = "true";
 		}
