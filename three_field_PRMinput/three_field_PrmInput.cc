@@ -145,6 +145,9 @@ namespace Project_attempt
 		{
 			double alpha;
 			double beta;
+			int x_ref;
+			int y_ref;
+			int z_ref;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -160,6 +163,18 @@ namespace Project_attempt
 					"0.0",
 					Patterns::Double(),
 					"beta");
+				prm.declare_entry("x_ref",
+					"8",
+					Patterns::Integer(),
+					"x_ref");
+				prm.declare_entry("y_ref",
+					"8",
+					Patterns::Integer(),
+					"y_ref");
+				prm.declare_entry("z_ref",
+					"8",
+					Patterns::Integer(),
+					"z_ref");
 			}
 			prm.leave_subsection();
 		}
@@ -169,6 +184,9 @@ namespace Project_attempt
 			{
 				alpha = prm.get_double("alpha");
 				beta = prm.get_double("beta");
+				x_ref = prm.get_integer("x_ref");
+				y_ref = prm.get_integer("y_ref");
+				z_ref = prm.get_integer("z_ref");
 			}
 			prm.leave_subsection();
 		}
@@ -529,9 +547,9 @@ namespace Project_attempt
 		const Point<dim> p2(1, 1, 1);
 		double side = 0; // Must equal z coordinate of bottom face for dirichlet BCs to work
 		std::vector<unsigned int> refinements(dim);
-		refinements[0] = 8;
-		refinements[1] = 8;
-		refinements[2] = 8;
+		refinements[0] = parameters.x_ref;
+		refinements[1] = parameters.y_ref;
+		refinements[2] = parameters.z_ref;
 		GridGenerator::subdivided_hyper_rectangle_with_simplices(triangulation,
 			refinements,
 			p1,
@@ -1189,7 +1207,6 @@ namespace Project_attempt
 	{
 		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
 		const auto op_un_M = block_operator(un_M);
-		const auto& M = constrained_mass_matrix;
 		BlockVector<double> un_rhs = system_rhs;
 		auto& sol = solution;
 		//BlockVector<double> old_sol = old_solution;
