@@ -441,7 +441,7 @@ namespace Project_attempt
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum()
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(.01)
+		, velocity(0)
 	{}
 
 	template <int dim>
@@ -740,6 +740,7 @@ namespace Project_attempt
 		double Jf;
 		Tensor<2, dim> pk1;
 		double sol_counter;
+		double realJf;
 
 		const std::vector<types::global_dof_index> dofs_per_component =
 			DoFTools::count_dofs_per_fe_component(dof_handler);
@@ -768,6 +769,7 @@ namespace Project_attempt
 			pk1 = 0;
 			temp_momentum = 0;
 			temp_pressure = 0;
+			realJf = 0;
 
 			cell_mass_matrix = 0;
 			cell_rhs = 0;
@@ -797,13 +799,15 @@ namespace Project_attempt
 						++sol_counter;
 					}
 				}
-
+				fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
 				realFF = get_realFF(displacement_increment_grads[q_point]);
 				FF += alpha * (realFF - FF);
 				temp_pressure += beta * mu * (determinant(realFF) - 1 - temp_pressure / kappa);
 				Jf = get_Jf(FF);
-				Cofactor = get_cofactorF(FF, Jf);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, Cofactor);
+				realJf = get_Jf(realFF);                                   
+				Cofactor = get_cofactorF(FF,Jf);
+				pk1 = get_pk1(FF, mu, Jf, temp_pressure, Cofactor);               //MUST REMOVE THESE REALS FOR CODE TO BE A PROPER 3 FIELD
+
 
 				local_quadrature_points_history[q_point].pk1_store = pk1;
 				local_quadrature_points_history[q_point].pressure_store = temp_pressure;
@@ -827,7 +831,8 @@ namespace Project_attempt
 							1 / kappa * // Pressure terms
 							fe_val_Pressure_i *
 							fe_values[Pressure].value(j, q_point) *
-							fe_values.JxW(q_point) +
+							fe_values.JxW(q_point) + 
+							present_timestep * present_timestep *
 							scalar_product(Cofactor * fe_grad_Pressure_i,
 								Cofactor * fe_values[Pressure].gradient(j, q_point)) *
 							fe_values.JxW(q_point);
