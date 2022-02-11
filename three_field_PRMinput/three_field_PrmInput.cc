@@ -114,6 +114,7 @@ namespace Project_attempt
 		{
 			double present_timestep;
 			double end_time;
+			double save_time;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -129,6 +130,10 @@ namespace Project_attempt
 					"0.5",
 					Patterns::Double(),
 					"End time");
+				prm.declare_entry("Save time",
+					"0.005",
+					Patterns::Double(),
+					"Save time");
 			}
 			prm.leave_subsection();
 		}
@@ -138,6 +143,7 @@ namespace Project_attempt
 			{
 				present_timestep = prm.get_double("Timestep");
 				end_time = prm.get_double("End time");
+				save_time = prm.get_double("Save time");
 			}
 			prm.leave_subsection();
 		}
@@ -385,6 +391,8 @@ namespace Project_attempt
 		double present_time;
 		double present_timestep;
 		double end_time;
+		double save_time;
+		double save_counter;
 		unsigned int timestep_no;
 
 		Parameters::AllParameters parameters;
@@ -530,10 +538,12 @@ namespace Project_attempt
 		nu = parameters.nu;
 		present_timestep = parameters.present_timestep;
 		end_time = parameters.end_time;
-
+		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		output_results();
+		output_results();	
+		cout << "Saving results at time : " << present_time << std::endl;
+		save_counter=1;
 		while (present_time < end_time)
 			do_timestep();
 	}
@@ -905,7 +915,6 @@ namespace Project_attempt
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 
 			FF = 0;
-			Jf = 0;
 			temp_momentum = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
@@ -929,7 +938,6 @@ namespace Project_attempt
 
 					}
 				}
-				Jf = get_Jf(FF);
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
 				for (const unsigned int i : fe_values.dof_indices())
 				{
@@ -1359,9 +1367,12 @@ namespace Project_attempt
 			present_time = end_time;
 		}
 		solve_timestep();
-		//time_integrator();
 		move_mesh();
-		output_results();
+		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
+			cout << "Saving results at time : " << present_time << std::endl;
+			output_results();
+			save_counter++;
+		}
 		cout << std::endl;
 	}
 
