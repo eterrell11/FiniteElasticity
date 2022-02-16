@@ -1,0 +1,18 @@
+# Parameter file for three-field problem
+
+subsection Material properties
+  set Young's modulus = 2000
+  set Poisson's ratio = 0.5
+end 
+subsection Time
+  set Timestep = 0.00025
+  set End time = 0.5
+  set Save time = 0.00025
+end
+subsection Numerical parameters
+  set alpha = 1
+  set beta  = 1
+  set x_ref = 6 
+  set y_ref = 6
+  set z_ref = 6
+end
