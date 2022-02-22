@@ -239,8 +239,8 @@ namespace Project_attempt
 	struct PointHistory
 	{
 		Tensor<2, dim> pk1_store;
-		double pressure_store;
 		Tensor<2, dim> Cofactor_store;
+		Tensor<2, dim> face_Cofactor_store;
 	};
 
 	//Class for defining Kappa
@@ -284,7 +284,7 @@ namespace Project_attempt
 
 	template <int dim>
 	Tensor<2, dim>
-		get_cofactorF(Tensor<2, dim>& FF, double& Jf)
+		get_Cofactor(Tensor<2, dim>& FF, double& Jf)
 	{
 		Tensor<2, dim> CofactorF;
 		CofactorF = Jf * (invert(transpose(FF)));
@@ -308,7 +308,7 @@ namespace Project_attempt
 	{
 		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
-		Tensor<2, dim> CofactorF = get_cofactorF(FF, Jf);
+		Tensor<2, dim> CofactorF = get_Cofactor(FF, Jf);
 		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, CofactorF);
 
 		return pk1;
@@ -372,7 +372,7 @@ namespace Project_attempt
 		AffineConstraints<double> homogeneous_constraints;
 
 		const QGauss<dim> quadrature_formula;
-		const QGauss<dim> face_quadrature_formula;
+		const QGauss<dim - 1> face_quadrature_formula;
 
 		std::vector<PointHistory<dim>> quadrature_point_history;
 		BlockSparsityPattern constrained_sparsity_pattern;
@@ -508,9 +508,9 @@ namespace Project_attempt
 		: parameters(input_file)
 		, triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
-		, fe(FE_Q<dim>(1), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
+		, fe(FE_Q<dim>(2), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
-		, face_quadrature_formula(fe.degree+1)
+		, face_quadrature_formula(fe.degree + 1)
 		, timestep_no(0)
 		, E(parameters.E)
 		, nu(parameters.nu)
@@ -542,9 +542,9 @@ namespace Project_attempt
 		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		output_results();	
+		output_results();
 		cout << "Saving results at time : " << present_time << std::endl;
-		save_counter=1;
+		save_counter = 1;
 		while (present_time < end_time)
 			do_timestep();
 	}
@@ -698,7 +698,7 @@ namespace Project_attempt
 		system_rhs.collect_sizes();
 
 		cout << "Applying initial conditions" << std::endl;
-		VectorTools::interpolate( dof_handler, InitialMomentum<dim>(), solution);
+		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(), solution);
 
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
@@ -719,21 +719,21 @@ namespace Project_attempt
 			face_quadrature_formula,
 			update_values |
 			update_normal_vectors |
-			updated_quadrature_points |
+			update_quadrature_points |
 			update_JxW_values);
 
 		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula.size();
 		const unsigned int n_face_q_points = face_quadrature_formula.size();
 
+			
 		std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
 		std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
-		const unsigned int dpc = fe.dofs_per_cell;
 
 
 
 
-		
+
 
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
@@ -790,7 +790,7 @@ namespace Project_attempt
 			pk1 = 0;
 			temp_momentum = 0;
 			temp_pressure = 0;
-			face_temp_momentum = 0;
+
 			realJf = 0;
 
 			cell_mass_matrix = 0;
@@ -827,12 +827,11 @@ namespace Project_attempt
 				realJf = get_Jf(realFF);
 				temp_pressure += beta * mu * (realJf - 1 - temp_pressure / kappa);
 				Jf = get_Jf(FF);
-				Cofactor = get_cofactorF(FF,Jf);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, Cofactor);               
+				Cofactor = get_Cofactor(FF, Jf);
+				pk1 = get_pk1(FF, mu, Jf, temp_pressure, Cofactor);
 
 
 				local_quadrature_points_history[q_point].pk1_store = pk1;
-				local_quadrature_points_history[q_point].pressure_store = temp_pressure;
 				local_quadrature_points_history[q_point].Cofactor_store = Cofactor;
 
 				for (const unsigned int i : fe_values.dof_indices())
@@ -853,7 +852,7 @@ namespace Project_attempt
 							1 / kappa * // Pressure terms
 							fe_val_Pressure_i *
 							fe_values[Pressure].value(j, q_point) *
-							fe_values.JxW(q_point) + 
+							fe_values.JxW(q_point) +
 							present_timestep * present_timestep *
 							scalar_product(Cofactor * fe_grad_Pressure_i,
 								Cofactor * fe_values[Pressure].gradient(j, q_point)) *
@@ -867,21 +866,24 @@ namespace Project_attempt
 
 			for (const auto& face : cell->face_iterators())
 			{
+				face_temp_momentum = 0;
 				if (face->at_boundary())
 				{
 					fe_face_values.reinit(cell, face);
 					fe_face_values.get_function_values(solution, face_sol_vec);
-					for (const unsigned int q_point : fe_values.quadrature_point_indices())
+					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
 					{
 						for (int i = 0; i < dim; i++) {
 							face_temp_momentum[i] = face_sol_vec[q_point](i);
 						}
 						for (const unsigned int i : fe_values.dof_indices())
 						{
-							cell_rhs(i) += 
+							cell_rhs(i) += face_temp_momentum *
+								fe_face_values[Def_Gradient].value(i,q_point) *
+								fe_face_values.normal_vector(q_point) *
+								fe_face_values.JxW(q_point);
 						}
 					}
-
 				}
 			}
 
@@ -890,8 +892,8 @@ namespace Project_attempt
 				cell_mass_matrix,
 				local_dof_indices,
 				constrained_mass_matrix);
-			for (unsigned int i = 0; i < dpc; ++i) {
-				for (unsigned int j = 0; j < dpc; ++j) {
+			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+				for (unsigned int j = 0; j < dofs_per_cell; ++j) {
 					unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 				}
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
@@ -911,15 +913,24 @@ namespace Project_attempt
 			update_quadrature_points |
 			update_JxW_values);
 
-		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
-		const unsigned int dpc = fe.dofs_per_cell;
+		FEFaceValues<dim> fe_face_values(fe,
+			face_quadrature_formula,
+			update_values |
+			update_normal_vectors |
+			update_quadrature_points |
+			update_JxW_values);
+
+		const unsigned int dofs_per_cell = fe.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula.size();
+		const unsigned int n_face_q_points = face_quadrature_formula.size();
+
+		std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
+		std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
 
 
 		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
 			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
 
-		const unsigned int dofs_per_cell = fe.dofs_per_cell;
-		const unsigned int n_q_points = quadrature_formula.size();
 
 
 		Vector<double>     cell_rhs(dofs_per_cell);
@@ -933,9 +944,12 @@ namespace Project_attempt
 		const FEValuesExtractors::Scalar Pressure(dim);
 
 		Tensor<2, dim> FF;
+		Tensor<2, dim> face_FF;
 		Tensor<1, dim> temp_momentum;
+		Tensor<1, dim> face_temp_momentum;
 		Tensor<2, dim> Cofactor;
 		double Jf;
+		Tensor<2, dim> face_Cofactor;
 		double sol_counter;
 
 
@@ -968,7 +982,9 @@ namespace Project_attempt
 
 					}
 				}
+
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
+				
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					cell_rhs(i) += -scalar_product(temp_momentum *
@@ -977,9 +993,52 @@ namespace Project_attempt
 						fe_values.JxW(q_point);
 				}
 			}
+			for (const auto& face : cell->face_iterators())
+			{
+
+				if (face->at_boundary())
+				{
+
+					fe_face_values.reinit(cell, face);
+					fe_face_values.get_function_values(solution, face_sol_vec);
+					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
+					{
+						face_temp_momentum = 0;
+						face_FF = 0;
+						Jf = 0;
+						face_Cofactor = 0;
+						sol_counter = 0;
+
+						for (int i = 0; i < dim; i++) {
+							face_temp_momentum[sol_counter] = face_sol_vec[q_point](i);
+							sol_counter++;
+						}
+						sol_counter++;
+						for (int i = 0; i < dim; i++) {
+							for (int j = 0; j < dim; j++) {
+								face_FF[i][j] = face_sol_vec[q_point](sol_counter);
+								++sol_counter;
+							}
+						}
+
+						Jf = get_Jf(face_FF);
+						face_Cofactor = get_Cofactor(face_FF, Jf);
+						//Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
+						for (const unsigned int i : fe_face_values.dof_indices())
+						{
+							cell_rhs(i) += face_temp_momentum *
+								face_Cofactor *
+								fe_face_values[Pressure].value(i, q_point) *
+								fe_face_values.normal_vector(q_point) *
+								fe_face_values.JxW(q_point);
+						}
+
+					}
+				}
+			}
 
 			cell->get_dof_indices(local_dof_indices);
-			for (unsigned int i = 0; i < dpc; ++i) {
+			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
 		}
@@ -997,16 +1056,27 @@ namespace Project_attempt
 			update_quadrature_points |
 			update_JxW_values);
 
-		std::vector<Vector<double>> sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
-		std::vector<Vector<double>> old_sol_vec(quadrature_formula.size(), Vector<double>(dim + 1 + dim * dim));
+		FEFaceValues<dim> fe_face_values(fe,
+			face_quadrature_formula,
+			update_values |
+			update_normal_vectors |
+			update_quadrature_points |
+			update_JxW_values);
 
-		const unsigned int dpc = fe.dofs_per_cell;
+		const unsigned int dofs_per_cell = fe.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula.size();
+		const unsigned int n_face_q_points = face_quadrature_formula.size();
+
+		std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
+		std::vector<Vector<double>> old_sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
+		std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
+		std::vector<Vector<double>> face_old_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
+
 
 
 		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
 			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
 
-		const unsigned int dofs_per_cell = fe.dofs_per_cell;
 
 
 		Vector<double>     cell_rhs(dofs_per_cell);
@@ -1022,8 +1092,12 @@ namespace Project_attempt
 
 		double temp_pressure;
 		double old_temp_pressure;
+		double face_temp_pressure;
+		double face_old_temp_pressure;
+		Tensor<2, dim> face_FF;
 		Tensor<2, dim> Cofactor;
-		//double Jf;
+		Tensor<2, dim> face_Cofactor;
+		double Jf;
 		double sol_counter;
 		//double old_pressure;
 
@@ -1046,7 +1120,6 @@ namespace Project_attempt
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
-				//old_pressure = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].pressure_store;
 				temp_pressure = sol_vec[q_point](sol_counter);
 				old_temp_pressure = old_sol_vec[q_point](sol_counter);
 
@@ -1056,9 +1129,47 @@ namespace Project_attempt
 						fe_values.JxW(q_point);
 				}
 			}
+			for (const auto& face : cell->face_iterators())
+			{
+
+				if (face->at_boundary())
+				{
+					fe_face_values.reinit(cell, face);
+					fe_face_values.get_function_values(solution, face_sol_vec);
+					fe_face_values.get_function_values(old_solution, face_old_sol_vec);
+					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
+					{
+						face_temp_pressure = 0;
+						face_old_temp_pressure = 0;
+						sol_counter = dim+1;
+
+						face_temp_pressure = face_sol_vec[q_point](sol_counter);
+						face_old_temp_pressure = face_old_sol_vec[q_point](sol_counter);
+
+
+						for (int i = 0; i < dim; i++) {
+							for (int j = 0; j < dim; j++) {
+								face_FF[i][j] = face_sol_vec[q_point](sol_counter);
+								++sol_counter;
+							}
+						}
+						Jf = get_Jf(face_FF);
+						face_Cofactor = get_Cofactor(face_FF, Jf);
+
+						for (const unsigned int i : fe_face_values.dof_indices())
+						{
+							cell_rhs(i) += (face_temp_pressure - face_old_temp_pressure) *
+								face_Cofactor *
+								fe_face_values[Momentum].value(i, q_point) *
+								fe_face_values.normal_vector(q_point) *
+								fe_face_values.JxW(q_point);
+						}
+					}
+				}
+			}
 
 			cell->get_dof_indices(local_dof_indices);
-			for (unsigned int i = 0; i < dpc; ++i) {
+			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				system_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
 		}
@@ -1105,7 +1216,7 @@ namespace Project_attempt
 
 		FEValuesExtractors::Vector Momentum(0);
 		FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); 
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim);
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
 			Def_Gradient[i] = "true";
 		}
