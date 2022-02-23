@@ -508,7 +508,7 @@ namespace Project_attempt
 		: parameters(input_file)
 		, triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
-		, fe(FE_Q<dim>(2), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
+		, fe(FE_Q<dim>(1), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
 		, quadrature_formula(fe.degree + 1)
 		, face_quadrature_formula(fe.degree + 1)
 		, timestep_no(0)
@@ -608,7 +608,7 @@ namespace Project_attempt
 		FEValuesExtractors::Scalar Pressure(dim);
 		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = "true";
+			Def_Gradient[i] = true;
 		}
 		homogeneous_constraints.clear();
 
@@ -1218,7 +1218,7 @@ namespace Project_attempt
 		FEValuesExtractors::Scalar Pressure(dim);
 		std::vector<bool> Def_Gradient(dim * dim + 1 + dim);
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = "true";
+			Def_Gradient[i] = true;
 		}
 
 		AffineConstraints<double> u_constraints;
@@ -1246,22 +1246,16 @@ namespace Project_attempt
 		rhs.reinit(old_sol);
 		setup_constrained_rhs.apply(rhs);
 
-
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
 		const auto& M2 = constrained_mass_matrix.block(2, 2);
-
 
 		auto& momentum = solution.block(0);
 		auto& def_grad = solution.block(2);
 
-
-
+		//could make const references
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
 
-		/*SparseDirectUMFPACK M0_direct;
-		M0_direct.initialize(M0);
-		M0_direct.vmult(momentum, u_rhs);*/
 		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
@@ -1270,10 +1264,6 @@ namespace Project_attempt
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
 		it_count[0] = solver_control.last_step();
-
-		/*SparseDirectUMFPACK M2_direct;
-		M2_direct.initialize(M2);
-		M2_direct.vmult(def_grad, F_rhs);*/
 
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
@@ -1302,7 +1292,7 @@ namespace Project_attempt
 		const FEValuesExtractors::Scalar Pressure(dim);
 		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = "true";
+			Def_Gradient[i] = true;
 		}
 
 		AffineConstraints<double> p_constraints;
@@ -1374,7 +1364,7 @@ namespace Project_attempt
 		const FEValuesExtractors::Scalar Pressure(dim);
 		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = "true";
+			Def_Gradient[i] = true;
 		}
 
 		AffineConstraints<double> u_constraints;
