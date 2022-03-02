@@ -155,6 +155,7 @@ namespace Project_attempt
 			int x_ref;
 			int y_ref;
 			int z_ref;
+			unsigned int order;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -182,6 +183,11 @@ namespace Project_attempt
 					"8",
 					Patterns::Integer(),
 					"z_ref");
+				prm.declare_entry("Momentum order",
+					"1",
+					Patterns::Integer(0),
+					"Momentum order");
+
 			}
 			prm.leave_subsection();
 		}
@@ -194,13 +200,46 @@ namespace Project_attempt
 				x_ref = prm.get_integer("x_ref");
 				y_ref = prm.get_integer("y_ref");
 				z_ref = prm.get_integer("z_ref");
+				order = prm.get_integer("Momentum order");
+			}
+			prm.leave_subsection();
+		}
+		struct Simulation
+		{
+			double BodyForce;
+			double InitialVelocity;
+			static void declare_parameters(ParameterHandler& prm);
+			void parse_parameters(ParameterHandler& prm);
+		};
+		void Simulation::declare_parameters(ParameterHandler& prm)
+		{
+			prm.enter_subsection("Simulation parameters");
+			{
+				prm.declare_entry("Body force",
+					"-100",
+					Patterns::Double(),
+					"Body Force");
+				prm.declare_entry("Initial velocity",
+					"0",
+					Patterns::Double(),
+					"Initial velocity");
+			}
+			prm.leave_subsection();
+		}
+		void Simulation::parse_parameters(ParameterHandler& prm)
+		{
+			prm.enter_subsection("Simulation parameters");
+			{
+				BodyForce = prm.get_double("Body force");
+				InitialVelocity = prm.get_double("Initial velocity");
 			}
 			prm.leave_subsection();
 		}
 		struct AllParameters :
 			public Materials,
 			public Time,
-			public Numerical
+			public Numerical,
+			public Simulation
 		{
 			AllParameters(const std::string& input_file);
 
@@ -221,12 +260,14 @@ namespace Project_attempt
 			Materials::declare_parameters(prm);
 			Time::declare_parameters(prm);
 			Numerical::declare_parameters(prm);
+			Simulation::declare_parameters(prm);
 		}
 		void AllParameters::parse_parameters(ParameterHandler& prm)
 		{
 			Materials::parse_parameters(prm);
 			Time::parse_parameters(prm);
 			Numerical::parse_parameters(prm);
+			Simulation::parse_parameters(prm);
 		}
 	} // namespace Parameters
 
@@ -413,21 +454,21 @@ namespace Project_attempt
 	class RightHandSide : public Function<dim>
 	{
 	public:
-		virtual void vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values)
+		virtual void vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& BodyForce)
 
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> point_1;
-			values[2] = -100; //gravity? Need to check units n'at
+			values[2] = BodyForce; //gravity? Need to check units n'at
 		}
 		virtual void
-			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list)
+			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				RightHandSide<dim>::vector_value(points[p], value_list[p]);
+				RightHandSide<dim>::vector_value(points[p], value_list[p],BodyForce);
 		}
 	};
 
@@ -437,7 +478,7 @@ namespace Project_attempt
 	class InitialMomentum : public Function<dim>
 	{
 	public:
-		InitialMomentum();
+		InitialMomentum(double & InitialVelocity);
 		virtual void vector_value(const Point<dim>& p,
 			Vector<double>& values) const override;
 		virtual void
@@ -448,9 +489,9 @@ namespace Project_attempt
 	};
 
 	template <int dim>
-	InitialMomentum<dim>::InitialMomentum()
+	InitialMomentum<dim>::InitialMomentum(double & InitialVelocity)
 		: Function<dim>(dim + dim * dim + 1)
-		, velocity(0)
+		, velocity(InitialVelocity)
 	{}
 
 	template <int dim>
@@ -462,10 +503,6 @@ namespace Project_attempt
 		values = 0;
 
 		double rotator = velocity * std::sin(p[2] * M_PI / (2));
-
-		//std::cout << " Rotation matrix" << rotation_matrix << std::endl; 
-		//std::cout << " Original point: " << p << std::endl;
-		//std::cout << " Rotated Point: " << pnew << std::endl;
 		values(0) = 0;// -p[1] * rotator;
 		values(1) = 0;// p[0] * rotator;
 		values(2) = rotator;
@@ -509,18 +546,11 @@ namespace Project_attempt
 		, triangulation(MPI_COMM_WORLD)
 		, dof_handler(triangulation)
 		, fe(FE_Q<dim>(1), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
-		, quadrature_formula(fe.degree + 1)
-		, face_quadrature_formula(fe.degree + 1)
+		, quadrature_formula(2)
+		, face_quadrature_formula(2)
 		, timestep_no(0)
-		, E(parameters.E)
-		, nu(parameters.nu)
 	{}
 
-	/*template <int dim>
-	const double Inelastic<dim>::kappa = get_kappa<dim>(parameters.E, paramters.nu);
-
-	template <int dim>
-	const double Inelastic<dim>::mu = get_mu<dim>(parameters.E, parameters.nu);*/
 
 	//This is a destructor.
 	template <int dim>
@@ -698,7 +728,7 @@ namespace Project_attempt
 		system_rhs.collect_sizes();
 
 		cout << "Applying initial conditions" << std::endl;
-		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(), solution);
+		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), solution);
 
 		incremental_displacement.reinit(dof_handler.n_dofs());
 	}
@@ -798,7 +828,7 @@ namespace Project_attempt
 			fe_values.reinit(cell);
 
 			fe_values.get_function_values(solution, sol_vec);
-			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values);
+			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values,parameters.BodyForce);
 
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
@@ -1246,16 +1276,22 @@ namespace Project_attempt
 		rhs.reinit(old_sol);
 		setup_constrained_rhs.apply(rhs);
 
+
 		const auto& M0 = constrained_mass_matrix.block(0, 0);
 		const auto& M2 = constrained_mass_matrix.block(2, 2);
+
 
 		auto& momentum = solution.block(0);
 		auto& def_grad = solution.block(2);
 
-		//could make const references
+
+
 		Vector<double> u_rhs = rhs.block(0);
 		Vector<double> F_rhs = rhs.block(2);
 
+		/*SparseDirectUMFPACK M0_direct;
+		M0_direct.initialize(M0);
+		M0_direct.vmult(momentum, u_rhs);*/
 		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
@@ -1264,6 +1300,10 @@ namespace Project_attempt
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
 		it_count[0] = solver_control.last_step();
+
+		/*SparseDirectUMFPACK M2_direct;
+		M2_direct.initialize(M2);
+		M2_direct.vmult(def_grad, F_rhs);*/
 
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
@@ -1290,7 +1330,7 @@ namespace Project_attempt
 
 		FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
+		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); 
 		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
 			Def_Gradient[i] = true;
 		}
