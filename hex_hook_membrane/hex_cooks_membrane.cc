@@ -208,6 +208,7 @@ namespace Project_attempt
 		{
 			double BodyForce;
 			double InitialVelocity;
+			double TractionMagnitude;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -223,6 +224,10 @@ namespace Project_attempt
 					"0",
 					Patterns::Double(),
 					"Initial velocity");
+				prm.declare_entry("Traction Magnitude",
+					"0",
+					Patterns::Double(),
+					"Traction Magnitude");
 			}
 			prm.leave_subsection();
 		}
@@ -232,6 +237,7 @@ namespace Project_attempt
 			{
 				BodyForce = prm.get_double("Body force");
 				InitialVelocity = prm.get_double("Initial velocity");
+				TractionMagnitude = prm.get_double("Traction Magnitude");
 			}
 			prm.leave_subsection();
 		}
@@ -472,6 +478,24 @@ namespace Project_attempt
 		}
 	};
 
+	template<int dim>
+	class TractionVector : public Function<dim>
+	{
+	public :
+		virtual void vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& TractionMagnitude)
+		{
+			Assert(dim >= 2, ExcInternalError());
+			values[dim-1] = TractionMagnitude;
+		}
+		virtual void vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
+		{
+			const unsigned int n_points = points.size();
+			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+			for (unsigned int p = 0; p < n_points; ++p)
+				TractionVector<dim>::vector_value(points[p], value_list[p], TractionMagnitude);
+		}
+	};
+
 
 
 	template <int dim>
@@ -578,8 +602,6 @@ namespace Project_attempt
 			do_timestep();
 	}
 
-
-	//Classic grid generating bit. This is where the actual hollowed hemisphere is employed
 	template <int dim>
 	void Inelastic<dim>::create_coarse_grid()
 	{
@@ -608,7 +630,7 @@ namespace Project_attempt
 			cells[i].material_id = 0;
 		}
 
-		double side = 0; 
+		//double side = 0; 
 
 		triangulation.create_triangulation(vertices, cells, SubCellData());
 
@@ -617,8 +639,11 @@ namespace Project_attempt
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (face_center[0] == -side) {
+					if (face_center[0] == 0) {
 						face->set_boundary_id(4);
+					}
+					if (abs(face_center[0] - 0.48) < 0.01) {
+						face->set_boundary_id(5);
 					}
 				}
 		triangulation.refine_global(1);
@@ -794,6 +819,8 @@ namespace Project_attempt
 		RightHandSide<dim> right_hand_side;
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
+		TractionVector<dim> traction_vector;
+		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
 
 		const FEValuesExtractors::Vector Momentum(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
@@ -918,6 +945,8 @@ namespace Project_attempt
 				{
 					fe_face_values.reinit(cell, face);
 					fe_face_values.get_function_values(solution, face_sol_vec);
+					traction_vector.vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude);
+
 					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
 					{
 						for (int i = 0; i < dim; i++) {
@@ -925,10 +954,19 @@ namespace Project_attempt
 						}
 						for (const unsigned int i : fe_values.dof_indices())
 						{
-							cell_rhs(i) += face_temp_momentum *
-								fe_face_values[Def_Gradient].value(i,q_point) *
-								fe_face_values.normal_vector(q_point) *
-								fe_face_values.JxW(q_point);
+							if (face->boundary_id() == 5) {
+								cell_rhs(i) += traction_values[q_point] * fe_face_values[Momentum].value(i, q_point) * fe_face_values.JxW(q_point) + // Momentum face terms (traction)
+									face_temp_momentum *
+									fe_face_values[Def_Gradient].value(i, q_point) *
+									fe_face_values.normal_vector(q_point) *
+									fe_face_values.JxW(q_point); // Deformation gradient face terms
+							}
+							else {
+								cell_rhs(i) += face_temp_momentum *
+									fe_face_values[Def_Gradient].value(i, q_point) *
+									fe_face_values.normal_vector(q_point) *
+									fe_face_values.JxW(q_point); // Deformation gradient face terms
+							}
 						}
 					}
 				}
