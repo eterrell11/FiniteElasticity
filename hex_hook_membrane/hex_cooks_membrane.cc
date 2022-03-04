@@ -926,7 +926,7 @@ namespace Project_attempt
 				}
 
 				temp_pressure = sol_vec[q_point](sol_counter);
-				sol_counter += 1;
+				++sol_counter;
 
 				for (unsigned int i = 0; i < dim; i++) {
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
@@ -1266,18 +1266,19 @@ namespace Project_attempt
 					{
 						face_temp_pressure = 0;
 						face_old_temp_pressure = 0;
-						sol_counter = dim+1;
+						sol_counter = dim;
 
 						face_temp_pressure = face_sol_vec[q_point](sol_counter);
 						face_old_temp_pressure = face_old_sol_vec[q_point](sol_counter);
 
-
+						++sol_counter;
 						for (int i = 0; i < dim; i++) {
 							for (int j = 0; j < dim; j++) {
 								face_FF[i][j] = face_sol_vec[q_point](sol_counter);
 								++sol_counter;
 							}
 						}
+
 						Jf = get_Jf(face_FF);
 						face_Cofactor = get_Cofactor(face_FF, Jf);
 
@@ -1706,7 +1707,7 @@ int main(int argc, char** argv)
 		using namespace dealii;
 		using namespace Project_attempt;
 
-		Project_attempt::Inelastic<3> inelastic("parameter_file.prm");
+		Project_attempt::Inelastic<2> inelastic("parameter_file.prm");
 		inelastic.run();
 	}
 	catch (std::exception& exc)
