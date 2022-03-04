@@ -344,8 +344,9 @@ namespace Project_attempt
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
 		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, Tensor<2, dim>& CofactorF)
 	{
+		double dimension = 1.0 * dim;
 		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3.0 * CofactorF / Jf) + (pressure * CofactorF);
+		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / dimension * CofactorF / Jf) + (pressure * CofactorF);
 		return strain;
 	}
 
@@ -353,7 +354,6 @@ namespace Project_attempt
 	inline Tensor<2, dim> //Provides construction of PK1 stress tensor
 		get_pk1_all(Tensor<2, dim> FF, const double mu)
 	{
-		cout << "FF = " << FF << std::endl;
 		double Jf = get_Jf(FF);
 		Tensor<2, dim> CofactorF = get_Cofactor(FF, Jf);
 		Tensor<2, dim> pk1 = get_pk1(FF, mu, Jf, CofactorF);
@@ -395,7 +395,8 @@ namespace Project_attempt
 		void run();
 
 	private:
-		void         create_coarse_grid();
+		void         create_coarse_grid(Triangulation<2>& triangulation);
+		void         create_coarse_grid(Triangulation<3>& triangulation);
 		void         setup_system();
 		void         assemble_system();
 		void		 assemble_pressure_rhs();
@@ -466,7 +467,7 @@ namespace Project_attempt
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> point_1;
-			values[2] = BodyForce; //gravity? Need to check units n'at
+			values[dim-1] = BodyForce; //gravity? Need to check units n'at
 		}
 		virtual void
 			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce)
@@ -526,13 +527,13 @@ namespace Project_attempt
 		Assert(values.size() == (dim + dim * dim + 1), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
-		double rotator = velocity * std::sin(p[2] * M_PI / (2));
-		values(0) = 0;// -p[1] * rotator;
-		values(1) = 0;// p[0] * rotator;
-		values(2) = rotator;
-		values(4) = 1;
-		values(8) = 1;
-		values(12) = 1;
+		//double rotator = velocity * std::sin(p[2] * M_PI / (2));
+		values(dim-1) = 0;
+		values(dim+1) = 1;
+		values(2*dim+2) = 1;
+		if (dim == 3) {
+			values(12) = 1;
+		}
 	}
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
@@ -556,9 +557,11 @@ namespace Project_attempt
 				Vector<double>& values) const override
 		{
 			values = 0;
-			values(4) = 1;
-			values(8) = 1;
-			values(12) = 1;
+			values(dim+1) = 1;
+			values(2*dim+2) = 1;
+			if (dim == 3) {
+				values(12) = 1;
+			}
 		}
 	};
 
@@ -586,7 +589,7 @@ namespace Project_attempt
 	template<int dim>
 	void Inelastic<dim>::run()
 	{
-		create_coarse_grid();
+		create_coarse_grid(triangulation);
 		setup_system();
 		E = parameters.E;
 		nu = parameters.nu;
@@ -603,36 +606,24 @@ namespace Project_attempt
 	}
 
 	template <int dim>
-	void Inelastic<dim>::create_coarse_grid()
+	void Inelastic<dim>::create_coarse_grid(Triangulation<2> & triangulation)
 	{
-		const std::vector<Point<dim>> vertices = {
-			{0.0 , 0.0 , 0.0} , {0.0, 0.1, 0.0}, {0.0 , 0.0 , 0.22} , {0.0, 0.1, 0.22}, {0.0, 0.0, 0.44}, {0.0, 0.1, 0.44},
-			{0.12, 0.0, 0.11}, {0.12, 0.1, 0.11}, {0.12, 0.0, 0.295}, {0.12, 0.1, 0.295}, {0.12, 0.0, 0.48}, {0.12, 0.1, 0.48},
-			{0.24, 0.0, 0.22}, {0.24, 0.1, 0.22}, {0.24, 0.0, 0.37}, {0.24, 0.1, 0.37}, {0.24, 0.0, 0.52}, {0.24, 0.1, 0.52},
-			{0.36, 0.0, 0.33}, {0.36, 0.1, 0.33}, {0.36, 0.0, 0.445}, {0.36, 0.1, 0.445}, {0.36, 0.00, 0.56}, {0.36, 0.1, 0.56},
-			{0.48, 0.0, 0.44}, {0.48, 0.1, 0.44}, {0.48, 0.0, 0.52}, {0.48, 0.1, 0.52}, {0.48, 0.0, 0.6}, {0.48, 0.1, 0.6 }};
-		const std::vector < std::array<int, GeometryInfo<dim>::vertices_per_cell>>
-			cell_vertices = { {{0, 1, 2, 3, 6, 7, 8, 9}},
-				{{2, 3, 4, 5, 8, 9, 10, 11}},
-				{{6, 7, 8, 9, 12, 13, 14, 15}},
-				{{8, 9, 10, 11, 14, 15, 16, 17}},
-				{{12, 13, 14, 15, 18, 19, 20, 21}},
-				{{14, 15, 16, 17, 20, 21, 22, 23}},
-				{{18,19,20,21,24,25,26,27}},
-				{{20,21,22,23,26,27,28,29}} };
-		const unsigned int n_cells = cell_vertices.size();
+			std::vector<Point<2>> vertices = {
+				{0.0,0.0} , {0.0,0.44}, {0.48, 0.60}, {0.48, 0.44} };
 
-		std::vector<CellData<dim>> cells(n_cells, CellData<dim>());
-		for (unsigned int i = 0; i < n_cells; ++i) {
-			for (unsigned int j = 0; j < cell_vertices[i].size(); ++j) {
-				cells[i].vertices[j] = cell_vertices[i][j];
+			const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
+				cell_vertices = { {{0,3,1,2}} };
+			const unsigned int n_cells = cell_vertices.size();
+
+			std::vector<CellData<2>> cells(n_cells, CellData<2>());
+			for (unsigned int i = 0; i < n_cells; ++i) {
+				for (unsigned int j = 0; j < cell_vertices[i].size(); ++j) {
+					cells[i].vertices[j] = cell_vertices[i][j];
+				}
+				cells[i].material_id = 0;
 			}
-			cells[i].material_id = 0;
-		}
+			triangulation.create_triangulation(vertices, cells, SubCellData());
 
-		//double side = 0; 
-
-		triangulation.create_triangulation(vertices, cells, SubCellData());
 
 		for (const auto& cell : triangulation.active_cell_iterators())
 			for (const auto& face : cell->face_iterators())
@@ -646,11 +637,59 @@ namespace Project_attempt
 						face->set_boundary_id(5);
 					}
 				}
-		triangulation.refine_global(1);
+		triangulation.refine_global(4);
 		setup_quadrature_point_history();
-
 	}
 
+	template <int dim>
+	void Inelastic<dim>::create_coarse_grid(Triangulation<3>& triangulation)
+	{
+		//std::vector<Point<dim>> vertices;
+			std::vector<Point<3>> vertices = {
+				{0.0 , 0.0 , 0.0} , {0.0, 0.1, 0.0}, {0.0, 0.0 , 0.22} , {0.0, 0.1, 0.22}, {0.0, 0.0, 0.44}, {0.0, 0.1, 0.44},
+				{0.12, 0.0, 0.11}, {0.12, 0.1, 0.11}, {0.12, 0.0, 0.295}, {0.12, 0.1, 0.295}, {0.12, 0.0, 0.48}, {0.12, 0.1, 0.48},
+				{0.24, 0.0, 0.22}, {0.24, 0.1, 0.22}, {0.24, 0.0, 0.37}, {0.24, 0.1, 0.37}, {0.24, 0.0, 0.52}, {0.24, 0.1, 0.52},
+				{0.36, 0.0, 0.33}, {0.36, 0.1, 0.33}, {0.36, 0.0, 0.445}, {0.36, 0.1, 0.445}, {0.36, 0.00, 0.56}, {0.36, 0.1, 0.56},
+				{0.48, 0.0, 0.44}, {0.48, 0.1, 0.44}, {0.48, 0.0, 0.52}, {0.48, 0.1, 0.52}, {0.48, 0.0, 0.6}, {0.48, 0.1, 0.6 } };
+			const std::vector < std::array<int, GeometryInfo<3>::vertices_per_cell>>
+				cell_vertices = { {{0, 1, 2, 3, 6, 7, 8, 9}},
+					{{2, 3, 4, 5, 8, 9, 10, 11}},
+					{{6, 7, 8, 9, 12, 13, 14, 15}},
+					{{8, 9, 10, 11, 14, 15, 16, 17}},
+					{{12, 13, 14, 15, 18, 19, 20, 21}},
+					{{14, 15, 16, 17, 20, 21, 22, 23}},
+					{{18,19,20,21,24,25,26,27}},
+					{{20,21,22,23,26,27,28,29}} };
+			const unsigned int n_cells = cell_vertices.size();
+
+			std::vector<CellData<3>> cells(n_cells, CellData<3>());
+			for (unsigned int i = 0; i < n_cells; ++i) {
+				for (unsigned int j = 0; j < cell_vertices[i].size(); ++j) {
+					cells[i].vertices[j] = cell_vertices[i][j];
+				}
+				cells[i].material_id = 0;
+			}
+			triangulation.create_triangulation(vertices, cells, SubCellData());
+
+
+		for (const auto& cell : triangulation.active_cell_iterators())
+			for (const auto& face : cell->face_iterators())
+				if (face->at_boundary())
+				{
+					const Point<dim> face_center = face->center();
+					if (face_center[0] == 0) {
+						face->set_boundary_id(4);
+					}
+					if (abs(face_center[0] - 0.48) < 0.015) {
+						face->set_boundary_id(5);
+					}
+				}
+		triangulation.refine_global(1);
+		setup_quadrature_point_history();
+	}
+
+
+	
 
 
 
@@ -895,6 +934,7 @@ namespace Project_attempt
 						++sol_counter;
 					}
 				}
+
 				fe_values.get_function_gradients(incremental_displacement, displacement_increment_grads);
 				realFF = get_realFF(displacement_increment_grads[q_point]);
 				FF += alpha * (realFF - FF);
@@ -1060,6 +1100,7 @@ namespace Project_attempt
 
 					++sol_counter;
 				}
+				sol_counter += 1; //Skip one for pressure?
 				for (unsigned int i = 0; i < dim; i++) {
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
 						FF[i][j] = sol_vec[q_point](sol_counter);
@@ -1067,7 +1108,6 @@ namespace Project_attempt
 
 					}
 				}
-
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
 				
 				for (const unsigned int i : fe_values.dof_indices())
