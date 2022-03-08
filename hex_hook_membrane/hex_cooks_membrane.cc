@@ -461,7 +461,7 @@ namespace Project_attempt
 	class RightHandSide : public Function<dim>
 	{
 	public:
-		virtual void vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& BodyForce)
+		virtual void rhs_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& BodyForce)
 
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
@@ -470,12 +470,12 @@ namespace Project_attempt
 			values[dim-1] = BodyForce; //gravity? Need to check units n'at
 		}
 		virtual void
-			vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce)
+			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				RightHandSide<dim>::vector_value(points[p], value_list[p],BodyForce);
+				RightHandSide<dim>::rhs_vector_value(points[p], value_list[p],BodyForce);
 		}
 	};
 
@@ -483,17 +483,17 @@ namespace Project_attempt
 	class TractionVector : public Function<dim>
 	{
 	public :
-		virtual void vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& TractionMagnitude)
+		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude)
 		{
 			Assert(dim >= 2, ExcInternalError());
 			values[dim-1] = TractionMagnitude;
 		}
-		virtual void vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
+		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				TractionVector<dim>::vector_value(points[p], value_list[p], TractionMagnitude);
+				TractionVector<dim>::traction_vector_value(points[p], value_list[p], TractionMagnitude);
 		}
 	};
 
@@ -521,14 +521,12 @@ namespace Project_attempt
 
 	template <int dim>
 	void
-		InitialMomentum<dim>::vector_value(const Point<dim>& p,
+		InitialMomentum<dim>::vector_value(const Point<dim>& /*p*/,
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + dim * dim + 1), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
-		//double rotator = velocity * std::sin(p[2] * M_PI / (2));
-		values(dim-1) = 0;
 		values(dim+1) = 1;
 		values(2*dim+2) = 1;
 		if (dim == 3) {
@@ -553,7 +551,7 @@ namespace Project_attempt
 		Def_Grad_bound() : Function<dim>(dim + dim * dim + 1)
 		{}
 		void
-			vector_value(const Point<dim>& p,
+			vector_value(const Point<dim>& /*p*/,
 				Vector<double>& values) const override
 		{
 			values = 0;
@@ -569,12 +567,12 @@ namespace Project_attempt
 
 	template<int dim> // Constructor for the main class
 	Inelastic<dim>::Inelastic(const std::string& input_file)
-		: parameters(input_file)
-		, dof_handler(triangulation)
+		:  dof_handler(triangulation)
 		, fe(FE_Q<dim>(2), dim, FE_Q<dim>(1), 1, FE_Q<dim, dim>(1), dim* dim)
 		, quadrature_formula(3)
 		, face_quadrature_formula(3)
 		, timestep_no(0)
+		, parameters(input_file)
 	{}
 
 
@@ -878,7 +876,7 @@ namespace Project_attempt
 
 		const std::vector<types::global_dof_index> dofs_per_component =
 			DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim;
+		/*const unsigned int n_u = dofs_per_component[0] * dim;*/
 
 		std::vector<std::vector<Tensor<1, dim>>> displacement_increment_grads(
 			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim + 1 + dim * dim));
@@ -911,7 +909,7 @@ namespace Project_attempt
 			fe_values.reinit(cell);
 
 			fe_values.get_function_values(solution, sol_vec);
-			right_hand_side.vector_value_list(fe_values.get_quadrature_points(), rhs_values,parameters.BodyForce);
+			right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values,parameters.BodyForce);
 
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
@@ -985,7 +983,7 @@ namespace Project_attempt
 				{
 					fe_face_values.reinit(cell, face);
 					fe_face_values.get_function_values(solution, face_sol_vec);
-					traction_vector.vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude);
+					traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude);
 
 					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
 					{
@@ -1080,8 +1078,8 @@ namespace Project_attempt
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
-			PointHistory<dim>* local_quadrature_points_history =
-				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+			/*PointHistory<dim>* local_quadrature_points_history =
+				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());*/
 
 			FF = 0;
 			temp_momentum = 0;
@@ -1700,7 +1698,7 @@ namespace Project_attempt
 
 
 //Establsihes namespace, calls PETSc, calls run function, and all is bueno
-int main(int argc, char** argv)
+int main(int /*argc*/, char** /*argv*/)
 {
 	try
 	{
