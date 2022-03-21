@@ -1,0 +1,10 @@
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/rebuild_cache.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/info.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/edit_cache.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/strip_comments.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/distclean.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/runclean.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/release.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/debug.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/run.dir
+/mnt/c/Users/Edward Terrell/Documents/workspace/finite_elasticity/hex_cook_membrane_ssprk3/CMakeFiles/hex_cooks_membrane_ssprk3.dir
