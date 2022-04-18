@@ -361,7 +361,7 @@ namespace NonlinearElasticity
 				full_FF[i][j] = FF[i][j];
 			}
 		}
-		if (dim ==2)
+		if (dim == 2)
 			full_FF[2][2] = 1;
 		Tensor<2, 3> full_HH;
 		for (int i = 0; i < dim; ++i) {
@@ -369,14 +369,22 @@ namespace NonlinearElasticity
 				full_HH[i][j] = HH[i][j];
 			}
 		}
+        if(dim == 2)
+            full_HH[2][2] = Jf;
 
 		Tensor<2, 3>  full_pk1_stress;
 		Tensor<2, dim> stress;
-		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + kappa * ((Jf - 1) * full_CofactorF);
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + kappa * ((Jf - 1) * full_HH);
 		for (int i=0; i < dim; ++i)
 			for (int j=0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
 		
+        /*cout << "FF : " << full_FF<<std::endl;
+        cout << "HH : " << HH<<std::endl;
+        cout << "Jf : " << Jf << std::endl;
+        cout << "Full HH : " << full_HH << std::endl;
+        cout << "PK1 : " << full_pk1_stress <<std::endl;
+        cout << std::endl;*/
 		return stress;
 	}
 
@@ -876,6 +884,7 @@ namespace NonlinearElasticity
 				fe_values.get_function_gradients(total_displacement, displacement_grads);
 				real_FF = get_real_FF(displacement_grads[q_point]);
 				real_Jf = get_Jf(real_FF);
+                Cofactor = get_Cofactor(real_FF, real_Jf);
 				real_pk1 = get_real_pk1(real_FF, mu, real_Jf, kappa, Cofactor);
 
 				local_quadrature_points_history[q_point].pk1_store = real_pk1;
@@ -890,14 +899,6 @@ namespace NonlinearElasticity
 							fe_val_Momentum_i * //Momentum terms
 							fe_values[Momentum].value(j, q_point) *
 							fe_values.JxW(q_point);
-							//1 / kappa * // Pressure terms
-							//fe_val_Pressure_i *
-							//fe_values[Pressure].value(j, q_point) *
-							//fe_values.JxW(q_point) +
-							//present_timestep * present_timestep *
-							//scalar_product(Cofactor * fe_grad_Pressure_i,
-							//	Cofactor * fe_values[Pressure].gradient(j, q_point)) *
-							//fe_values.JxW(q_point);
 					}
 					cell_rhs(i) += (-scalar_product(fe_values[Momentum].gradient(i, q_point), real_pk1) +
 						fe_val_Momentum_i * rhs_values[q_point]) * fe_values.JxW(q_point);
