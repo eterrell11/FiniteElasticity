@@ -923,23 +923,10 @@ namespace NonlinearElasticity
 					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
 					{
 
-						real_FF = get_real_FF(displacement_grads[q_point]);
-						real_Jf = get_Jf(real_FF);
-						Cofactor = get_Cofactor(real_FF, real_Jf);
-						real_pk1 = get_real_pk1(real_FF, mu, real_Jf, kappa, Cofactor);
-
-
 						for (const unsigned int i : fe_values.dof_indices())
 						{
 							if (face->boundary_id() == 5) {
 								cell_rhs(i) += fe_face_values[Momentum].value(i, q_point) * traction_values[q_point] * fe_face_values.JxW(q_point); // Deformation gradient face terms
-							}
-							else {
-								//cell_rhs(i) += /*fe_face_values[Momentum].value(i,q_point) * real_pk1 * fe_face_values.normal_vector(q_point) * fe_face_values.JxW(q_point) +*/
-								//	face_temp_momentum *
-								//	fe_face_values[Def_Gradient].value(i, q_point) *
-								//	fe_face_values.normal_vector(q_point) *
-								//	fe_face_values.JxW(q_point); // Deformation gradient face terms
 							}
 						}
 					}
@@ -1134,17 +1121,23 @@ namespace NonlinearElasticity
 			DataOut<dim>::type_dof_data,
 			interpretation1);
 
-
+        std::vector<Tensor<2,dim>> pk1_output(triangulation.n_active_quads(),Tensor<2,dim>());
 		Vector<double> norm_of_pk1(triangulation.n_active_cells());
-		{
+		
 			for (auto& cell : triangulation.active_cell_iterators()) {
 				Tensor<2, dim> accumulated_stress;
 				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
 					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
 				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
 			}
-		}
+		
+        for (auto& quad : triangulation.active_quad_iterators()) {
+            for (unsigned int q = 0; q < quadrature_formula.size(); ++q){
+                pk1_output(quad->active_quad_index()) = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
+            }
+        }
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
+        data_out.add_data_vector(pk1_output, "PK1 values");
 
 		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
 		GridTools::get_subdomain_association(triangulation, partition_int);
