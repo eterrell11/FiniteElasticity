@@ -498,6 +498,35 @@ namespace NonlinearElasticity
 		double mu;
 	};
 
+template <int dim>
+class FFPostprocessor : public DataPostprocessorTensor<dim>
+{
+public:
+  FFPostprocessor ()
+    :
+    DataPostprocessorTensor<dim> ("FF",
+                                  update_gradients)
+  {}
+  virtual
+  void
+  evaluate_vector_field
+  (const DataPostprocessorInputs::Vector<dim> &input_data,
+   std::vector<Vector<double> > &computed_quantities) const override
+  {
+    AssertDimension (input_data.solution_gradients.size(),
+                     computed_quantities.size());
+    Tensor<2, dim> I = unit_symmetric_tensor<dim>();
+    for (unsigned int p=0; p<input_data.solution_gradients.size(); ++p)
+      {
+        AssertDimension (computed_quantities[p].size(),
+                         (Tensor<2,dim>::n_independent_components));
+        for (unsigned int d=0; d<dim; ++d)
+          for (unsigned int e=0; e<dim; ++e)
+            computed_quantities[p][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+              = I[d][e] + input_data.solution_gradients[p][d][e];
+      }
+  }
+};
 
 	// Creates RHS forcing function that pushes tissue downward depending on its distance from the y-z plane
 	// i.e. "downward" gravitational force applied everywhere except at bottom of hemisphere
@@ -1102,6 +1131,9 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::output_results(Vector<double>& sol_n) const
 	{
+        
+        FFPostprocessor<dim> FF_out;
+
 		DataOut<dim> data_out;
 		data_out.attach_dof_handler(dof_handler);
 
@@ -1115,29 +1147,23 @@ namespace NonlinearElasticity
 				DataComponentInterpretation::component_is_part_of_vector);
 
 		
-		
 		data_out.add_data_vector(sol_n,
 			solution_names1,
 			DataOut<dim>::type_dof_data,
 			interpretation1);
-
-        std::vector<Tensor<2,dim>> pk1_output(triangulation.n_active_quads(),Tensor<2,dim>());
+        data_out.add_data_vector(total_displacement, FF_out);
 		Vector<double> norm_of_pk1(triangulation.n_active_cells());
-		
+        {
 			for (auto& cell : triangulation.active_cell_iterators()) {
 				Tensor<2, dim> accumulated_stress;
 				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
 					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
 				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
 			}
-		
-        for (auto& quad : triangulation.active_quad_iterators()) {
-            for (unsigned int q = 0; q < quadrature_formula.size(); ++q){
-                pk1_output(quad->active_quad_index()) = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-            }
         }
+        
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-        data_out.add_data_vector(pk1_output, "PK1 values");
+        data_out.add_data_vector(total_displacement, "displacement");
 
 		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
 		GridTools::get_subdomain_association(triangulation, partition_int);

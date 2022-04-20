@@ -755,6 +755,7 @@ namespace NonlinearElasticity
 			Def_Grad_bound<dim>(),
 			F_constraints,
 			fe.component_mask(Def_Gradient));
+        
 		F_constraints.close();
 		homogeneous_constraints.merge(u_constraints);
 		homogeneous_constraints.merge(p_constraints);
