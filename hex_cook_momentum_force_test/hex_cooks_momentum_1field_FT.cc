@@ -657,7 +657,7 @@ public:
 	void Inelastic<dim>::create_coarse_grid(Triangulation<2>& triangulation)
 	{
 		std::vector<Point<2>> vertices = {
-			{0.0,0.0} , {0.0,0.44}, {0.48, 0.6}, {0.48, 0.44} };
+			{0.0,0.0} , {0.0,0.44}, {0.48, 0.44}, {0.48, 0.0} };
 
 		const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
 			cell_vertices = { {{0,3,1,2}} };
@@ -679,7 +679,7 @@ public:
 				{
 					const Point<dim> face_center = face->center();
 					if (face_center[0] == 0) {
-						face->set_boundary_id(4);
+						face->set_boundary_id(3);
 					}
 					if (abs(face_center[0] - 0.48) < 0.001) {
 						face->set_boundary_id(5);
@@ -929,8 +929,8 @@ public:
 							fe_values[Momentum].value(j, q_point) *
 							fe_values.JxW(q_point);
 					}
-					cell_rhs(i) += (-scalar_product(fe_values[Momentum].gradient(i, q_point), real_pk1) +
-						fe_val_Momentum_i * rhs_values[q_point]) * fe_values.JxW(q_point);
+					cell_rhs(i) += //(-scalar_product(fe_values[Momentum].gradient(i, q_point), real_pk1) +
+						fe_val_Momentum_i * rhs_values[q_point]/*)*/ * fe_values.JxW(q_point);
 				}
 			}
 
