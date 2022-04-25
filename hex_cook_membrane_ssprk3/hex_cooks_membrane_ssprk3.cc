@@ -116,8 +116,8 @@ namespace NonlinearElasticity
 			double present_timestep;
 			double end_time;
 			double save_time;
-			double start_time
-			static void declare_parameters(ParameterHandler& prm);
+			double start_time;
+				static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
 		void Time::declare_parameters(ParameterHandler& prm)
@@ -150,7 +150,7 @@ namespace NonlinearElasticity
 				present_timestep = prm.get_double("Timestep");
 				end_time = prm.get_double("End time");
 				save_time = prm.get_double("Save time");
-				start_time = prm.get_double("Start time")
+				start_time = prm.get_double("Start time");
 			}
 			prm.leave_subsection();
 		}
@@ -158,9 +158,8 @@ namespace NonlinearElasticity
 		{
 			double alpha;
 			double beta;
-			int x_ref;
-			int y_ref;
-			int z_ref;
+			int rk_order;
+			int n_ref;
 			unsigned int order;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
@@ -177,18 +176,14 @@ namespace NonlinearElasticity
 					"0.0",
 					Patterns::Double(),
 					"beta");
-				prm.declare_entry("x_ref",
-					"8",
+				prm.declare_entry("Time integrator order",
+					"1",
 					Patterns::Integer(),
-					"x_ref");
-				prm.declare_entry("y_ref",
-					"8",
+					"Time integrator order");
+				prm.declare_entry("n_ref",
+					"4",
 					Patterns::Integer(),
-					"y_ref");
-				prm.declare_entry("z_ref",
-					"8",
-					Patterns::Integer(),
-					"z_ref");
+					"n_ref");
 				prm.declare_entry("Momentum order",
 					"1",
 					Patterns::Integer(0),
@@ -203,9 +198,8 @@ namespace NonlinearElasticity
 			{
 				alpha = prm.get_double("alpha");
 				beta = prm.get_double("beta");
-				x_ref = prm.get_integer("x_ref");
-				y_ref = prm.get_integer("y_ref");
-				z_ref = prm.get_integer("z_ref");
+				rk_order = prm.get_integer("Time integrator order");
+				n_ref = prm.get_integer("n_ref");
 				order = prm.get_integer("Momentum order");
 			}
 			prm.leave_subsection();
@@ -348,12 +342,34 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
-		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, Tensor<2, dim>& CofactorF)
+		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, Tensor<2, dim>& HH)
 	{
-		double dimension = 1.0 * dim;
-		Tensor<2, dim> strain;
-		strain = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / dimension * CofactorF / Jf) + (pressure * CofactorF);
-		return strain;
+		Tensor<2, 3> full_FF; 
+		for (int i = 0; i < dim; ++i) {
+			for (int j = 0; j < dim; ++j) {
+				full_FF[i][j] = FF[i][j];
+			}
+		}
+		if (dim == 2) {
+			full_FF[2][2] = 1;
+		}
+		Tensor<2, 3> full_HH;
+		for (int i = 0; i < dim; ++i) {
+			for (int j = 0; j < dim; ++j) {
+				full_HH[i][j] = HH[i][j];
+			}
+		}
+		if (dim == 2) {
+			full_HH[2][2] = Jf;
+		}		
+		Tensor<2, dim> stress;
+		Tensor<2, 3> full_pk1_stress;
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + (pressure * full_HH);
+		for (int i = 0; i < dim; ++i)
+			for (int j = 0; j < dim; ++j)
+				stress[i][j] = full_pk1_stress[i][j];
+
+		return stress;
 	}
 
 	template <int dim>
@@ -407,7 +423,10 @@ namespace NonlinearElasticity
 		void         assemble_system(BlockVector<double>& sol_n);
 		void		 assemble_pressure_rhs(BlockVector<double>& sol_n_plus_1);
 		void		 assemble_momentum_rhs(BlockVector<double>& sol_n, BlockVector<double>& sol_n_plus_1);
-		void         solve_timestep();
+		void         solve_ForwardEuler();
+		void         solve_ssprk2();
+		void         solve_ssprk3();
+		void		 solve_MFE2();
 		Vector<double> solve_mint_F(BlockVector<double>& sol_n, BlockVector<double>& sol_n_plus_1);
 		unsigned int solve_p(BlockVector<double>& sol_n, BlockVector<double>& sol_n_plus_1);
 		unsigned int solve_m(BlockVector<double>& sol_n, BlockVector<double>& sol_n_plus_1);
@@ -416,6 +435,7 @@ namespace NonlinearElasticity
 		void do_timestep();
 
 		void move_mesh();
+		void move_mesh_back();
 
 		void setup_quadrature_point_history();
 
@@ -438,6 +458,10 @@ namespace NonlinearElasticity
 
 
 		BlockVector<double> system_rhs;
+		Vector<double> int_mint_rhs;
+		Vecotr<double> int_F_rhs;
+		Vector<double> int_p_rhs;
+		Vector<double> int_m_rhs;
 
 		BlockVector<double> solution;
 		BlockVector<double> old_solution;
@@ -445,6 +469,7 @@ namespace NonlinearElasticity
 		BlockVector<double> int_solution_2; //For RK3 and higher order
 
 		Vector<double> incremental_displacement;
+		Vector<double> total_displacement;
 
 
 		double present_time;
@@ -600,6 +625,7 @@ namespace NonlinearElasticity
 		setup_system();
 		E = parameters.E;
 		nu = parameters.nu;
+		present_time = parameters.start_time;
 		present_timestep = parameters.present_timestep;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
@@ -616,7 +642,7 @@ namespace NonlinearElasticity
 	void Inelastic<dim>::create_coarse_grid(Triangulation<2>& triangulation)
 	{
 		std::vector<Point<2>> vertices = {
-			{0.0,0.0} , {0.0,0.44}, {0.88, 0.44}, {0.88, 0.0} };
+			{0.0,0.0} , {0.0,0.44}, {0.48, 0.6}, {0.48, 0.44} };
 
 		const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
 			cell_vertices = { {{0,3,1,2}} };
@@ -640,11 +666,11 @@ namespace NonlinearElasticity
 					if (face_center[0] == 0) {
 						face->set_boundary_id(4);
 					}
-					if (abs(face_center[0] - 0.88) < 0.001) {
+					if (abs(face_center[0] - 0.48) < 0.001) {
 						face->set_boundary_id(5);
 					}
 				}
-		triangulation.refine_global(3);
+		triangulation.refine_global(parameters.n_ref);
 		setup_quadrature_point_history();
 	}
 
@@ -691,7 +717,7 @@ namespace NonlinearElasticity
 						face->set_boundary_id(5);
 					}
 				}
-		triangulation.refine_global(1);
+		triangulation.refine_global(parameters.n_ref);
 		setup_quadrature_point_history();
 	}
 
@@ -827,16 +853,24 @@ namespace NonlinearElasticity
 		system_rhs.block(2).reinit(n_f);
 		system_rhs.collect_sizes();
 
+		int_mint_rhs.reinit(n_u);
+		int_f_rhs.reinit(n_f);
+		int_p_rhs.reinit(n_p);
+		int_m_rhs.reinit(n_u);
+
+
 		cout << "Applying initial conditions" << std::endl;
 		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), old_solution);
 
 		incremental_displacement.reinit(dof_handler.n_dofs());
+		total_displacement.reinit(dof_handler.n_dofs());
 	}
 
 	template <int dim>
 	void Inelastic<dim>::assemble_system(BlockVector<double>& sol_n)
 	{
-		system_rhs = 0;
+		system_rhs.block(0) = 0;
+		system_rhs.block(2) = 0;
 
 		FEValues<dim> fe_values(fe,
 			quadrature_formula,
@@ -911,6 +945,7 @@ namespace NonlinearElasticity
 		double alpha = parameters.alpha;
 		double beta = parameters.beta;
 
+		Tensor<2, dim> II = unit_symmetric_tensor<dim>();
 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -995,7 +1030,7 @@ namespace NonlinearElasticity
 					}
 					cell_rhs(i) += (-scalar_product(pk1, fe_values[Momentum].gradient(i, q_point)) +
 						fe_val_Momentum_i * rhs_values[q_point] +
-						-temp_momentum * fe_values[Def_Gradient].divergence(i, q_point)) * fe_values.JxW(q_point);
+						- scalar_product(fe_values[Def_Gradient].gradient(i, q_point),outer_product(temp_momentum, II) )) * fe_values.JxW(q_point);
 				}
 			}
 
@@ -1018,15 +1053,11 @@ namespace NonlinearElasticity
 						{
 							if (face->boundary_id() == 5) {
 								cell_rhs(i) += traction_values[q_point] * fe_face_values[Momentum].value(i, q_point) * fe_face_values.JxW(q_point) + // Momentum face terms (traction)
-									face_temp_momentum *
-									fe_face_values[Def_Gradient].value(i, q_point) *
-									fe_face_values.normal_vector(q_point) *
+									scalar_product(fe_face_values[Def_Gradient].value(i, q_point), contract<2,0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point))) *
 									fe_face_values.JxW(q_point); // Deformation gradient face terms
 							}
 							else {
-								cell_rhs(i) += face_temp_momentum *
-									fe_face_values[Def_Gradient].value(i, q_point) *
-									fe_face_values.normal_vector(q_point) *
+								cell_rhs(i) +=  scalar_product(fe_face_values[Def_Gradient].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
 									fe_face_values.JxW(q_point); // Deformation gradient face terms
 							}
 						}
@@ -1051,7 +1082,7 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Inelastic<dim>::assemble_pressure_rhs(BlockVector<double>& sol_n_plus_1)
 	{
-		system_rhs = 0;
+		system_rhs.block(1) = 0;
 
 		FEValues<dim> fe_values(fe,
 			quadrature_formula,
@@ -1103,6 +1134,7 @@ namespace NonlinearElasticity
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			FF = 0;
+			Jf = 0;
 			temp_momentum = 0;
 			cell_rhs = 0;
 			fe_values.reinit(cell);
@@ -1128,11 +1160,11 @@ namespace NonlinearElasticity
 					}
 				}
 				Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
-
+				Jf = get_Jf(FF);
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					cell_rhs(i) += -scalar_product(temp_momentum *
-						Cofactor,
+						Cofactor*Jf,
 						fe_values[Pressure].gradient(i, q_point)) *
 						fe_values.JxW(q_point);
 				}
@@ -1145,38 +1177,40 @@ namespace NonlinearElasticity
 
 					fe_face_values.reinit(cell, face);
 					fe_face_values.get_function_values(sol_n_plus_1, face_sol_vec);
-					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
-					{
-						face_temp_momentum = 0;
-						face_FF = 0;
-						Jf = 0;
-						face_Cofactor = 0;
-						sol_counter = 0;
-
-						for (int i = 0; i < dim; i++) {
-							face_temp_momentum[sol_counter] = face_sol_vec[q_point](i);
-							sol_counter++;
-						}
-						sol_counter++;
-						for (int i = 0; i < dim; i++) {
-							for (int j = 0; j < dim; j++) {
-								face_FF[i][j] = face_sol_vec[q_point](sol_counter);
-								++sol_counter;
-							}
-						}
-
-						Jf = get_Jf(face_FF);
-						face_Cofactor = get_Cofactor(face_FF, Jf);
-						//Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
-						for (const unsigned int i : fe_face_values.dof_indices())
+					if (face->boundary_id() == 5) {
+						for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
 						{
-							cell_rhs(i) += face_temp_momentum *
-								face_Cofactor *
-								fe_face_values[Pressure].value(i, q_point) *
-								fe_face_values.normal_vector(q_point) *
-								fe_face_values.JxW(q_point);
-						}
+							face_temp_momentum = 0;
+							face_FF = 0;
+							Jf = 0;
+							face_Cofactor = 0;
+							sol_counter = 0;
 
+							for (int i = 0; i < dim; i++) {
+								face_temp_momentum[sol_counter] = face_sol_vec[q_point](i);
+								sol_counter++;
+							}
+							sol_counter++;
+							for (int i = 0; i < dim; i++) {
+								for (int j = 0; j < dim; j++) {
+									face_FF[i][j] = face_sol_vec[q_point](sol_counter);
+									++sol_counter;
+								}
+							}
+
+							Jf = get_Jf(face_FF);
+							face_Cofactor = get_Cofactor(face_FF, Jf);
+							//Cofactor = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].Cofactor_store;
+							for (const unsigned int i : fe_face_values.dof_indices())
+							{
+								cell_rhs(i) += face_temp_momentum *
+									face_Cofactor * Jf *
+									fe_face_values[Pressure].value(i, q_point) *
+									fe_face_values.normal_vector(q_point) *
+									fe_face_values.JxW(q_point);
+							}
+
+						}
 					}
 				}
 			}
@@ -1191,7 +1225,7 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Inelastic<dim>::assemble_momentum_rhs(BlockVector<double>& sol_n, BlockVector<double>& sol_n_plus_1)
 	{
-		system_rhs = 0;
+		system_rhs.block(1) = 0;
 
 		FEValues<dim> fe_values(fe,
 			quadrature_formula,
@@ -1269,7 +1303,7 @@ namespace NonlinearElasticity
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_rhs(i) += -scalar_product((temp_pressure - old_temp_pressure) * Cofactor, fe_values[Momentum].gradient(i, q_point)) *
+					cell_rhs(i) += -scalar_product(fe_values[Momentum].gradient(i, q_point),(temp_pressure - old_temp_pressure) * Cofactor) *
 						fe_values.JxW(q_point);
 				}
 			}
@@ -1303,9 +1337,9 @@ namespace NonlinearElasticity
 
 						for (const unsigned int i : fe_face_values.dof_indices())
 						{
-							cell_rhs(i) += (face_temp_pressure - face_old_temp_pressure) *
+							cell_rhs(i) += fe_face_values[Momentum].value(i, q_point) *
+								(face_temp_pressure - face_old_temp_pressure) *
 								face_Cofactor *
-								fe_face_values[Momentum].value(i, q_point) *
 								fe_face_values.normal_vector(q_point) *
 								fe_face_values.JxW(q_point);
 						}
@@ -1320,10 +1354,61 @@ namespace NonlinearElasticity
 		}
 	}
 
+	template<int dim>
+	void Inelastic<dim>::solve_ForwardEuler()
+	{
+		cout << " Assembling system..." << std::flush;
+		assemble_system(old_solution);
+		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve system..." << std::endl;
+		const Vector<double> it_count = solve_mint_F(old_solution, solution);
+		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count[1] << " iterations." << std::endl;
+		assemble_pressure_rhs(solution);
+		const unsigned int n_iterations2 = solve_p(old_solution, solution);
+		cout << "  Pressure solver converged in " << n_iterations2 << " iterations." << std::endl;
+		assemble_momentum_rhs(old_solution, solution);
+		const unsigned int n_iterations3 = solve_m(old_solution, solution);
+		cout << "  Updated momentum solver converged in " << n_iterations3 << " iterations." << std::endl;
+	}
+
+
+	template<int dim>
+	void Inelastic<dim>::solve_ssprk2()
+	{
+		cout << " Assembling system..." << std::flush;
+		assemble_system(old_solution);
+		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve system..." << std::endl;
+		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
+		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count[1] << " iterations." << std::endl;
+		assemble_pressure_rhs(int_solution);
+		const unsigned int n_iterations2 = solve_p(old_solution, int_solution);
+		cout << "  Pressure solver converged in " << n_iterations2 << " iterations." << std::endl;
+		assemble_momentum_rhs(old_solution, int_solution);
+		const unsigned int n_iterations3 = solve_m(old_solution, int_solution);
+		cout << "  Updated momentum solver converged in " << n_iterations3 << " iterations." << std::endl;
+
+		cout << " Assembling intermediate system..." << std::flush;
+		assemble_system(int_solution);
+		cout << "norm of intermediate rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve intermediate system..." << std::endl;
+		const Vector<double> it_count2 = solve_mint_F(int_solution, solution);
+		cout << "  Intermediate momentum solver converged in " << it_count2[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count2[1] << " iterations." << std::endl;
+		assemble_pressure_rhs(solution);
+		const unsigned int n_iterations4 = solve_p(int_solution, solution);
+		cout << "  Pressure solver converged in " << n_iterations4 << " iterations." << std::endl;
+		assemble_momentum_rhs(int_solution, solution);
+		const unsigned int n_iterations5 = solve_m(int_solution, solution);
+		solution = 0.5 * old_solution + 0.5 * solution;
+		cout << "  Updated momentum solver converged in " << n_iterations5 << " iterations." << std::endl;
+	}
 
 	//Assembles system, solves system, updates quad data.
 	template<int dim>
-	void Inelastic<dim>::solve_timestep()
+	void Inelastic<dim>::solve_ssprk3()
 	{
 		cout << " Assembling system..." << std::flush;
 		assemble_system(old_solution);
@@ -1369,8 +1454,45 @@ namespace NonlinearElasticity
 		assemble_momentum_rhs(int_solution_2, solution);
 		const unsigned int n_iterations6 = solve_m(int_solution_2, solution);
 		cout << "  Updated momentum solver converged in " << n_iterations6 << " iterations." << std::endl;
-		solution = 1.0/3.0 * old_solution + 2.0/3.0 * solution;
+		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
 
+	}
+
+	template<int dim>
+	void Inelastic<dim>::solve_MFE2()
+	{
+		cout << " Assembling system..." << std::flush;
+		assemble_system(old_solution);
+		cout << "norm of rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve system..." << std::endl;
+		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
+		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count[1] << " iterations." << std::endl;
+		assemble_pressure_rhs(int_solution);
+		const unsigned int n_iterations2 = solve_p(old_solution, int_solution);
+		cout << "  Pressure solver converged in " << n_iterations2 << " iterations." << std::endl;
+		assemble_momentum_rhs(old_solution, int_solution);
+		const unsigned int n_iterations3 = solve_m(old_solution, int_solution);
+		cout << "  Updated momentum solver converged in " << n_iterations3 << " iterations." << std::endl;
+
+		int_mint_rhs = system_rhs.block(0);
+		int_p_rhs = system_rhs.block(1);
+		int_f_rhs = system_rhs.block(2);
+
+		cout << " Assembling intermediate system..." << std::flush;
+		assemble_system(int_solution);
+		cout << "norm of intermediate rhs is " << system_rhs.l2_norm() << std::endl;
+		cout << "Attempting to solve intermediate system..." << std::endl;
+		const Vector<double> it_count2 = solve_mint_F(int_solution, solution);
+		cout << "  Intermediate momentum solver converged in " << it_count2[0] << " iterations." << std::endl;
+		cout << "  Deformation gradient solver converged in " << it_count2[1] << " iterations." << std::endl;
+		assemble_pressure_rhs(solution);
+		const unsigned int n_iterations4 = solve_p(int_solution, solution);
+		cout << "  Pressure solver converged in " << n_iterations4 << " iterations." << std::endl;
+		assemble_momentum_rhs(int_solution, solution);
+		const unsigned int n_iterations5 = solve_m(int_solution, solution);
+		solution = 0.5 * old_solution + 0.5 * solution;
+		cout << "  Updated momentum solver converged in " << n_iterations5 << " iterations." << std::endl;
 	}
 
 	//solves system using direct solver
@@ -1676,13 +1798,25 @@ namespace NonlinearElasticity
 			present_timestep -= (present_time - end_time);
 			present_time = end_time;
 		}
-		solve_timestep();
+
+		if (parameters.rk_order == 1)
+		{
+			solve_ForwardEuler();
+		}
+		else if (parameters.rk_order == 2)
+		{
+			solve_ssprk2();
+		} else if (parameters.rk_order == 3)
+		{
+			solve_ssprk3();
+		}
 		move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
 			output_results(solution);
 			save_counter++;
 		}
+		move_mesh_back();
 		std::swap(old_solution, solution);
 
 		cout << std::endl << std::endl;
@@ -1711,21 +1845,39 @@ namespace NonlinearElasticity
 					for (unsigned int d = 0; d < dim; ++d) {
 						tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
 
-						// SSPRK2 in here? 
-						//f^int
-						tmp[d] = tmp_loc[d] + present_timestep * tmp_momentum[d];
-						incremental_displacement(cell->vertex_dof_index(v, d)) += 0.5 * (-tmp_loc[d] + tmp[d] + present_timestep * tmp_momentum[d]);
-						//f^n+1
+						incremental_displacement(cell->vertex_dof_index(v, d)) = present_timestep * tmp_momentum[d];
+						total_displacement(cell->vertex_dof_index(v, d)) += incremental_displacement(cell->vertex_dof_index(v, d));
+						tmp[d] = tmp_loc[d] + total_displacement(cell->vertex_dof_index(v, d));
 					}
-					//cout << "Momentum : " <<  tmp_momentum << std::endl;
-					//cout << "f^int : " << tmp << std::endl;
-					//cout << "difference : " << tmp - tmp_loc << std::endl;
-					cell->vertex(v) = 0.5 * (tmp_loc + tmp + present_timestep * tmp_momentum);
+					cell->vertex(v) = tmp;
 
 				}
 		cout << "Mesh was successfully moved " << std::endl;
 	}
+	
+	template<int dim>
+	void Inelastic<dim>::move_mesh_back()
+	{
+		cout << "    Moving mesh back to reference coordinates" << std::endl;
 
+		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
+		for (auto& cell : dof_handler.active_cell_iterators())
+			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
+				if (vertex_touched[cell->vertex_index(v)] == false)
+				{
+					vertex_touched[cell->vertex_index(v)] = true;
+					Point<dim> tmp_loc = cell->vertex(v);
+					Point<dim> tmp;
+
+					for (unsigned int d = 0; d < dim; ++d) {
+
+						tmp[d] = tmp_loc[d] - total_displacement(cell->vertex_dof_index(v, d));
+					}
+					cell->vertex(v) = tmp;
+
+				}
+		cout << "Mesh was moved back" << std::endl;
+	}
 
 	// This chunk of code allows for communication between current code state and quad point history
 	template<int dim>
