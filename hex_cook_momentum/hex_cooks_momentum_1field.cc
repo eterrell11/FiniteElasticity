@@ -618,9 +618,9 @@ public:
 	Inelastic<dim>::Inelastic(const std::string& input_file)
 		: parameters(input_file)
 		, dof_handler(triangulation)
-		, fe(FE_Q<dim>(parameters.order+1), dim)
-		, quadrature_formula(3)
-		, face_quadrature_formula(3)
+		, fe(FE_Q<dim>(parameters.order), dim)
+		, quadrature_formula(parameters.order+1)
+		, face_quadrature_formula(parameters.order+1)
 		, timestep_no(0)
 	{}
 
@@ -807,6 +807,9 @@ public:
 	void Inelastic<dim>::assemble_system(Vector<double>& sol_n)
 	{
 		system_rhs = 0;
+
+		constrained_mass_matrix = 0;
+		unconstrained_mass_matrix = 0;
 
 		FEValues<dim> fe_values(fe,
 			quadrature_formula,
