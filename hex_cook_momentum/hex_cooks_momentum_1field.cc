@@ -437,8 +437,6 @@ namespace NonlinearElasticity
 		void         create_coarse_grid(Triangulation<3>& triangulation);
 		void         setup_system();
 		void         assemble_system(Vector<double>& sol_n);
-		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1);
-		void		 assemble_momentum_rhs(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void         solve_FE();
 		void         solve_ssprk2();
 		void         solve_ssprk3();
@@ -447,7 +445,7 @@ namespace NonlinearElasticity
 
 		void do_timestep();
 
-		void update_displacement(const std::string update_type);
+		void update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus);
 		void move_mesh();
 		void move_mesh_back();
 
@@ -990,7 +988,7 @@ public:
 		cout << "Attempting to solve system..." << std::endl;
 		const Vector<double> it_count = solve_mint_F(old_solution, solution);
 		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
-		update_displacement("Forward Euler");
+		update_displacement(old_solution, 0.0, solution, 1.0);
 		cout << std::endl;
 	}
 
@@ -1004,7 +1002,7 @@ public:
 		cout << "Attempting to solve system..." << std::endl;
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
 		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
-		update_displacement("Forward Euler");
+		update_displacement(old_solution, 0.0, int_solution, 1.0);
 
 		cout << std::endl;
 		cout << " Assembling intermediate system..." << std::flush;
@@ -1014,7 +1012,7 @@ public:
 		const Vector<double> it_count2 = solve_mint_F(int_solution, solution);
 		cout << "  Intermediate momentum solver converged in " << it_count2[0] << " iterations." << std::endl;
 		solution = 0.5 * old_solution + 0.5 * solution;
-		update_displacement("Trapezoid");
+		update_displacement(old_solution, 0.5, solution, 0.5);
 
 		cout << std::endl;
 	}
@@ -1029,7 +1027,7 @@ public:
 		cout << "Attempting to solve system..." << std::endl;
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
 		cout << "  Intermediate momentum solver converged in " << it_count[0] << " iterations." << std::endl;
-		update_displacement("Forward Euler");
+		update_displacement(old_solution, 0.0, int_solution, 1.0);
 
 		cout << std::endl;
 		cout << " Assembling f(1) system..." << std::flush;
@@ -1039,7 +1037,7 @@ public:
 		const Vector<double> it_count2 = solve_mint_F(int_solution, int_solution_2);
 		cout << "  Intermediate momentum solver converged in " << it_count2[0] << " iterations." << std::endl;
 		int_solution_2 = 0.75 * old_solution + 0.25 * int_solution_2;
-		//update_displacement();
+		update_displacement(old_solution, 0.75, int_solution_2, 0.25);
 		cout << std::endl;
 
 		cout << " Assembling f^(2) system..." << std::flush;
@@ -1049,7 +1047,7 @@ public:
 		const Vector<double> it_count3 = solve_mint_F(int_solution_2, solution);
 		cout << "  Intermediate momentum solver converged in " << it_count3[0] << " iterations." << std::endl;
 		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
-		//update_displacement();
+		update_displacement(old_solution, 1.0/3.0, solution, 2.0/3.0);
 	}
 
 	//solves system using direct solver
@@ -1227,10 +1225,11 @@ public:
 
 
 	template<int dim>
-	void Inelastic<dim>::update_displacement(const std::string input_type)
+	void Inelastic<dim>::update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus)
 	{
-		if (input_type == "Forward Euler") {
-			auto momentum = solution;
+		//if (input_type == "Forward Euler") {
+			auto momentum = sol_n_plus;
+			auto old_momentum = sol_n;
 			cout << "    Updating displacements" << std::endl;
 			std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
 			for (auto& cell : dof_handler.active_cell_iterators())
@@ -1239,18 +1238,23 @@ public:
 					{
 						vertex_touched[cell->vertex_index(v)] = true;
 						Point<dim> tmp_momentum;
+						Point<dim> tmp_momentum_plus;
 						Point<dim> tmp_loc = cell->vertex(v);
 
 						for (unsigned int d = 0; d < dim; ++d) {
-							tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
-							incremental_displacement(cell->vertex_dof_index(v, d)) = present_timestep * tmp_momentum[d];
+							tmp_momentum_plus[d] = momentum(cell->vertex_dof_index(v, d));
+							tmp_momentum[d] = old_momentum(cell->vertex_dof_index(v, d));
+							if (coeff_n != 0.0)
+								total_displacement(cell->vertex_dof_index(v, d)) -= incremental_displacement(cell->vertex_dof_index(v, d));
+
+							incremental_displacement(cell->vertex_dof_index(v, d)) = present_timestep * (coeff_n * tmp_momentum[d] + coeff_n_pluss * tmp_momentum_plus[d]);
 							total_displacement(cell->vertex_dof_index(v, d)) += incremental_displacement(cell->vertex_dof_index(v, d));
 						}
 
 
 					}
-		}
-		else if (input_type == "Trapezoid") {
+		//}
+		/*else if (input_type == "Trapezoid") {
 			auto momentum = solution;
 			auto old_momentum = old_solution;
 			cout << "    Updating displacements" << std::endl;
@@ -1272,7 +1276,7 @@ public:
 							total_displacement(cell->vertex_dof_index(v, d)) += incremental_displacement(cell->vertex_dof_index(v, d));
 						}
 					}
-		}
+		}*/
 
 	}
 	
