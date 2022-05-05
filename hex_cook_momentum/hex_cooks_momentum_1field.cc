@@ -72,6 +72,9 @@
 //For discontinuous galerkin elements
 #include <deal.II/fe/fe_dgq.h>
 
+//For moving mesh using displacement field
+#include <deal.II/fe/mapping_q_eulerian.h>
+
 
 
 namespace NonlinearElasticity
@@ -117,7 +120,7 @@ namespace NonlinearElasticity
 			double end_time;
 			double save_time;
 			double start_time;
-				static void declare_parameters(ParameterHandler& prm);
+			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
 		void Time::declare_parameters(ParameterHandler& prm)
@@ -356,8 +359,8 @@ namespace NonlinearElasticity
 	{
 		Tensor<2, 3> full_FF;
 
-		for (int i =0; i < dim; ++i) {
-			for (int j=0; j < dim; ++j) {
+		for (int i = 0; i < dim; ++i) {
+			for (int j = 0; j < dim; ++j) {
 				full_FF[i][j] = FF[i][j];
 			}
 		}
@@ -369,22 +372,22 @@ namespace NonlinearElasticity
 				full_HH[i][j] = HH[i][j];
 			}
 		}
-        if(dim == 2)
-            full_HH[2][2] = Jf;
+		if (dim == 2)
+			full_HH[2][2] = Jf;
 
 		Tensor<2, 3>  full_pk1_stress;
 		Tensor<2, dim> stress;
 		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + kappa * ((Jf - 1) * full_HH);
-		for (int i=0; i < dim; ++i)
-			for (int j=0; j < dim; ++j)
+		for (int i = 0; i < dim; ++i)
+			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
-		
-        /*cout << "FF : " << full_FF<<std::endl;
-        cout << "HH : " << HH<<std::endl;
-        cout << "Jf : " << Jf << std::endl;
-        cout << "Full HH : " << full_HH << std::endl;
-        cout << "PK1 : " << full_pk1_stress <<std::endl;
-        cout << std::endl;*/
+
+		/*cout << "FF : " << full_FF<<std::endl;
+		cout << "HH : " << HH<<std::endl;
+		cout << "Jf : " << Jf << std::endl;
+		cout << "Full HH : " << full_HH << std::endl;
+		cout << "PK1 : " << full_pk1_stress <<std::endl;
+		cout << std::endl;*/
 		return stress;
 	}
 
@@ -446,8 +449,8 @@ namespace NonlinearElasticity
 		void do_timestep();
 
 		void update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus);
-		void move_mesh();
-		void move_mesh_back();
+		/*void move_mesh();
+		void move_mesh_back();*/
 
 		void setup_quadrature_point_history();
 
@@ -496,35 +499,35 @@ namespace NonlinearElasticity
 		double mu;
 	};
 
-template <int dim>
-class FFPostprocessor : public DataPostprocessorTensor<dim>
-{
-public:
-  FFPostprocessor ()
-    :
-    DataPostprocessorTensor<dim> ("FF",
-                                  update_gradients)
-  {}
-  virtual
-  void
-  evaluate_vector_field
-  (const DataPostprocessorInputs::Vector<dim> &input_data,
-   std::vector<Vector<double> > &computed_quantities) const override
-  {
-    AssertDimension (input_data.solution_gradients.size(),
-                     computed_quantities.size());
-    Tensor<2, dim> I = unit_symmetric_tensor<dim>();
-    for (unsigned int p=0; p<input_data.solution_gradients.size(); ++p)
-      {
-        AssertDimension (computed_quantities[p].size(),
-                         (Tensor<2,dim>::n_independent_components));
-        for (unsigned int d=0; d<dim; ++d)
-          for (unsigned int e=0; e<dim; ++e)
-            computed_quantities[p][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
-              = I[d][e] + input_data.solution_gradients[p][d][e];
-      }
-  }
-};
+	template <int dim>
+	class FFPostprocessor : public DataPostprocessorTensor<dim>
+	{
+	public:
+		FFPostprocessor()
+			:
+			DataPostprocessorTensor<dim>("FF",
+				update_gradients)
+		{}
+		virtual
+			void
+			evaluate_vector_field
+			(const DataPostprocessorInputs::Vector<dim>& input_data,
+				std::vector<Vector<double> >& computed_quantities) const override
+		{
+			AssertDimension(input_data.solution_gradients.size(),
+				computed_quantities.size());
+			Tensor<2, dim> I = unit_symmetric_tensor<dim>();
+			for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
+			{
+				AssertDimension(computed_quantities[p].size(),
+					(Tensor<2, dim>::n_independent_components));
+				for (unsigned int d = 0; d < dim; ++d)
+					for (unsigned int e = 0; e < dim; ++e)
+						computed_quantities[p][Tensor<2, dim>::component_to_unrolled_index(TableIndices<2>(d, e))]
+						= I[d][e] + input_data.solution_gradients[p][d][e];
+			}
+		}
+	};
 
 	// Creates RHS forcing function that pushes tissue downward depending on its distance from the y-z plane
 	// i.e. "downward" gravitational force applied everywhere except at bottom of hemisphere
@@ -617,8 +620,8 @@ public:
 		: parameters(input_file)
 		, dof_handler(triangulation)
 		, fe(FE_Q<dim>(parameters.order), dim)
-		, quadrature_formula(parameters.order+1)
-		, face_quadrature_formula(parameters.order+1)
+		, quadrature_formula(parameters.order + 1)
+		, face_quadrature_formula(parameters.order + 1)
 		, timestep_no(0)
 	{}
 
@@ -914,7 +917,7 @@ public:
 				fe_values.get_function_gradients(total_displacement, displacement_grads);
 				real_FF = get_real_FF(displacement_grads[q_point]);
 				real_Jf = get_Jf(real_FF);
-                Cofactor = get_Cofactor(real_FF, real_Jf);
+				Cofactor = get_Cofactor(real_FF, real_Jf);
 				real_pk1 = get_real_pk1(real_FF, mu, real_Jf, kappa, Cofactor);
 
 				local_quadrature_points_history[q_point].pk1_store = real_pk1;
@@ -977,7 +980,7 @@ public:
 		}
 	}
 
-	
+
 
 	template<int dim>
 	void Inelastic<dim>::solve_FE()
@@ -1047,7 +1050,7 @@ public:
 		const Vector<double> it_count3 = solve_mint_F(int_solution_2, solution);
 		cout << "  Intermediate momentum solver converged in " << it_count3[0] << " iterations." << std::endl;
 		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
-		update_displacement(old_solution, 1.0/3.0, solution, 2.0/3.0);
+		update_displacement(old_solution, 1.0 / 3.0, solution, 2.0 / 3.0);
 	}
 
 	//solves system using direct solver
@@ -1073,7 +1076,7 @@ public:
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim ),
+			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
 			fe.component_mask(Momentum));
 		u_constraints.close();
@@ -1108,7 +1111,7 @@ public:
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
 		it_count[0] = solver_control.last_step();
-		
+
 
 		all_constraints.distribute(sol_n_plus_1);
 		it_count[1] = solver_control.last_step();
@@ -1116,10 +1119,10 @@ public:
 	}
 
 
-	
 
 
-	
+
+
 
 
 
@@ -1132,8 +1135,8 @@ public:
 	template<int dim>
 	void Inelastic<dim>::output_results(Vector<double>& sol_n) const
 	{
-        
-        FFPostprocessor<dim> FF_out;
+
+		FFPostprocessor<dim> FF_out;
 
 		DataOut<dim> data_out;
 		data_out.attach_dof_handler(dof_handler);
@@ -1147,30 +1150,30 @@ public:
 				dim,
 				DataComponentInterpretation::component_is_part_of_vector);
 
-		
+
 		data_out.add_data_vector(sol_n,
 			solution_names1,
 			DataOut<dim>::type_dof_data,
 			interpretation1);
-        data_out.add_data_vector(total_displacement, FF_out);
+		data_out.add_data_vector(total_displacement, FF_out);
 		Vector<double> norm_of_pk1(triangulation.n_active_cells());
-        {
+		{
 			for (auto& cell : triangulation.active_cell_iterators()) {
 				Tensor<2, dim> accumulated_stress;
 				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
 					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
 				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
 			}
-        }
-        
+		}
+
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-        data_out.add_data_vector(total_displacement, "displacement");
+		data_out.add_data_vector(total_displacement, "displacement");
 
 		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
 		GridTools::get_subdomain_association(triangulation, partition_int);
 
-
-		data_out.build_patches(1);
+		MappingQEulerian<dim> patches_mapping(fe.tensor_degree(), dof_handler, total_displacement);
+		data_out.build_patches(patches_mapping, fe.degree==1?1:4);
 
 		DataOutBase::VtkFlags vtk_flags;
 		vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
@@ -1205,17 +1208,18 @@ public:
 		else if (parameters.rk_order == 2)
 		{
 			solve_ssprk2();
-		} else if (parameters.rk_order == 3)
+		}
+		else if (parameters.rk_order == 3)
 		{
 			solve_ssprk3();
 		}
-		move_mesh();
+		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
 			output_results(solution);
 			save_counter++;
 		}
-		move_mesh_back();
+		//move_mesh_back();
 		std::swap(old_solution, solution);
 
 		cout << std::endl << std::endl;
@@ -1227,104 +1231,66 @@ public:
 	template<int dim>
 	void Inelastic<dim>::update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus)
 	{
-		//if (input_type == "Forward Euler") {
-			auto momentum = sol_n_plus;
-			auto old_momentum = sol_n;
-			cout << "    Updating displacements" << std::endl;
-			std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-			for (auto& cell : dof_handler.active_cell_iterators())
-				for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-					if (vertex_touched[cell->vertex_index(v)] == false)
-					{
-						vertex_touched[cell->vertex_index(v)] = true;
-						Point<dim> tmp_momentum;
-						Point<dim> tmp_momentum_plus;
-						Point<dim> tmp_loc = cell->vertex(v);
+		auto momentum = sol_n_plus;
+		auto old_momentum = sol_n;
 
-						for (unsigned int d = 0; d < dim; ++d) {
-							tmp_momentum_plus[d] = momentum(cell->vertex_dof_index(v, d));
-							tmp_momentum[d] = old_momentum(cell->vertex_dof_index(v, d));
-							if (coeff_n != 0.0)
-								total_displacement(cell->vertex_dof_index(v, d)) -= incremental_displacement(cell->vertex_dof_index(v, d));
-
-							incremental_displacement(cell->vertex_dof_index(v, d)) = present_timestep * (coeff_n * tmp_momentum[d] + coeff_n_pluss * tmp_momentum_plus[d]);
-							total_displacement(cell->vertex_dof_index(v, d)) += incremental_displacement(cell->vertex_dof_index(v, d));
-						}
+		if (coeff_n != 0.0) {
+			total_displacement -= incremental_displacement;
+		}
+		incremental_displacement = present_timestep * (coeff_n * old_momentum + coeff_n_plus * momentum);
+		total_displacement += incremental_displacement;
 
 
-					}
-		//}
-		/*else if (input_type == "Trapezoid") {
-			auto momentum = solution;
-			auto old_momentum = old_solution;
-			cout << "    Updating displacements" << std::endl;
-			std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-			for (auto& cell : dof_handler.active_cell_iterators())
-				for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-					if (vertex_touched[cell->vertex_index(v)] == false)
-					{
-						vertex_touched[cell->vertex_index(v)] = true;
-						Point<dim> tmp_momentum;
-						Point<dim> tmp_int_momentum;
-						Point<dim> tmp_loc = cell->vertex(v);
 
-						for (unsigned int d = 0; d < dim; ++d) {
-							tmp_momentum[d] = momentum(cell->vertex_dof_index(v, d));
-							tmp_int_momentum[d] = old_momentum(cell->vertex_dof_index(v, d));
-							total_displacement(cell->vertex_dof_index(v, d)) -= incremental_displacement(cell->vertex_dof_index(v, d));
-							incremental_displacement(cell->vertex_dof_index(v, d)) = present_timestep / 2.0 * (tmp_momentum[d] + tmp_int_momentum[d]);
-							total_displacement(cell->vertex_dof_index(v, d)) += incremental_displacement(cell->vertex_dof_index(v, d));
-						}
-					}
-		}*/
+
 
 	}
-	
+
 
 	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
-	template< int dim>
-	void Inelastic<dim>::move_mesh()
-	{
+	//template< int dim>
+	//void Inelastic<dim>::move_mesh()
+	//{
 
-		cout << "    Moving mesh..." << std::endl;
-		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-		for (auto& cell : dof_handler.active_cell_iterators())
-			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-				if (vertex_touched[cell->vertex_index(v)] == false)
-				{
-					vertex_touched[cell->vertex_index(v)] = true;
-					Point<dim> tmp_loc = cell->vertex(v);
-					Point<dim> tmp;
+	//	cout << "    Moving mesh..." << std::endl;
+	//	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
+	//	for (auto& cell : dof_handler.active_cell_iterators())
+	//		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
+	//			if (vertex_touched[cell->vertex_index(v)] == false)
+	//			{
+	//				vertex_touched[cell->vertex_index(v)] = true;
+	//				Point<dim> tmp_loc = cell->vertex(v);
+	//				Point<dim> tmp;
 
-					for (unsigned int d = 0; d < dim; ++d) {
-						tmp[d] = tmp_loc[d] + total_displacement(cell->vertex_dof_index(v, d));
-					}
-					cell->vertex(v) = tmp;
-				}
-		cout << "Mesh was successfully moved " << std::endl;
-	}
+	//				for (unsigned int d = 0; d < dim; ++d) {
+	//					tmp[d] = tmp_loc[d] + total_displacement(cell->vertex_dof_index(v, d));
+	//				}
+	//				cell->vertex(v) = tmp;
+	//			}
+	//	cout << "Mesh was successfully moved " << std::endl;
+	//}
 
-	template<int dim>
-	void Inelastic<dim>::move_mesh_back()
-	{
+	//template<int dim>
+	//void Inelastic<dim>::move_mesh_back()
+	//{
 
-		cout << "    Moving mesh..." << std::endl;
-		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-		for (auto& cell : dof_handler.active_cell_iterators())
-			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-				if (vertex_touched[cell->vertex_index(v)] == false)
-				{
-					vertex_touched[cell->vertex_index(v)] = true;
-					Point<dim> tmp_loc = cell->vertex(v);
-					Point<dim> tmp;
+	//	cout << "    Moving mesh..." << std::endl;
+	//	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
+	//	for (auto& cell : dof_handler.active_cell_iterators())
+	//		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
+	//			if (vertex_touched[cell->vertex_index(v)] == false)
+	//			{
+	//				vertex_touched[cell->vertex_index(v)] = true;
+	//				Point<dim> tmp_loc = cell->vertex(v);
+	//				Point<dim> tmp;
 
-					for (unsigned int d = 0; d < dim; ++d) {
-						tmp[d] = tmp_loc[d] - total_displacement(cell->vertex_dof_index(v, d));
-					}
-					cell->vertex(v) = tmp;
-				}
-		cout << "Mesh was moved back" << std::endl;
-	}
+	//				for (unsigned int d = 0; d < dim; ++d) {
+	//					tmp[d] = tmp_loc[d] - total_displacement(cell->vertex_dof_index(v, d));
+	//				}
+	//				cell->vertex(v) = tmp;
+	//			}
+	//	cout << "Mesh was moved back" << std::endl;
+	//}
 
 
 	// This chunk of code allows for communication between current code state and quad point history
