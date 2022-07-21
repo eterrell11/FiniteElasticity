@@ -420,32 +420,29 @@ namespace NonlinearElasticity
         SparsityPattern sparsity_pattern_def_grad;
         SparsityPattern sparsity_pattern_pres_vel;
 
-        SparseMatrix<double> vel_Laplace_plus_Mass;
         SparseMatrix<double> vel_it_matrix[dim]; //For the addition of lap+mass and variable advection
         SparseMatrix<double> vel_Mass;
-        SparseMatrix<double> vel_Laplace;
-        SparseMatrix<double> vel_Advection;
+        SparseMatrix<double> def_grad_Mass;
         SparseMatrix<double> pres_Laplace;
         SparseMatrix<double> pres_Mass;
-        SparseMatrix<double> pres_Diff[dim];
-        SparseMatrix<double> pres_iterative; //Introduced so pres_Laplace doesn't have to be adjusted for projection BC's
+        SparseMatrix<double> pres_iterative; //can now be used so only Laplace portion needs to be changed with updates to cofactor; no need to affect the mass matrix
 
-        Vector<double> pres_n_plus_1;
+        Vector<double> pres_n_minus_1;
         Vector<double> pres_n;
         Vector<double> pres_star;
 
-        Vector<double> u_n_plus_1[dim];
+        Vector<double> u_n_minus_1[dim];
         Vector<double> u_n[dim];
         Vector<double> u_star[dim];
 
-        Vector<double> FF_n_plus_1[dim * dim];
+        Vector<double> FF_n_minus_1[dim * dim];
         Vector<double> FF_n[dim * dim];
         Vector<double> FF_star[dim * dim];
 
         Vector<double> force[dim];
         Vector<double> v_tmp;
         Vector<double> pres_tmp;
-        Vector<double> FF_temp
+        Vector<double> FF_temp;
 
         SparseILU<double>   prec_momentum[dim];
         SparseILU<double>   prec_pres_Laplace;
@@ -711,9 +708,16 @@ namespace NonlinearElasticity
         for (unsigned int d = 0; d < dim; ++d)
         {
             u_n[d].reinit(dof_handler_momentum.n_dofs());
-            u_n_minus_1[d].reinit(dof_handler_momentum.n_dofs());
+            u_n_plus_1[d].reinit(dof_handler_momentum.n_dofs());
             u_star[d].reinit(dof_handler_momentum.n_dofs());
             force[d].reinit(dof_handler_momentum.n_dofs());
+        }
+        for (unsigned int d = 0; d< dim;++d)
+        {
+            FF_n[d].reinit(dof_handler_def_grad.n_dofs());
+            FF_star[d].reinit(dof_handler_def_grad.n_dofs());
+            FF_n_plus_1[d].reinit(dof_handler_def_grad.n_dofs());
+
         }
         v_tmp.reinit(dof_handler_momentum.n_dofs());
         rot_u.reinit(dof_handler_momentum.n_dofs());
@@ -796,6 +800,25 @@ namespace NonlinearElasticity
             quadrature_pressure,
             pres_Mass);
     }
+
+template <int dim>
+void NavierStokesProjection<dim>::initialize_def_grad_matrices()
+{
+    {
+        DynamicSparsityPattern dsp(dof_handler_def_grad.n_dofs(),
+            dof_handler_def_grad.n_dofs());
+        DoFTools::make_sparsity_pattern(dof_handler_def_grad, dsp);
+        sparsity_pattern_def_grad.copy_from(dsp);
+    }
+
+    
+    def_grad_Mass.reinit(sparsity_pattern_def_grad);
+
+
+    MatrixCreator::create_mass_matrix(dof_handler_def_grad,
+        quadrature_def_grad,
+        def_grad_Mass);
+}
 
     template <int dim>
     void NavierStokesProjection<dim>::initialize_gradient_operator()
