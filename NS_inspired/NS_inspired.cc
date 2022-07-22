@@ -430,17 +430,21 @@ namespace NonlinearElasticity
         Vector<double> pres_n_minus_1;
         Vector<double> pres_n;
         Vector<double> pres_star;
+        Vector<double> pres_RHS;
 
         Vector<double> u_n_minus_1[dim];
         Vector<double> u_n[dim];
         Vector<double> u_star[dim];
+        Vector<double> u_RHS[dim];
+        Vector<double> u_RHS_2[dim];
 
         Vector<double> FF_n_minus_1[dim * dim];
         Vector<double> FF_n[dim * dim];
         Vector<double> FF_star[dim * dim];
+        Vector<double> FF_RHS[dim * dim];
 
         Vector<double> force[dim];
-        Vector<double> v_tmp;
+        Vector<double> u_tmp;
         Vector<double> pres_tmp;
         Vector<double> FF_temp;
 
@@ -552,6 +556,56 @@ namespace NonlinearElasticity
 
         void copy_gradient_local_to_global(const InitGradPerTaskData& data);
 
+        void assemble_pres_Lap_term();
+
+        struct pres_Lap_PerTaskData
+        {
+            FullMatrix<double>                   local_pres_Lap;
+            std::vector<types::global_dof_index> local_dof_indices;
+            AdvectionPerTaskData(const unsigned int dpc)
+                : local_pres_Lap(dpc, dpc)
+                , local_dof_indices(dpc)
+            {}
+        };
+
+        struct pres_Lap_ScratchData
+        {
+            unsigned int                nqp;
+            unsigned int                dpc;
+            std::vector<Point<dim>>     u_star_local;
+            std::vector<Tensor<1, dim>> grad_u_star;
+            std::vector<double>         u_star_tmp;
+            FEValues<dim>               fe_val;
+            pres_Lap_ScratchData(const FE_Q<dim>& fe,
+                const QGauss<dim>& quad,
+                const UpdateFlags  flags)
+                : nqp(quad.size())
+                , dpc(fe.n_dofs_per_cell())
+                , u_star_local(nqp)
+                , grad_u_star(nqp)
+                , u_star_tmp(nqp)
+                , fe_val(fe, quad, flags)
+            {}
+
+            pres_Lap_ScratchData(const AdvectionScratchData& data)
+                : nqp(data.nqp)
+                , dpc(data.dpc)
+                , u_star_local(nqp)
+                , grad_u_star(nqp)
+                , u_star_tmp(nqp)
+                , fe_val(data.fe_val.get_fe(),
+                    data.fe_val.get_quadrature(),
+                    data.fe_val.get_update_flags())
+            {}
+        };
+
+        void assemble_one_cell_of_pres_Lap(
+            const typename DoFHandler<dim>::active_cell_iterator& cell,
+            AdvectionScratchData& scratch,
+            AdvectionPerTaskData& data);
+
+        void copy_pres_Lap_local_to_global(const AdvectionPerTaskData& data);
+        
         void assemble_advection_term();
 
         struct AdvectionPerTaskData
@@ -605,7 +659,6 @@ namespace NonlinearElasticity
 
         void output_results(const unsigned int step);
 
-        void assemble_vorticity(const bool reinit_prec);
     };
 
     template <int dim> 
@@ -702,25 +755,27 @@ namespace NonlinearElasticity
 
         pres_n.reinit(dof_handler_pressure.n_dofs());
         pres_n_minus_1.reinit(dof_handler_pressure.n_dofs());
-        phi_n.reinit(dof_handler_pressure.n_dofs());
-        phi_n_minus_1.reinit(dof_handler_pressure.n_dofs());
         pres_tmp.reinit(dof_handler_pressure.n_dofs());
         for (unsigned int d = 0; d < dim; ++d)
         {
             u_n[d].reinit(dof_handler_momentum.n_dofs());
-            u_n_plus_1[d].reinit(dof_handler_momentum.n_dofs());
+            u_n_minus_1[d].reinit(dof_handler_momentum.n_dofs());
             u_star[d].reinit(dof_handler_momentum.n_dofs());
             force[d].reinit(dof_handler_momentum.n_dofs());
+            u_RHS[d].reinit(dof_handler_momentum.n_dofs());
+            u_RHS_2[d].reinit(dof_handler_momentum.n_dofs());
         }
-        for (unsigned int d = 0; d< dim;++d)
+        
+        u_tmp.reinit(dof_handler_momentum.n_dofs());
+
+        for (unsigned int d = 0; d< dim * dim; ++d)
         {
             FF_n[d].reinit(dof_handler_def_grad.n_dofs());
             FF_star[d].reinit(dof_handler_def_grad.n_dofs());
-            FF_n_plus_1[d].reinit(dof_handler_def_grad.n_dofs());
+            FF_n_minus_1[d].reinit(dof_handler_def_grad.n_dofs());
+            FF_RHS[d].reinit(dof_handler_def_grad.n_dofs());
 
         }
-        v_tmp.reinit(dof_handler_momentum.n_dofs());
-        rot_u.reinit(dof_handler_momentum.n_dofs());
 
         std::cout << "dim (X_h) = " << (dof_handler_momentum.n_dofs() * dim)
             << std::endl
@@ -764,19 +819,14 @@ namespace NonlinearElasticity
             DoFTools::make_sparsity_pattern(dof_handler_momentum, dsp);
             sparsity_pattern_momentum.copy_from(dsp);
         }
-        vel_Laplace_plus_Mass.reinit(sparsity_pattern_momentum);
-        for (unsigned int d = 0; d < dim; ++d)
-            vel_it_matrix[d].reinit(sparsity_pattern_momentum);
+
+        
         vel_Mass.reinit(sparsity_pattern_momentum);
-        vel_Laplace.reinit(sparsity_pattern_momentum);
-        vel_Advection.reinit(sparsity_pattern_momentum);
 
         MatrixCreator::create_mass_matrix(dof_handler_momentum,
             quadrature_momentum,
             vel_Mass);
-        MatrixCreator::create_laplace_matrix(dof_handler_momentum,
-            quadrature_momentum,
-            vel_Laplace);
+
     }
 
     template <int dim>
@@ -793,9 +843,6 @@ namespace NonlinearElasticity
         pres_iterative.reinit(sparsity_pattern_pressure);
         pres_Mass.reinit(sparsity_pattern_pressure);
 
-        MatrixCreator::create_laplace_matrix(dof_handler_pressure,
-            quadrature_pressure,
-            pres_Laplace);
         MatrixCreator::create_mass_matrix(dof_handler_pressure,
             quadrature_pressure,
             pres_Mass);
@@ -952,9 +999,9 @@ void NavierStokesProjection<dim>::initialize_def_grad_matrices()
         for (unsigned int d = 0; d < dim; ++d)
         {
             force[d] = 0.;
-            v_tmp.equ(2. / dt, u_n[d]);
-            v_tmp.add(-.5 / dt, u_n_minus_1[d]);
-            vel_Mass.vmult_add(force[d], v_tmp);
+            u_tmp.equ(2. / dt, u_n[d]);
+            u_tmp.add(-.5 / dt, u_n_minus_1[d]);
+            vel_Mass.vmult_add(force[d], u_tmp);
 
             pres_Diff[d].vmult_add(force[d], pres_tmp);
             u_n_minus_1[d] = u_n[d];
