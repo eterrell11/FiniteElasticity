@@ -475,9 +475,10 @@ namespace NonlinearElasticity
 		void         create_coarse_grid(Triangulation<2>& triangulation);
 		void         create_coarse_grid(Triangulation<3>& triangulation);
 		void         setup_system();
-		void         assemble_system(Vector<double>& sol_n);
-		void		 assemble_momentum_int_rhs(Vector<double>& sol_n);
-		void		 assemble_FF_rhs(Vector<double>& sol_n);
+		void         assemble_momentum_mass(Vector<double>& sol_n);
+		void		 assemble_pressure_mass(Vector<double>& sol_n);
+		void		 assemble_def_grad_mass(Vector<double>& sol_n);
+        void         assemble_pressure_Lap(Vector<double>& sol_n);
 		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1);
 		void		 assemble_momentum_rhs(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void         solve_ForwardEuler();
@@ -505,21 +506,23 @@ namespace NonlinearElasticity
 		DoFHandler<dim>    dof_handler_momentum;
 		DoFHandler<dim>	   dof_handler_def_grad;
 		DoFHandler<dim>    dof_handler_pressure;
-		FE_SimplexP<dim> fe_velocity;
+		FE_SimplexP<dim> fe_momentum;
 		FE_SimplexP<dim> fe_pressure;
 		FE_SimplexP<dim> fe_def_grad;
 
 
 		MappingFE<dim> mapping_simplex;
 
-		AffineConstraints<double> homogeneous_constraints;
+		AffineConstraints<double> homogeneous_constraints_momentum;
+        AffineConstraints<double> homogeneous_constraints_def_grad;
+        AffineConstraints<double> homogeneous_constraints_pressure;
 
-		const QGauss<dim> momentum_quadrature_formula;
-		const QGauss<dim - 1> momentum_face_quadrature_formula;
-		const QGauss<dim> def_grad_quadrature_formula;
-		const QGauss<dim - 1> def_grad_face_quadrature_formula;
-		const QGauss<dim> pressure_quadrature_formula;
-		const QGauss<dim - 1> pressure_face_quadrature_formula;
+		const QGauss<dim> quadrature_formula_momentum;
+		const QGauss<dim - 1> face_quadrature_formula_momentum;
+		const QGauss<dim> quadrature_formula_def_grad;
+		const QGauss<dim - 1> face_quadrature_formula_def_grad;
+		const QGauss<dim> quadrature_formula_pressure;
+		const QGauss<dim - 1> face_quadrature_formula_pressure;
 
 		std::vector<PointHistory<dim>> quadrature_point_history;
 
@@ -819,11 +822,11 @@ namespace NonlinearElasticity
 		, fe_momentum(parameters.order+1)
 		, fe_pressure(parameters.order)
 		, fe_def_grad(parameters.order)
-		, momentum_quadrature_formula(parameters.order + 2)
-		, pressure_quadrature_formula(parameters.order + 1)
-		, def_grad_quadrature_formula(parameters.order + 1)
-		, momentum_face_quadrature_formula(parameters.order + 2)
-		, pressure_face_quadrature_formula(parameters.order + 2)
+		, quadrature_formula_momentum(parameters.order + 2)
+		, quadrature_formula_pressure(parameters.order + 1)
+		, quadrature_formula_def_grad(parameters.order + 1)
+		, face_quadrature_formula_momentum(parameters.order + 2)
+		, face_quadrature_formula_pressure(parameters.order + 2)
 		, def_gard_face_quadrature_formula(parameters.order + 2)
 		, timestep_no(0)
 	{}
@@ -955,305 +958,169 @@ namespace NonlinearElasticity
 	void Inelastic<dim>::setup_system()
 	{
 
-		dof_handler.distribute_dofs(fe);
-		DoFRenumbering::component_wise(dof_handler);
+		dof_handler_momentum.distribute_dofs(fe_velocity);
+        dof_handler_def_grad.distribute_dofs(fe_def_grad);
+        dof_handler_pressure.distribute_dofs(fe_pressure);
 
-		const std::vector<types::global_dof_index> dofs_per_component =
-			DoFTools::count_dofs_per_fe_component(dof_handler);
-		const unsigned int n_u = dofs_per_component[0] * dim,
-			n_p = dofs_per_component[dim],
-			n_f = dofs_per_component[dim + 1] * dim * dim;
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
 			<< std::endl
-			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
-			<< " (" << n_u << '+' << n_p << '+' << n_f << ')' << std::endl;
+        << "Number of degrees of freedom: " << dof_handler_momentum.n_dofs() + dof_handler_def_grad.n_dofs() +dof_handler_pressure.n_dofs()
+			<< " (" << dof_handler_momentum.n_dofs() << '+' << dof_handler_pressure.n_dofs() << '+' << dof_handler_def_grad.n_dofs() << ')' << std::endl;
 
 		std::cout << "Setting up zero boundary conditions" << std::endl;
 
 		FEValuesExtractors::Vector Momentum(0);
-		FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
-		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = true;
+		FEValuesExtractors::Scalar Pressure(0);
+		std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
+		for (unsigned int i = 0; i < dim * dim; ++i) {
+			Def_Grad[i] = true;
 		}
-		homogeneous_constraints.clear();
-
-		AffineConstraints<double> u_constraints;
+        
+// HOMOGENEOUS CONSTRAINTS
+        homogeneous_constraints_momentum.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler,
 			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-			u_constraints,
+			Functions::ZeroFunction<dim>(dim),
+			homogeneous_constraints_momentum,
 			fe.component_mask(Momentum));
-		u_constraints.close();
+        homogeneous_constraints_momentum.close();
 
-
-		AffineConstraints<double> p_constraints;
+        homogeneous_constraints_pressure.clear();
 		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 		//	dof_handler,
 		//	4,
 		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-		//	p_constraints,
+		//	homogeneous_constraints_pressure,
 		//	fe.component_mask(Pressure));
-		p_constraints.close();
+        homogeneous_constraints_pressure.close();
 
-		AffineConstraints<double> F_constraints;
+        homogeneous_constraints_def_grad.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler,
 			4,
 			Def_Grad_bound<dim>(),
-			F_constraints,
-			fe.component_mask(Def_Gradient));
-		F_constraints.close();
-		homogeneous_constraints.merge(u_constraints);
-		homogeneous_constraints.merge(p_constraints);
-		homogeneous_constraints.merge(F_constraints);
-		homogeneous_constraints.close();
-
-		const std::vector<types::global_dof_index> block_sizes = { n_u, n_p, n_f };
+            homogeneous_constraints_def_grad,
+			fe.component_mask(Def_Grad));
+        homogeneous_constraints_def_grad.close();
 
 
-		BlockDynamicSparsityPattern dsp_constrained(block_sizes, block_sizes);
-		dsp_constrained.collect_sizes();
-		DoFTools::make_sparsity_pattern(dof_handler,
-			dsp_constrained,
-			homogeneous_constraints,
+
+//DYNAMIC SPARSITY PATTERNS
+		DynamicSparsityPattern dsp_momentum_constrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
+		DoFTools::make_sparsity_pattern(dof_handler_momentum,
+			dsp_momentum_constrained,
+			homogeneous_constraints_momentum,
 			false);
-		constrained_sparsity_pattern.copy_from(dsp_constrained);
-		constrained_mass_matrix.reinit(constrained_sparsity_pattern);
+		constrained_sparsity_pattern_momentum.copy_from(dsp_momentum_constrained);
+		constrained_mass_matrix_momentum.reinit(constrained_sparsity_pattern_momentum);
 
+		BlockDynamicSparsityPattern dsp_momentum_unconstrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
+		DoFTools::make_sparsity_pattern(dof_handler_momentum, dsp_momentum_unconstrained);
+		unconstrained_sparsity_pattern_momentum.copy_from(dsp_momentum_unconstrained);
+		unconstrained_mass_matrix_momentum.reinit(unconstrained_sparsity_pattern_momentum);
 
-		BlockDynamicSparsityPattern dsp_unconstrained(block_sizes, block_sizes);
-		dsp_unconstrained.collect_sizes();
-		DoFTools::make_sparsity_pattern(dof_handler, dsp_unconstrained);
-		unconstrained_sparsity_pattern.copy_from(dsp_unconstrained);
-		unconstrained_mass_matrix.reinit(unconstrained_sparsity_pattern);
+        
+        DynamicSparsityPattern dsp_pressure_constrained(dof_handler_pressure.n_dofs(), dof_handler_pressure.n_dofs());
+        DoFTools::make_sparsity_pattern(dof_handler_pressure,
+            dsp_pressure_constrained,
+            homogeneous_constraints_pressure,
+            false);
+        constrained_sparsity_pattern_pressure.copy_from(dsp_pressure_constrained);
+        constrained_mass_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
 
+        BlockDynamicSparsityPattern dsp_pressure_unconstrained(dof_handler_pressure.n_dofs(), dof_handler_pressure.n_dofs());
+        DoFTools::make_sparsity_pattern(dof_handler_pressure, dsp_pressure_unconstrained);
+        unconstrained_sparsity_pattern_pressure.copy_from(dsp_pressure_unconstrained);
+        unconstrained_mass_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
 
-		solution.reinit(block_sizes);
-		solution.collect_sizes();
+        
+        DynamicSparsityPattern dsp_def_grad_constrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
+        DoFTools::make_sparsity_pattern(dof_handler_def_grad,
+            dsp_def_grad_constrained,
+            homogeneous_constraints_def_grad,
+            false);
+        constrained_sparsity_pattern_def_grad.copy_from(dsp_def_grad_constrained);
+        constrained_mass_matrix_def_grad.reinit(constrained_sparsity_pattern_def_grad);
 
-		old_solution.reinit(block_sizes);
-		old_solution.collect_sizes();
+        BlockDynamicSparsityPattern dsp_def_grad_unconstrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
+        DoFTools::make_sparsity_pattern(dof_handler_def_grad, dsp_def_grad_unconstrained);
+        unconstrained_sparsity_pattern_def_grad.copy_from(dsp_def_grad_unconstrained);
+        unconstrained_mass_matrix_def_grad.reinit(unconstrained_sparsity_pattern_def_grad);
 
-		int_solution.reinit(block_sizes);
-		int_solution.collect_sizes();
+		momentum_solution.reinit(dof_handler_momentum.n_dofs);
+		momentum_old_solution.reinit(dof_handler_momentum.n_dofs);
+		momentum_int_solution.reinit(dof_handler_momentum.n_dofs);
+		momentum_int_solution_2.reinit(dof_handler_momentum.n_dofs);
+		momentum_rhs.reinit(dof_handler_momentum.n_dofs);
 
-		int_solution_2.reinit(block_sizes);
-		int_solution_2.collect_sizes();
-
-		system_rhs.reinit(block_sizes);
-		system_rhs.collect_sizes();
-
-		//residual.reinit(block_sizes);
-		//residual.collect_sizes();
+        pressure_solution.reinit(dof_handler_pressure.n_dofs);
+        pressure_old_solution.reinit(dof_handler_pressure.n_dofs);
+        pressure_int_solution.reinit(dof_handler_pressure.n_dofs);
+        pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs);
+        pressure_rhs.reinit(dof_handler_pressure.n_dofs);
 
 
 
 		cout << "Applying initial conditions" << std::endl;
-		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), old_solution);
+		VectorTools::interpolate(dof_handler_momentum, InitialMomentum<dim>(parameters.InitialVelocity), momentum_old_solution);
 
-		incremental_displacement.reinit(dof_handler.n_dofs());
-		total_displacement.reinit(dof_handler.n_dofs());
+		incremental_displacement.reinit(dof_handler_momentum.n_dofs());
+        total_displacement.reinit(dof_handler_momentum.n_dofs());
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_system(Vector<double>& sol_n)
+	void Inelastic<dim>::assemble_momentum_mass(Vector<double>& sol_n)
 	{
 
 
-		constrained_mass_matrix.block(0, 0) = 0;
-		constrained_mass_matrix.block(0, 1) = 0;
-		constrained_mass_matrix.block(1, 0) = 0;
-		constrained_mass_matrix.block(1, 1) = 0;
-		constrained_mass_matrix.block(1, 2) = 0;
-		constrained_mass_matrix.block(2, 2) = 0;
-		constrained_mass_matrix.block(2, 1) = 0;
-		constrained_mass_matrix.block(2, 0) = 0;
-		constrained_mass_matrix.block(0, 2) = 0;
+        constrained_mass_matrix_momentum = 0;
 
-
-		unconstrained_mass_matrix.block(0, 0) = 0;
-		unconstrained_mass_matrix.block(0, 1) = 0;
-		unconstrained_mass_matrix.block(1, 0) = 0;
-		unconstrained_mass_matrix.block(1, 1) = 0;
-		unconstrained_mass_matrix.block(1, 2) = 0;
-		unconstrained_mass_matrix.block(2, 2) = 0;
-		unconstrained_mass_matrix.block(2, 1) = 0;
-		unconstrained_mass_matrix.block(2, 0) = 0;
-		unconstrained_mass_matrix.block(0, 2) = 0;
+        unconstrained_mass_matrix_momentum = 0;
 
 		FEValues<dim> fe_values(mapping_simplex,
-			fe,
-			quadrature_formula,
+			fe_momentum,
+			quadrature_formula_momentum,
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(fe,
-			face_quadrature_formula,
-			update_values |
-			update_normal_vectors |
-			update_quadrature_points |
-			update_JxW_values);
 
-		const unsigned int dofs_per_cell = fe.dofs_per_cell;
-		const unsigned int n_q_points = quadrature_formula.size();
-		const unsigned int n_face_q_points = face_quadrature_formula.size();
-
-
-		std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
-		std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
-
-
-
-
-
+		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula_momentum.size();
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
-		Vector<double>     cell_rhs(dofs_per_cell);
-
-
-
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-		RightHandSide<dim> right_hand_side;
-		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
-		TractionVector<dim> traction_vector;
-		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
-
-		const FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
-
-		Tensor<2, dim> real_FF;
-		Tensor<2, dim> FF;
-		Tensor<1, dim> temp_momentum;
-		Tensor<1, dim> face_temp_momentum;
-		double         temp_pressure;
-		Tensor<2, dim> HH;
-		Tensor<2, dim> real_HH;
-		double Jf;
-		Tensor<2, dim> pk1;
-		Tensor<2, dim> real_pk1;
-		double sol_counter;
-		double real_Jf;
-		double real_pressure;
-
-		const std::vector<types::global_dof_index> dofs_per_component =
-			DoFTools::count_dofs_per_fe_component(dof_handler);
-		/*const unsigned int n_u = dofs_per_component[0] * dim;*/
-
-		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(
-			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim + 1 + dim * dim));
 
 		Tensor<1, dim> fe_val_Momentum_i;
-		double fe_val_Pressure_i;
-		Tensor<1, dim> fe_grad_Pressure_i;
-		Tensor<2, dim> fe_val_Def_Grad_i;
-
-		//Stability parameters 
-		double alpha = parameters.alpha;
-		double beta = parameters.beta;
-
-		Tensor<2, dim> II = unit_symmetric_tensor<dim>();
 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
-			PointHistory<dim>* local_quadrature_points_history =
-				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-			real_FF = 0;
-			FF = 0;
-			HH = 0;
-			Jf = 0;
-			pk1 = 0;
-			temp_momentum = 0;
-			temp_pressure = 0;
-
-			real_Jf = 0;
-			real_pressure = 0;
+			
 
 			cell_mass_matrix = 0;
 			fe_values.reinit(cell);
 
-			fe_values.get_function_values(sol_n, sol_vec);
-			right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce);
 
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
-
-				sol_counter = 0;
-				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
-
-					temp_momentum[i] = sol_vec[q_point](sol_counter);
-
-					++sol_counter;
-				}
-
-				temp_pressure = sol_vec[q_point](sol_counter);
-				++sol_counter;
-
-				for (unsigned int i = 0; i < dim; i++) {
-					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
-						FF[i][j] = sol_vec[q_point](sol_counter);
-						++sol_counter;
-					}
-				}
-
-				fe_values.get_function_gradients(total_displacement, displacement_grads);
-				real_FF = get_real_FF(displacement_grads[q_point]);
-				FF += alpha * (real_FF - FF);
-				real_Jf = get_Jf(real_FF);
-				temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
-				Jf = get_Jf(FF);
-				HH = get_HH(FF, Jf);
-				real_HH = get_HH(real_FF, real_Jf);
-				real_pressure = kappa * (real_Jf - 1.0);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
-				real_pk1 = get_pk1(real_FF, mu, real_Jf, real_pressure, real_HH);
-
-				//cout << "q_point momentum : " << temp_momentum << std::endl;
-				/*cout << "FF : " << FF << std::endl;
-				cout << "PK1 : " << pk1 << std::endl;*//*
-				cout << "real FF : " << real_FF << std::endl;
-				for (int i = 0; i < dim; i++)
-					for (int j = 0; j < dim; j++)
-						cout << "displacement_grads[" << i << j << "]: " << displacement_grads[q_point][i][j] << std::endl;*/
-						//cout << "displacement grads : " << displacement_grads[q_point] << std::endl;
-
-				local_quadrature_points_history[q_point].pk1_store = pk1;
-				local_quadrature_points_history[q_point].HH_store = HH;
-
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
-					fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
-					fe_val_Def_Grad_i = fe_values[Def_Gradient].value(i, q_point);
-					fe_grad_Pressure_i = fe_values[Pressure].gradient(i, q_point);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
 						cell_mass_matrix(i, j) +=
 							fe_val_Momentum_i * //Momentum terms
 							fe_values[Momentum].value(j, q_point) *
-							fe_values.JxW(q_point) +
-							scalar_product(fe_val_Def_Grad_i, //Deformation Gradient terms
-								fe_values[Def_Gradient].value(j, q_point)) *
-							fe_values.JxW(q_point) +
-							1.0 / kappa * // Pressure terms
-							fe_val_Pressure_i *
-							fe_values[Pressure].value(j, q_point) *
-							fe_values.JxW(q_point) +
-							present_timestep * present_timestep *
-							scalar_product(HH * fe_grad_Pressure_i,
-								HH * fe_values[Pressure].gradient(j, q_point)) *
-							fe_values.JxW(q_point);
+                        fe_values.JxW(q_point);
 					}
 
 				}
@@ -1262,17 +1129,366 @@ namespace NonlinearElasticity
 
 
 			cell->get_dof_indices(local_dof_indices);
-			homogeneous_constraints.distribute_local_to_global(
+			homogeneous_constraints_momentum.distribute_local_to_global(
 				cell_mass_matrix,
 				local_dof_indices,
-				constrained_mass_matrix);
+				constrained_mass_matrix_momentum);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-					unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+					unconstrained_mass_matrix_momentum.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 				}
 			}
 		}
 	}
+
+template <int dim>
+void Inelastic<dim>::assemble_pressure_mass(Vector<double>& sol_n)
+{
+
+
+    constrained_mass_matrix_pressure = 0;
+
+    unconstrained_mass_matrix_pressure = 0;
+
+    FEValues<dim> fe_values(mapping_simplex,
+        fe_pressure,
+        quadrature_formula_pressure,
+        update_values |
+        update_gradients |
+        update_quadrature_points |
+        update_JxW_values);
+
+
+    const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
+    const unsigned int n_q_points = quadrature_formula_pressure.size();
+
+    FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+
+    Tensor<1, dim> fe_val_Pressure_i;
+
+
+    for (const auto& cell : dof_handler.active_cell_iterators())
+    {
+        
+
+        cell_mass_matrix = 0;
+        fe_values.reinit(cell);
+        for (const unsigned int q_point : fe_values.quadrature_point_indices())
+        {
+            for (const unsigned int i : fe_values.dof_indices())
+            {
+                fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
+                for (const unsigned int j : fe_values.dof_indices())
+                {
+                    cell_mass_matrix(i, j) +=
+                        fe_val_Pressure_i * //Momentum terms
+                        fe_values[Pressure].value(j, q_point) *
+                    fe_values.JxW(q_point);
+                }
+
+            }
+        }
+
+
+
+        cell->get_dof_indices(local_dof_indices);
+        homogeneous_constraints_pressure.distribute_local_to_global(
+            cell_mass_matrix,
+            local_dof_indices,
+            constrained_mass_matrix_pressure);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+            for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+                unconstrained_mass_matrix_pressure.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+            }
+        }
+    }
+}
+template <int dim>
+void Inelastic<dim>::assemble_def_grad_mass(Vector<double>& sol_n)
+{
+
+
+    constrained_mass_matrix_def_grad = 0;
+
+    unconstrained_mass_matrix_def_grad = 0;
+
+    FEValues<dim> fe_values(mapping_simplex,
+        fe_def_grad,
+        quadrature_formula_def_grad,
+        update_values |
+        update_gradients |
+        update_quadrature_points |
+        update_JxW_values);
+
+
+    const unsigned int dofs_per_cell = fe_def_grad.dofs_per_cell;
+    const unsigned int n_q_points = quadrature_formula_def_grad.size();
+
+    FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+
+    Tensor<1, dim> fe_val_Def_Grad_i;
+
+
+    for (const auto& cell : dof_handler_def_grad.active_cell_iterators())
+    {
+        
+
+        cell_mass_matrix = 0;
+        fe_values.reinit(cell);
+
+
+
+        for (const unsigned int q_point : fe_values.quadrature_point_indices())
+        {
+            for (const unsigned int i : fe_values.dof_indices())
+            {
+                fe_val_Def_Grad_i = fe_values[Def_Grad].value(i, q_point);
+                for (const unsigned int j : fe_values.dof_indices())
+                {
+                    cell_mass_matrix(i, j) +=
+                        fe_val_Def_Grad_i * //Momentum terms
+                        fe_values[Def_Grad].value(j, q_point) *
+                    fe_values.JxW(q_point);
+                }
+
+            }
+        }
+
+
+
+        cell->get_dof_indices(local_dof_indices);
+        homogeneous_constraints_def_grad.distribute_local_to_global(
+            cell_mass_matrix,
+            local_dof_indices,
+            constrained_mass_matrix_def_grad);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+            for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+                unconstrained_mass_matrix_def_grad.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+            }
+        }
+    }
+}
+
+template <int dim>
+void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
+{
+
+
+    constrained_mass_matrix.block(0, 0) = 0;
+    constrained_mass_matrix.block(0, 1) = 0;
+    constrained_mass_matrix.block(1, 0) = 0;
+    constrained_mass_matrix.block(1, 1) = 0;
+    constrained_mass_matrix.block(1, 2) = 0;
+    constrained_mass_matrix.block(2, 2) = 0;
+    constrained_mass_matrix.block(2, 1) = 0;
+    constrained_mass_matrix.block(2, 0) = 0;
+    constrained_mass_matrix.block(0, 2) = 0;
+
+
+    unconstrained_mass_matrix.block(0, 0) = 0;
+    unconstrained_mass_matrix.block(0, 1) = 0;
+    unconstrained_mass_matrix.block(1, 0) = 0;
+    unconstrained_mass_matrix.block(1, 1) = 0;
+    unconstrained_mass_matrix.block(1, 2) = 0;
+    unconstrained_mass_matrix.block(2, 2) = 0;
+    unconstrained_mass_matrix.block(2, 1) = 0;
+    unconstrained_mass_matrix.block(2, 0) = 0;
+    unconstrained_mass_matrix.block(0, 2) = 0;
+
+    FEValues<dim> fe_values(mapping_simplex,
+        fe,
+        quadrature_formula,
+        update_values |
+        update_gradients |
+        update_quadrature_points |
+        update_JxW_values);
+
+    FEFaceValues<dim> fe_face_values(fe,
+        face_quadrature_formula,
+        update_values |
+        update_normal_vectors |
+        update_quadrature_points |
+        update_JxW_values);
+
+    const unsigned int dofs_per_cell = fe.dofs_per_cell;
+    const unsigned int n_q_points = quadrature_formula.size();
+    const unsigned int n_face_q_points = face_quadrature_formula.size();
+
+
+    std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
+    std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
+
+
+
+
+
+
+    FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+    Vector<double>     cell_rhs(dofs_per_cell);
+
+
+
+
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+    RightHandSide<dim> right_hand_side;
+    std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
+
+    TractionVector<dim> traction_vector;
+    std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
+
+    Tensor<2, dim> real_FF;
+    Tensor<2, dim> FF;
+    Tensor<1, dim> temp_momentum;
+    Tensor<1, dim> face_temp_momentum;
+    double         temp_pressure;
+    Tensor<2, dim> HH;
+    Tensor<2, dim> real_HH;
+    double Jf;
+    Tensor<2, dim> pk1;
+    Tensor<2, dim> real_pk1;
+    double sol_counter;
+    double real_Jf;
+    double real_pressure;
+
+    const std::vector<types::global_dof_index> dofs_per_component =
+        DoFTools::count_dofs_per_fe_component(dof_handler);
+    /*const unsigned int n_u = dofs_per_component[0] * dim;*/
+
+    std::vector<std::vector<Tensor<1, dim>>> displacement_grads(
+        quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim + 1 + dim * dim));
+
+    Tensor<1, dim> fe_val_Momentum_i;
+    double fe_val_Pressure_i;
+    Tensor<1, dim> fe_grad_Pressure_i;
+    Tensor<2, dim> fe_val_Def_Grad_i;
+
+    //Stability parameters
+    double alpha = parameters.alpha;
+    double beta = parameters.beta;
+
+    Tensor<2, dim> II = unit_symmetric_tensor<dim>();
+
+
+    for (const auto& cell : dof_handler.active_cell_iterators())
+    {
+        PointHistory<dim>* local_quadrature_points_history =
+            reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+        real_FF = 0;
+        FF = 0;
+        HH = 0;
+        Jf = 0;
+        pk1 = 0;
+        temp_momentum = 0;
+        temp_pressure = 0;
+
+        real_Jf = 0;
+        real_pressure = 0;
+
+        cell_mass_matrix = 0;
+        fe_values.reinit(cell);
+
+        fe_values.get_function_values(sol_n, sol_vec);
+        right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce);
+
+
+        for (const unsigned int q_point : fe_values.quadrature_point_indices())
+        {
+
+            sol_counter = 0;
+            for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
+
+                temp_momentum[i] = sol_vec[q_point](sol_counter);
+
+                ++sol_counter;
+            }
+
+            temp_pressure = sol_vec[q_point](sol_counter);
+            ++sol_counter;
+
+            for (unsigned int i = 0; i < dim; i++) {
+                for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
+                    FF[i][j] = sol_vec[q_point](sol_counter);
+                    ++sol_counter;
+                }
+            }
+
+            fe_values.get_function_gradients(total_displacement, displacement_grads);
+            real_FF = get_real_FF(displacement_grads[q_point]);
+            FF += alpha * (real_FF - FF);
+            real_Jf = get_Jf(real_FF);
+            temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
+            Jf = get_Jf(FF);
+            HH = get_HH(FF, Jf);
+            real_HH = get_HH(real_FF, real_Jf);
+            real_pressure = kappa * (real_Jf - 1.0);
+            pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
+            real_pk1 = get_pk1(real_FF, mu, real_Jf, real_pressure, real_HH);
+
+            //cout << "q_point momentum : " << temp_momentum << std::endl;
+            /*cout << "FF : " << FF << std::endl;
+            cout << "PK1 : " << pk1 << std::endl;*//*
+            cout << "real FF : " << real_FF << std::endl;
+            for (int i = 0; i < dim; i++)
+                for (int j = 0; j < dim; j++)
+                    cout << "displacement_grads[" << i << j << "]: " << displacement_grads[q_point][i][j] << std::endl;*/
+                    //cout << "displacement grads : " << displacement_grads[q_point] << std::endl;
+
+            local_quadrature_points_history[q_point].pk1_store = pk1;
+            local_quadrature_points_history[q_point].HH_store = HH;
+
+            for (const unsigned int i : fe_values.dof_indices())
+            {
+                fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
+                fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
+                fe_val_Def_Grad_i = fe_values[Def_Grad].value(i, q_point);
+                fe_grad_Pressure_i = fe_values[Pressure].gradient(i, q_point);
+                for (const unsigned int j : fe_values.dof_indices())
+                {
+                    cell_mass_matrix(i, j) +=
+                        fe_val_Momentum_i * //Momentum terms
+                        fe_values[Momentum].value(j, q_point) *
+                        fe_values.JxW(q_point) +
+                        scalar_product(fe_val_Def_Grad_i, //Deformation Gradient terms
+                            fe_values[Def_Grad].value(j, q_point)) *
+                        fe_values.JxW(q_point) +
+                        1.0 / kappa * // Pressure terms
+                        fe_val_Pressure_i *
+                        fe_values[Pressure].value(j, q_point) *
+                        fe_values.JxW(q_point) +
+                        present_timestep * present_timestep *
+                        scalar_product(HH * fe_grad_Pressure_i,
+                            HH * fe_values[Pressure].gradient(j, q_point)) *
+                        fe_values.JxW(q_point);
+                }
+
+            }
+        }
+
+
+
+        cell->get_dof_indices(local_dof_indices);
+        homogeneous_constraints.distribute_local_to_global(
+            cell_mass_matrix,
+            local_dof_indices,
+            constrained_mass_matrix);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+            for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+                unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+            }
+        }
+    }
+}
+
+
 
 	template <int dim>
 	void Inelastic<dim>::assemble_FF_rhs(Vector<double>& sol_n)
@@ -1318,9 +1534,6 @@ namespace NonlinearElasticity
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
-		const FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
 
 		Tensor<2, dim> FF;
@@ -1377,8 +1590,8 @@ namespace NonlinearElasticity
 				real_Jf = get_Jf(real_FF);
 				for (unsigned int i; i < dofs_per_cell; ++i)
 				{
-					//cell_rhs(i) += -scalar_product(fe_values[Def_Gradient].gradient(i, q_point), outer_product(temp_momentum, II)) * fe_values.JxW(q_point);
-					cell_rhs(i) += -fe_values[Def_Gradient].divergence(i, q_point) * temp_momentum * fe_values.JxW(q_point);
+					//cell_rhs(i) += -scalar_product(fe_values[Def_Grad].gradient(i, q_point), outer_product(temp_momentum, II)) * fe_values.JxW(q_point);
+					cell_rhs(i) += -fe_values[Def_Grad].divergence(i, q_point) * temp_momentum * fe_values.JxW(q_point);
 				}
 			}
 
@@ -1400,12 +1613,12 @@ namespace NonlinearElasticity
 						for (const unsigned int i : fe_values.dof_indices())
 						{
 							//if (face->boundary_id() == 5) {
-							cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Gradient].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
-								fe_face_values[Def_Gradient].value(i, q_point) * face_temp_momentum * fe_face_values.normal_vector(q_point) *
+							cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
+								fe_face_values[Def_Grad].value(i, q_point) * face_temp_momentum * fe_face_values.normal_vector(q_point) *
 								fe_face_values.JxW(q_point); // Deformation gradient face terms
 						//}
 						//else {
-						//	cell_rhs(i) +=  scalar_product(fe_face_values[Def_Gradient].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
+						//	cell_rhs(i) +=  scalar_product(fe_face_values[Def_Grad].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
 						//		fe_face_values.JxW(q_point); // Deformation gradient face terms
 						//}
 						}
@@ -1466,11 +1679,6 @@ namespace NonlinearElasticity
 
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
-
-
-		const FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Tensor<2> Def_Gradient(dim + 1);
 
 
 		TractionVector<dim> traction_vector;
@@ -1634,7 +1842,6 @@ namespace NonlinearElasticity
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
-		const FEValuesExtractors::Scalar Pressure(dim);
 
 		Tensor<2, dim> FF;
 		Tensor<2, dim> face_FF;
@@ -1799,8 +2006,6 @@ namespace NonlinearElasticity
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-
-		const FEValuesExtractors::Vector Momentum(0);
 
 		double temp_pressure;
 		double old_temp_pressure;
@@ -2034,12 +2239,6 @@ namespace NonlinearElasticity
 
 		AffineConstraints<double> all_constraints;
 
-		FEValuesExtractors::Vector Momentum(0);
-		FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim);
-		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = true;
-		}
 
 
 
@@ -2051,7 +2250,7 @@ namespace NonlinearElasticity
 			4,
 			Def_Grad_bound<dim>(),
 			F_constraints,
-			fe.component_mask(Def_Gradient));
+			fe.component_mask(Def_Grad));
 		F_constraints.close();
 		all_constraints.merge(F_constraints);
 		all_constraints.close();
@@ -2112,7 +2311,6 @@ namespace NonlinearElasticity
 
 		AffineConstraints<double> all_constraints;
 
-		FEValuesExtractors::Vector Momentum(0);
 
 
 		AffineConstraints<double> u_constraints;
@@ -2183,12 +2381,7 @@ namespace NonlinearElasticity
 		un_M.block(1, 1).vmult_add(un_rhs.block(1), old_sol.block(1));
 
 
-		FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim);
-		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = true;
-		}
+
 
 		AffineConstraints<double> p_constraints;
 		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
@@ -2260,12 +2453,7 @@ namespace NonlinearElasticity
 
 		auto& momentum = sol_n_plus_1.block(0);
 
-		FEValuesExtractors::Vector Momentum(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		std::vector<bool> Def_Gradient(dim * dim + 1 + dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors?
-		for (unsigned int i = dim + 1; i < dim * dim + 1 + dim; ++i) {
-			Def_Gradient[i] = true;
-		}
+    
 
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
@@ -2465,7 +2653,6 @@ namespace NonlinearElasticity
 		old_momentum.block(1) = 0;
 		old_momentum.block(2) = 0;
 
-		//Vector<double> old_momentum_vector = old_momentum;
 
 		auto momentum = sol_n_plus;
 		momentum.block(1) = 0;
