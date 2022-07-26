@@ -1192,7 +1192,7 @@ void Inelastic<dim>::assemble_pressure_mass()
                 fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
                 for (const unsigned int j : fe_values.dof_indices())
                 {
-                    cell_mass_matrix(i, j) +=
+                    cell_mass_matrix(i, j) += 1.0 / kappa *
                         fe_val_Pressure_i * //Momentum terms
                         fe_values[Pressure].value(j, q_point) *
                     fe_values.JxW(q_point);
@@ -1294,20 +1294,28 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	constrained_Lap_matrix_pressure = 0;
 	unconstrained_Lap_matrix_pressure = 0;
 
-    FEValues<dim> fe_values(mapping_simplex,
-        fe,
-        quadrature_formula,
+    FEValues<dim> fe_values_pressure(mapping_simplex,
+        fe_pressure,
+        quadrature_formula_pressure,
         update_values |
         update_gradients |
         update_quadrature_points |
         update_JxW_values);
+    
+    FEValues<dim> fe_values_def_grad(mapping_simplex,
+                                     fe_def_grad,
+                                     quadrature_formula_def_grad,
+                                     update_values|
+                                     update_gradients|
+                                     update_quadrature_points|
+                                     update_JxW_values);
 
 
-    const unsigned int dofs_per_cell = fe.dofs_per_cell;
-    const unsigned int n_q_points = quadrature_formula.size();
+    const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
+    const unsigned int n_q_points = quadrature_formula_pressure.size();
 
 
-    std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
+    std::vector<Vector<double>> sol_vec_def_grad(n_q_points, Vector<double>(dim * dim));
 
 
     FullMatrix<double> cell_Lap_matrix(dofs_per_cell, dofs_per_cell);
@@ -1320,21 +1328,16 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
     Tensor<2, dim> real_FF;
     Tensor<2, dim> FF;
-    Tensor<1, dim> temp_momentum;
-    Tensor<1, dim> face_temp_momentum;
-    double         temp_pressure;
     Tensor<2, dim> HH;
     Tensor<2, dim> real_HH;
     double Jf;
-    Tensor<2, dim> pk1;
-    Tensor<2, dim> real_pk1;
     double sol_counter;
     double real_Jf;
     double real_pressure;
 
 
     std::vector<std::vector<Tensor<1, dim>>> displacement_grads(
-        quadrature_formula_displacement.size(), std::vector<Tensor<1, dim>>(dim));
+        quadrature_formula_momentum.size(), std::vector<Tensor<1, dim>>(dim));
 
     double fe_val_Pressure_i;
     Tensor<1, dim> fe_grad_Pressure_i;
@@ -1343,44 +1346,35 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
     double alpha = parameters.alpha;
     double beta = parameters.beta;
 
-    Tensor<2, dim> II = unit_symmetric_tensor<dim>();
+    //Tensor<2, dim> II = unit_symmetric_tensor<dim>();
 
 
     for (const auto& cell : dof_handler.active_cell_iterators())
     {
         PointHistory<dim>* local_quadrature_points_history =
             reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
-        real_FF = 0;
+        //real_FF = 0;
         FF = 0;
         HH = 0;
         Jf = 0;
-        pk1 = 0;
-        temp_momentum = 0;
-        temp_pressure = 0;
+        //temp_pressure = 0;
 
-        real_Jf = 0;
-        real_pressure = 0;
+        //real_Jf = 0;
+       // real_pressure = 0;
 
-        cell_mass_matrix = 0;
-        fe_values.reinit(cell);
+        cell_Lap_matrix = 0;
+        fe_values_pressure.reinit(cell);
+        fe_values_def_grad.reinit(cell);
 
-        fe_values.get_function_values(sol_n, sol_vec);
-        right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce);
+        fe_values_def_grad.get_function_values(sol_n, sol_vec);
 
 
         for (const unsigned int q_point : fe_values.quadrature_point_indices())
         {
 
-            sol_counter = 0;
-            for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
-                temp_momentum[i] = sol_vec[q_point](sol_counter);
 
-                ++sol_counter;
-            }
-
-            temp_pressure = sol_vec[q_point](sol_counter);
-            ++sol_counter;
+            double sol_counter = 0;
 
             for (unsigned int i = 0; i < dim; i++) {
                 for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
@@ -1391,15 +1385,11 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
             fe_values.get_function_gradients(total_displacement, displacement_grads);
             real_FF = get_real_FF(displacement_grads[q_point]);
-            FF += alpha * (real_FF - FF);
+            //FF += alpha * (real_FF - FF);
             real_Jf = get_Jf(real_FF);
-            temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
             Jf = get_Jf(FF);
             HH = get_HH(FF, Jf);
             real_HH = get_HH(real_FF, real_Jf);
-            real_pressure = kappa * (real_Jf - 1.0);
-            pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
-            real_pk1 = get_pk1(real_FF, mu, real_Jf, real_pressure, real_HH);
 
             //cout << "q_point momentum : " << temp_momentum << std::endl;
             /*cout << "FF : " << FF << std::endl;
@@ -1410,29 +1400,15 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
                     cout << "displacement_grads[" << i << j << "]: " << displacement_grads[q_point][i][j] << std::endl;*/
                     //cout << "displacement grads : " << displacement_grads[q_point] << std::endl;
 
-            local_quadrature_points_history[q_point].pk1_store = pk1;
             local_quadrature_points_history[q_point].HH_store = HH;
 
             for (const unsigned int i : fe_values.dof_indices())
             {
-                fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
                 fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
-                fe_val_Def_Grad_i = fe_values[Def_Grad].value(i, q_point);
                 fe_grad_Pressure_i = fe_values[Pressure].gradient(i, q_point);
                 for (const unsigned int j : fe_values.dof_indices())
                 {
-                    cell_mass_matrix(i, j) +=
-                        fe_val_Momentum_i * //Momentum terms
-                        fe_values[Momentum].value(j, q_point) *
-                        fe_values.JxW(q_point) +
-                        scalar_product(fe_val_Def_Grad_i, //Deformation Gradient terms
-                            fe_values[Def_Grad].value(j, q_point)) *
-                        fe_values.JxW(q_point) +
-                        1.0 / kappa * // Pressure terms
-                        fe_val_Pressure_i *
-                        fe_values[Pressure].value(j, q_point) *
-                        fe_values.JxW(q_point) +
-                        present_timestep * present_timestep *
+                    cell_Lap_matrix(i, j) += present_timestep * present_timestep *
                         scalar_product(HH * fe_grad_Pressure_i,
                             HH * fe_values[Pressure].gradient(j, q_point)) *
                         fe_values.JxW(q_point);
@@ -1444,13 +1420,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
         cell->get_dof_indices(local_dof_indices);
-        homogeneous_constraints.distribute_local_to_global(
-            cell_mass_matrix,
+        homogeneous_constraints_pressure.distribute_local_to_global(
+            cell_Lap_matrix,
             local_dof_indices,
-            constrained_mass_matrix);
+            constrained_Lap_matrix_pressure);
         for (unsigned int i = 0; i < dofs_per_cell; ++i) {
             for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-                unconstrained_mass_matrix.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
+                unconstrained_Lap_matrix_pressure.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
             }
         }
     }
