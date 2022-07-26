@@ -475,10 +475,12 @@ namespace NonlinearElasticity
 		void         create_coarse_grid(Triangulation<2>& triangulation);
 		void         create_coarse_grid(Triangulation<3>& triangulation);
 		void         setup_system();
-		void         assemble_momentum_mass(Vector<double>& sol_n);
-		void		 assemble_pressure_mass(Vector<double>& sol_n);
-		void		 assemble_def_grad_mass(Vector<double>& sol_n);
+		void         assemble_momentum_mass();
+		void		 assemble_pressure_mass();
+		void		 assemble_def_grad_mass();
         void         assemble_pressure_Lap(Vector<double>& sol_n);
+		void		 assemble_def_grad_rhs(Vector<double>& sol_n);
+		void		 assemble_momentum_int_rhs(Vector<double>& sol_n);
 		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1);
 		void		 assemble_momentum_rhs(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void         solve_ForwardEuler();
@@ -535,6 +537,9 @@ namespace NonlinearElasticity
 		SparsityPattern unconstrained_sparsity_pattern_pressure;
 		SparseMatrix<double> constrained_mass_matrix_pressure;
 		SparseMatrix<double> unconstrained_mass_matrix_pressure;
+
+		SparseMatrix<double> constrained_Lap_matrix_pressure;
+		SparseMatrix<double> unconstrained_Lap_matrix_pressure;
 
 		SparsityPattern constrained_sparsity_pattern_def_grad;
 		SparsityPattern unconstrained_sparsity_pattern_def_grad;
@@ -1036,6 +1041,9 @@ namespace NonlinearElasticity
         unconstrained_sparsity_pattern_pressure.copy_from(dsp_pressure_unconstrained);
         unconstrained_mass_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
 
+		constrained_Lap_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
+		unconstrained_Lap_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
+
         
         DynamicSparsityPattern dsp_def_grad_constrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
         DoFTools::make_sparsity_pattern(dof_handler_def_grad,
@@ -1072,7 +1080,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_mass(Vector<double>& sol_n)
+	void Inelastic<dim>::assemble_momentum_mass()
 	{
 
 
@@ -1142,7 +1150,7 @@ namespace NonlinearElasticity
 	}
 
 template <int dim>
-void Inelastic<dim>::assemble_pressure_mass(Vector<double>& sol_n)
+void Inelastic<dim>::assemble_pressure_mass()
 {
 
 
@@ -1207,8 +1215,9 @@ void Inelastic<dim>::assemble_pressure_mass(Vector<double>& sol_n)
         }
     }
 }
+
 template <int dim>
-void Inelastic<dim>::assemble_def_grad_mass(Vector<double>& sol_n)
+void Inelastic<dim>::assemble_def_grad_mass()
 {
 
 
@@ -1282,26 +1291,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 {
 
 
-    constrained_mass_matrix.block(0, 0) = 0;
-    constrained_mass_matrix.block(0, 1) = 0;
-    constrained_mass_matrix.block(1, 0) = 0;
-    constrained_mass_matrix.block(1, 1) = 0;
-    constrained_mass_matrix.block(1, 2) = 0;
-    constrained_mass_matrix.block(2, 2) = 0;
-    constrained_mass_matrix.block(2, 1) = 0;
-    constrained_mass_matrix.block(2, 0) = 0;
-    constrained_mass_matrix.block(0, 2) = 0;
-
-
-    unconstrained_mass_matrix.block(0, 0) = 0;
-    unconstrained_mass_matrix.block(0, 1) = 0;
-    unconstrained_mass_matrix.block(1, 0) = 0;
-    unconstrained_mass_matrix.block(1, 1) = 0;
-    unconstrained_mass_matrix.block(1, 2) = 0;
-    unconstrained_mass_matrix.block(2, 2) = 0;
-    unconstrained_mass_matrix.block(2, 1) = 0;
-    unconstrained_mass_matrix.block(2, 0) = 0;
-    unconstrained_mass_matrix.block(0, 2) = 0;
+	constrained_Lap_matrix_pressure = 0;
+	unconstrained_Lap_matrix_pressure = 0;
 
     FEValues<dim> fe_values(mapping_simplex,
         fe,
@@ -1311,39 +1302,21 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
         update_quadrature_points |
         update_JxW_values);
 
-    FEFaceValues<dim> fe_face_values(fe,
-        face_quadrature_formula,
-        update_values |
-        update_normal_vectors |
-        update_quadrature_points |
-        update_JxW_values);
 
     const unsigned int dofs_per_cell = fe.dofs_per_cell;
     const unsigned int n_q_points = quadrature_formula.size();
-    const unsigned int n_face_q_points = face_quadrature_formula.size();
 
 
     std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
-    std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim + 1 + dim * dim));
 
 
-
-
-
-
-    FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
-    Vector<double>     cell_rhs(dofs_per_cell);
+    FullMatrix<double> cell_Lap_matrix(dofs_per_cell, dofs_per_cell);
 
 
 
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-    RightHandSide<dim> right_hand_side;
-    std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
-
-    TractionVector<dim> traction_vector;
-    std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
 
     Tensor<2, dim> real_FF;
     Tensor<2, dim> FF;
@@ -1359,17 +1332,12 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
     double real_Jf;
     double real_pressure;
 
-    const std::vector<types::global_dof_index> dofs_per_component =
-        DoFTools::count_dofs_per_fe_component(dof_handler);
-    /*const unsigned int n_u = dofs_per_component[0] * dim;*/
 
     std::vector<std::vector<Tensor<1, dim>>> displacement_grads(
-        quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim + 1 + dim * dim));
+        quadrature_formula_displacement.size(), std::vector<Tensor<1, dim>>(dim));
 
-    Tensor<1, dim> fe_val_Momentum_i;
     double fe_val_Pressure_i;
     Tensor<1, dim> fe_grad_Pressure_i;
-    Tensor<2, dim> fe_val_Def_Grad_i;
 
     //Stability parameters
     double alpha = parameters.alpha;
