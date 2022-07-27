@@ -1761,6 +1761,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	void Inelastic<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad)
 	{
 		pressure_rhs = 0;
+        
+        FEValuesExtractors::Scalar Pressure(0);
 
 		FEValues<dim> fe_values_momentum(mapping_simplex,
 			fe_momentum,
@@ -1831,13 +1833,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		Tensor<2, dim> HH;
 		double Jf;
 		Tensor<2, dim> face_HH;
-		double sol_counter;
+		int sol_counter;
 
 		double tau_pJ = parameters.tau_pJ * present_timestep;
 
 
 
-		for (const auto& cell : dof_handler.active_cell_iterators())
+		for (const auto& cell : dof_handler_pressure.active_cell_iterators())
 		{
 			FF = 0;
 			Jf = 0;
@@ -1845,23 +1847,22 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			//temp_momentum_residual = 0;
 			cell_rhs = 0;
 			fe_values_pressure.reinit(cell);
-
+            sol_counter= 0;
 			fe_values_pressure.get_function_values(sol_n_plus_1_momentum, sol_vec_momentum);
 			fe_values_def_grad.get_function_values(sol_n_plus_1_def_grad, sol_vec_def_grad);
 
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (const unsigned int q_point : fe_values_pressure.quadrature_point_indices())
 			{
 				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
-					temp_momentum[i] = sol_vec[q_point](dim);
+					temp_momentum[i] = sol_vec_momentum[q_point](dim);
 					//temp_momentum_residual[i] = residual_vec[q_point](sol_counter);
-					++sol_counter;
 				}
 				sol_counter = 0; //Skip one for pressure?
 				for (unsigned int i = 0; i < dim; i++) {
 					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
-						FF[i][j] = sol_vec[q_point](sol_counter);
+						FF[i][j] = sol_vec_def_grad[q_point](sol_counter);
 						++sol_counter;
 					}
 				}
@@ -1887,9 +1888,11 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				{
 
 					fe_face_values_pressure.reinit(cell, face);
-					fe_face_values_pressure.get_function_values(sol_n_plus_1, face_sol_vec);
+					fe_face_values_pressure.get_function_values(sol_n_plus_1_momentum, face_sol_vec_momentum);
+                    fe_face_values_pressure.get_function_values(sol_n_plus_1_def_grad, face_sol_vec_momentum);
+
 					if (face->boundary_id() == 5) {
-						for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
+						for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
 						{
 							face_temp_momentum = 0;
 							face_FF = 0;
@@ -1954,8 +1957,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			update_quadrature_points |
 			update_JxW_values);
 
-		const unsigned int dofs_per_cell = fe.dofs_per_cell;
-		const unsigned int n_q_points = quadrature_formula.size();
+		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
+		const unsigned int n_q_points = quadrature_formula_momentum.size();
 
 		std::vector<double> sol_vec_pressure(n_q_points);
 		std::vector<double> old_sol_vec_pressure(n_q_points);
@@ -1981,7 +1984,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		//double old_pressure;
 
 
-		for (const auto& cell : dof_handler.active_cell_iterators())
+		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
 
 
@@ -1993,8 +1996,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
-			fe_values_momentum.get_function_values(sol_n_plus_1, sol_vec_pressure);
-			fe_values_momentum.get_function_values(sol_n, old_sol_vec_pressure);
+			fe_values_momentum.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
+			fe_values_momentum.get_function_values(sol_n_pressure, old_sol_vec_pressure);
 
 			for (const unsigned int q_point : fe_values.quadrature_point_indices())
 			{
