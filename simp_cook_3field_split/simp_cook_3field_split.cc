@@ -304,7 +304,6 @@ namespace NonlinearElasticity
 	{
 		Tensor<2, dim> pk1_store;
 		Tensor<2, dim> HH_store;
-		Tensor<2, dim> face_HH_store;
 	};
 
 	//Class for defining Kappa
@@ -478,14 +477,14 @@ namespace NonlinearElasticity
 		void         assemble_momentum_mass();
 		void		 assemble_pressure_mass();
 		void		 assemble_def_grad_mass();
-        void         assemble_pressure_Lap(Vector<double>& sol_n);
+        void         assemble_pressure_Lap(Vector<double>& sol_n_def_grad);
 		void		 assemble_def_grad_rhs(Vector<double>& sol_n_momentum);
 		void		 assemble_momentum_int_rhs(Vector<double>& sol_n_def_grad, Vector<double>& sol_n_pressure);
 		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad);
 		void		 assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure);
 		void         solve_ForwardEuler();
-		void         solve_ssprk2();
-		void         solve_ssprk3();
+//		void         solve_ssprk2();
+//		void         solve_ssprk3();
 		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
@@ -540,6 +539,9 @@ namespace NonlinearElasticity
 
 		SparseMatrix<double> constrained_Lap_matrix_pressure;
 		SparseMatrix<double> unconstrained_Lap_matrix_pressure;
+        
+        SparseMatrix<double> constrained_it_matrix_pressure;
+        SparseMatrix<double> unconstrained_it_matrix_pressure;
 
 		SparsityPattern constrained_sparsity_pattern_def_grad;
 		SparsityPattern unconstrained_sparsity_pattern_def_grad;
@@ -832,7 +834,7 @@ namespace NonlinearElasticity
 		, quadrature_formula_def_grad(parameters.order + 1)
 		, face_quadrature_formula_momentum(parameters.order + 2)
 		, face_quadrature_formula_pressure(parameters.order + 2)
-		, def_gard_face_quadrature_formula(parameters.order + 2)
+		, face_quadrature_formula_def_grad(parameters.order + 2)
 		, timestep_no(0)
 	{}
 
@@ -841,7 +843,10 @@ namespace NonlinearElasticity
 	template <int dim>
 	Inelastic<dim>::~Inelastic()
 	{
-		dof_handler.clear();
+		dof_handler_momentum.clear();
+        dof_handler_pressure.clear();
+        dof_handler_def_grad.clear();
+
 	}
 
 	// Split up the run function from the grid_generator to replace refinement cycles with timesteps
@@ -858,11 +863,24 @@ namespace NonlinearElasticity
 		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		output_results(old_solution);
+		//output_results(old_solution);
 		cout << "Saving results at time : " << present_time << std::endl;
 		save_counter = 1;
-		while (present_time < end_time)
+        
+        assemble_momentum_mass();
+        assemble_def_grad_mass();
+        assemble_pressure_mass();
+        
+        while (present_time < end_time){
+            unconstrained_it_matrix_pressure = 0;
+            constrained_it_matrix_pressure = 0;
+
+            assemble_pressure_Lap(def_grad_old_solution);
+            
+            unconstrained_it_matrix_pressure = unconstrained_mass_matrix_pressure + unconstrained_Lap_matrix_pressure;
+            constrained_it_matrix_pressure = constrained_mass_matrix_pressure + constrained_Lap_matrix_pressure;
 			do_timestep();
+        }
 	}
 
 	template <int dim>
@@ -963,7 +981,7 @@ namespace NonlinearElasticity
 	void Inelastic<dim>::setup_system()
 	{
 
-		dof_handler_momentum.distribute_dofs(fe_velocity);
+		dof_handler_momentum.distribute_dofs(fe_momentum);
         dof_handler_def_grad.distribute_dofs(fe_def_grad);
         dof_handler_pressure.distribute_dofs(fe_pressure);
 
@@ -986,11 +1004,11 @@ namespace NonlinearElasticity
 // HOMOGENEOUS CONSTRAINTS
         homogeneous_constraints_momentum.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
-			dof_handler,
+			dof_handler_momentum,
 			4,
 			Functions::ZeroFunction<dim>(dim),
 			homogeneous_constraints_momentum,
-			fe.component_mask(Momentum));
+			fe_momentum.component_mask(Momentum));
         homogeneous_constraints_momentum.close();
 
         homogeneous_constraints_pressure.clear();
@@ -1004,11 +1022,11 @@ namespace NonlinearElasticity
 
         homogeneous_constraints_def_grad.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
-			dof_handler,
+			dof_handler_def_grad,
 			4,
 			Def_Grad_bound<dim>(),
             homogeneous_constraints_def_grad,
-			fe.component_mask(Def_Grad));
+			fe_def_grad.component_mask(Def_Grad));
         homogeneous_constraints_def_grad.close();
 
 
@@ -1044,6 +1062,8 @@ namespace NonlinearElasticity
 		constrained_Lap_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
 		unconstrained_Lap_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
 
+        constrained_it_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
+        unconstrained_it_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
         
         DynamicSparsityPattern dsp_def_grad_constrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
         DoFTools::make_sparsity_pattern(dof_handler_def_grad,
@@ -1083,6 +1103,7 @@ namespace NonlinearElasticity
 	void Inelastic<dim>::assemble_momentum_mass()
 	{
 
+        FEValuesExtractors::Vector Momentum(0);
 
         constrained_mass_matrix_momentum = 0;
 
@@ -1109,7 +1130,7 @@ namespace NonlinearElasticity
 		Tensor<1, dim> fe_val_Momentum_i;
 
 
-		for (const auto& cell : dof_handler.active_cell_iterators())
+		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
 			
 
@@ -1152,6 +1173,7 @@ namespace NonlinearElasticity
 template <int dim>
 void Inelastic<dim>::assemble_pressure_mass()
 {
+    FEValuesExtractors::Vector Pressure(0);
 
 
     constrained_mass_matrix_pressure = 0;
@@ -1179,7 +1201,7 @@ void Inelastic<dim>::assemble_pressure_mass()
     Tensor<1, dim> fe_val_Pressure_i;
 
 
-    for (const auto& cell : dof_handler.active_cell_iterators())
+    for (const auto& cell : dof_handler_pressure.active_cell_iterators())
     {
         
 
@@ -1220,7 +1242,11 @@ template <int dim>
 void Inelastic<dim>::assemble_def_grad_mass()
 {
 
-
+    std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
+    for (unsigned int i = 0; i < dim * dim; ++i) {
+        Def_Grad[i] = true;
+    }
+    
     constrained_mass_matrix_def_grad = 0;
 
     unconstrained_mass_matrix_def_grad = 0;
@@ -1287,9 +1313,10 @@ void Inelastic<dim>::assemble_def_grad_mass()
 }
 
 template <int dim>
-void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
+void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 {
 
+    FEValuesExtractors::Vector Pressure(0);
 
 	constrained_Lap_matrix_pressure = 0;
 	unconstrained_Lap_matrix_pressure = 0;
@@ -1348,7 +1375,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
     //Tensor<2, dim> II = unit_symmetric_tensor<dim>();
 
 
-    for (const auto& cell : dof_handler.active_cell_iterators())
+    for (const auto& cell : dof_handler_pressure.active_cell_iterators())
     {
         PointHistory<dim>* local_quadrature_points_history =
             reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
@@ -1365,10 +1392,10 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
         fe_values_pressure.reinit(cell);
         fe_values_def_grad.reinit(cell);
 
-        fe_values_def_grad.get_function_values(sol_n, sol_vec);
+        fe_values_def_grad.get_function_values(sol_n_def_grad, sol_vec_def_grad);
 
 
-        for (const unsigned int q_point : fe_values.quadrature_point_indices())
+        for (const unsigned int q_point : fe_values_pressure.quadrature_point_indices())
         {
 
 
@@ -1400,15 +1427,15 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
                     //cout << "displacement grads : " << displacement_grads[q_point] << std::endl;
 
 
-            for (const unsigned int i : fe_values.dof_indices())
+            for (const unsigned int i : fe_values_pressure.dof_indices())
             {
-                fe_grad_Pressure_i = fe_values[Pressure].gradient(i, q_point);
-                for (const unsigned int j : fe_values.dof_indices())
+                fe_grad_Pressure_i = fe_values_pressure[Pressure].gradient(i, q_point);
+                for (const unsigned int j : fe_values_pressure.dof_indices())
                 {
                     cell_Lap_matrix(i, j) += present_timestep * present_timestep *
                         scalar_product(HH * fe_grad_Pressure_i,
                             HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
-                        fe_values.JxW(q_point);
+                        fe_values_pressure.JxW(q_point);
                 }
 
             }
@@ -1432,10 +1459,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
 	template <int dim>
-	void Inelastic<dim>::assemble_FF_rhs(Vector<double>& sol_n)
+	void Inelastic<dim>::assemble_def_grad_rhs(Vector<double>& sol_n_momentum)
 	{
 		def_grad_rhs = 0;
-
+        std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
+        for (unsigned int i = 0; i < dim * dim; ++i) {
+            Def_Grad[i] = true;
+        }
 		FEValues<dim> fe_values_def_grad(mapping_simplex,
 			fe_def_grad,
 			quadrature_formula_def_grad,
@@ -1497,7 +1527,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
 
-		for (const auto& cell : dof_handler.active_cell_iterators())
+		for (const auto& cell : dof_handler_def_grad.active_cell_iterators())
 		{
 			
 			temp_momentum = 0;
@@ -1505,13 +1535,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 			fe_values_def_grad.reinit(cell);
 			fe_values_momentum.reinit(cell);
 
-			fe_values_def_grad.get_function_values(sol_n, sol_vec);
+			fe_values_def_grad.get_function_values(sol_n_momentum, sol_vec);
 
 
 
 
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (const unsigned int q_point : fe_values_def_grad.quadrature_point_indices())
 			{
 				for (unsigned int i = 0; i < dim; i++) { //Extracts momentum values, puts them in vector form
 
@@ -1534,15 +1564,15 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 				if (face->at_boundary())
 				{
 					fe_face_values_def_grad.reinit(cell, face);
-					fe_face_values_def_grad.get_function_values(sol_n, face_sol_vec);
+					fe_face_values_def_grad.get_function_values(sol_n_momentum, face_sol_vec);
 
-					for (const unsigned int q_point : fe_face_values.quadrature_point_indices())
+					for (const unsigned int q_point : fe_face_values_def_grad.quadrature_point_indices())
 					{
 						for (int i = 0; i < dim; i++) {
 							face_temp_momentum[i] = face_sol_vec[q_point](i);
 						}
 
-						for (const unsigned int i : fe_values.dof_indices())
+						for (const unsigned int i : fe_values_def_grad.dof_indices())
 						{
 							//if (face->boundary_id() == 5) {
 							cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
@@ -1567,10 +1597,11 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_int_rhs(Vector<double>& sol_n)
+	void Inelastic<dim>::assemble_momentum_int_rhs(Vector<double>& sol_n_def_grad, Vector<double>& sol_n_pressure)
 	{
 		momentum_rhs = 0;
 
+        FEValuesExtractors::Vector Momentum(0);
 
 		FEValues<dim> fe_values_momentum(mapping_simplex,
 			fe_momentum,
@@ -1631,6 +1662,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		Tensor<2, dim> FF;
 		//Tensor<2, dim> FF_residual;
 		Tensor<2, dim> pk1;
+        double temp_pressure;
 
 		//double temp_pressure_residual;
 		Tensor<2, dim> HH;
@@ -1642,7 +1674,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		double tau_FFp = parameters.tau_FFp * present_timestep;
 		double tau_pJ = parameters.tau_pJ * present_timestep;
 
-		for (const auto& cell : dof_handler.active_cell_iterators())
+		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
 			FF = 0;
 			Jf = 0;
@@ -1661,9 +1693,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 			fe_values_momentum.get_function_values(sol_n_def_grad, sol_vec_def_grad);
 			fe_values_momentum.get_function_values(sol_n_pressure, sol_vec_pressure);
 			//fe_values.get_function_values(residual, residual_vec);
+            
+            PointHistory<dim>* local_quadrature_points_history =
+                reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
+                
 				
 				temp_pressure = sol_vec_pressure[q_point];
 				//temp_pressure_residual = residual_vec[q_point](sol_counter);
@@ -1678,14 +1714,15 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 				}
 
 				//Stabilization terms
-				FF += alpha * (real_FF - FF) /*+ tau_FFp * FF_residual*/;
-				temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
+				//FF += alpha * (real_FF - FF) /*+ tau_FFp * FF_residual*/;
+				//temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
 
-				Jf = get_Jf(real_FF);
+				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
 				local_quadrature_points_history[q_point].HH_store = HH;
 
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
+                local_quadrature_points_history[q_point].pk1_store = pk1;
 
 				for (unsigned int i; i < dofs_per_cell; ++i)
 				{
@@ -1721,7 +1758,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		}
 	}
 	template <int dim>
-	void Inelastic<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1)
+	void Inelastic<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad)
 	{
 		pressure_rhs = 0;
 
@@ -1897,7 +1934,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_rhs(Vector<double>& sol_n, Vector<double>& sol_n_plus_1)
+	void Inelastic<dim>::assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure)
 	{
 		momentum_rhs = 0;
 
@@ -1983,132 +2020,128 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	template<int dim>
 	void Inelastic<dim>::solve_ForwardEuler()
 	{
-		assemble_system(old_solution);
 
-
-
-		assemble_FF_rhs(old_solution);
-		solve_F(old_solution, solution);
-		assemble_momentum_int_rhs(old_solution);
-		solve_momentum_int(old_solution, solution);
-		assemble_pressure_rhs(solution);
-		solve_p(old_solution, solution);
-		//assemble_momentum_rhs(old_solution, solution);
-		//const unsigned int n_iterations3 = solve_momentum(old_solution, solution);
-		update_displacement(old_solution, 0.0, solution, 1.0);
+		assemble_def_grad_rhs(momentum_old_solution);
+		solve_F(def_grad_old_solution, def_grad_solution);
+		assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
+		solve_momentum_int(momentum_old_solution, momentum_solution);
+		assemble_pressure_rhs(momentum_solution, def_grad_solution);
+		solve_p(pressure_old_solution, pressure_solution);
+		assemble_momentum_rhs(pressure_old_solution, pressure_solution);
+		solve_momentum(momentum_old_solution, momentum_solution);
+		update_displacement(momentum_old_solution, 0.0, momentum_solution, 1.0);
 		cout << std::endl;
 
 	}
 
 
-	template<int dim>
-	void Inelastic<dim>::solve_ssprk2()
-	{
-		assemble_system(old_solution);
-		assemble_FF_rhs(old_solution);
-		solve_F(old_solution, int_solution);
-		cout << "Successfully solved for FF" << std::endl;
-		assemble_momentum_int_rhs(old_solution);
-		solve_momentum_int(old_solution, int_solution);
-		cout << "Successfully solved for momentum int" << std::endl;
-		assemble_pressure_rhs(int_solution);
-		solve_p(old_solution, int_solution);
-		cout << "Successfully solved for pressure" << std::endl;
-
-		assemble_momentum_rhs(old_solution, int_solution);
-		solve_momentum(old_solution, int_solution);
-		cout << "Successfully solved for momentum" << std::endl;
-
-		update_displacement(old_solution, 0.0, solution, 1.0);
-		cout << std::endl;
-
-
-		assemble_system(int_solution);
-		assemble_FF_rhs(int_solution);
-		solve_F(int_solution, solution);
-		cout << "Successfully solved for FF" << std::endl;
-
-		assemble_momentum_int_rhs(int_solution);
-		solve_momentum_int(int_solution, solution);
-		cout << "Successfully solved for momentum int" << std::endl;
-
-		assemble_pressure_rhs(solution);
-		solve_p(int_solution, solution);
-		cout << "Successfully solved for pressure" << std::endl;
-
-		assemble_momentum_rhs(int_solution, solution);
-		solve_momentum(int_solution, solution);
-		cout << "Successfully solved for momentum" << std::endl;
-
-		solution = 0.5 * old_solution + 0.5 * solution;
-		update_displacement(old_solution, 0.5, solution, 0.5);
-		cout << std::endl;
-
-	}
-
-	//Assembles system, solves system, updates quad data.
-	template<int dim>
-	void Inelastic<dim>::solve_ssprk3()
-	{
-		cout << " Assembling system..." << std::flush;
-		assemble_system(old_solution);
-		assemble_FF_rhs(old_solution);
-		solve_F(old_solution, int_solution);
-		assemble_momentum_int_rhs(old_solution);
-		solve_momentum_int(old_solution, int_solution);
-		assemble_pressure_rhs(int_solution);
-		solve_p(old_solution, int_solution);
-		assemble_momentum_rhs(old_solution, int_solution);
-		solve_momentum(old_solution, int_solution);
-		update_displacement(old_solution, 0.0, solution, 1.0);
-		cout << std::endl;
-
-
-		assemble_system(int_solution);
-		assemble_FF_rhs(int_solution);
-		solve_F(int_solution, int_solution_2);
-		assemble_momentum_int_rhs(int_solution);
-		solve_momentum_int(int_solution, int_solution_2);
-		assemble_pressure_rhs(int_solution_2);
-		solve_p(int_solution, int_solution_2);
-		assemble_momentum_rhs(int_solution, int_solution_2);
-		solve_momentum(int_solution, int_solution_2);
-		int_solution_2 = 0.75 * old_solution + 0.25 * int_solution_2;
-		update_displacement(old_solution, 0.75, solution, 0.25);
-		cout << std::endl;
-
-
-		cout << std::endl;
-		assemble_system(int_solution_2);
-		assemble_FF_rhs(int_solution_2);
-		solve_F(int_solution_2, solution);
-		assemble_momentum_int_rhs(int_solution_2);
-		 solve_momentum_int(int_solution_2, solution);
-		assemble_pressure_rhs(solution);
-		solve_p(int_solution_2, solution);
-		assemble_momentum_rhs(int_solution_2, solution);
-		solve_momentum(int_solution_2, solution);
-		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
-		update_displacement(old_solution, 1.0 / 3.0, solution, 2.0 / 3.0);
-		cout << std::endl;
-
-
-	}
+//	template<int dim>
+//	void Inelastic<dim>::solve_ssprk2()
+//	{
+//		assemble_system(old_solution);
+//		assemble_def_grad_rhs(old_solution);
+//		solve_F(old_solution, int_solution);
+//		cout << "Successfully solved for FF" << std::endl;
+//		assemble_momentum_int_rhs(old_solution);
+//		solve_momentum_int(old_solution, int_solution);
+//		cout << "Successfully solved for momentum int" << std::endl;
+//		assemble_pressure_rhs(int_solution);
+//		solve_p(old_solution, int_solution);
+//		cout << "Successfully solved for pressure" << std::endl;
+//
+//		assemble_momentum_rhs(old_solution, int_solution);
+//		solve_momentum(old_solution, int_solution);
+//		cout << "Successfully solved for momentum" << std::endl;
+//
+//		update_displacement(old_solution, 0.0, solution, 1.0);
+//		cout << std::endl;
+//
+//
+//		assemble_system(int_solution);
+//		assemble_def_grad_rhs(int_solution);
+//		solve_F(int_solution, solution);
+//		cout << "Successfully solved for FF" << std::endl;
+//
+//		assemble_momentum_int_rhs(int_solution);
+//		solve_momentum_int(int_solution, solution);
+//		cout << "Successfully solved for momentum int" << std::endl;
+//
+//		assemble_pressure_rhs(solution);
+//		solve_p(int_solution, solution);
+//		cout << "Successfully solved for pressure" << std::endl;
+//
+//		assemble_momentum_rhs(int_solution, solution);
+//		solve_momentum(int_solution, solution);
+//		cout << "Successfully solved for momentum" << std::endl;
+//
+//		solution = 0.5 * old_solution + 0.5 * solution;
+//		update_displacement(old_solution, 0.5, solution, 0.5);
+//		cout << std::endl;
+//
+//	}
+//
+//	//Assembles system, solves system, updates quad data.
+//	template<int dim>
+//	void Inelastic<dim>::solve_ssprk3()
+//	{
+//		cout << " Assembling system..." << std::flush;
+//		assemble_system(old_solution);
+//		assemble_def_grad_rhs(old_solution);
+//		solve_F(old_solution, int_solution);
+//		assemble_momentum_int_rhs(old_solution);
+//		solve_momentum_int(old_solution, int_solution);
+//		assemble_pressure_rhs(int_solution);
+//		solve_p(old_solution, int_solution);
+//		assemble_momentum_rhs(old_solution, int_solution);
+//		solve_momentum(old_solution, int_solution);
+//		update_displacement(old_solution, 0.0, solution, 1.0);
+//		cout << std::endl;
+//
+//
+//		assemble_system(int_solution);
+//		assemble_def_grad_rhs(int_solution);
+//		solve_F(int_solution, int_solution_2);
+//		assemble_momentum_int_rhs(int_solution);
+//		solve_momentum_int(int_solution, int_solution_2);
+//		assemble_pressure_rhs(int_solution_2);
+//		solve_p(int_solution, int_solution_2);
+//		assemble_momentum_rhs(int_solution, int_solution_2);
+//		solve_momentum(int_solution, int_solution_2);
+//		int_solution_2 = 0.75 * old_solution + 0.25 * int_solution_2;
+//		update_displacement(old_solution, 0.75, solution, 0.25);
+//		cout << std::endl;
+//
+//
+//		cout << std::endl;
+//		assemble_system(int_solution_2);
+//		assemble_def_grad_rhs(int_solution_2);
+//		solve_F(int_solution_2, solution);
+//		assemble_momentum_int_rhs(int_solution_2);
+//		 solve_momentum_int(int_solution_2, solution);
+//		assemble_pressure_rhs(solution);
+//		solve_p(int_solution_2, solution);
+//		assemble_momentum_rhs(int_solution_2, solution);
+//		solve_momentum(int_solution_2, solution);
+//		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
+//		update_displacement(old_solution, 1.0 / 3.0, solution, 2.0 / 3.0);
+//		cout << std::endl;
+//
+//
+//	}
 
 
 	//solves system using direct solver
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1)
+    void Inelastic<dim>::solve_F(Vector<double>& def_grad_sol_n, Vector<double>& def_grad_sol_n_plus_1)
 	{
 
 
 		//residual.block(2) = 0;
 
-		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
-		const auto op_un_M = block_operator(un_M);
-		Vector<double> un_rhs = system_rhs;
-		un_rhs.block(0) = 0;
-		un_rhs.block(1) = 0;
+		SparseMatrix<double>& un_M = unconstrained_mass_matrix_def_grad;
+		const auto op_un_M = linear_operator(un_M);
+		Vector<double> un_rhs = def_grad_rhs;
+
 		Vector<double> old_sol = sol_n;
 
 		un_rhs *= present_timestep;
@@ -2123,11 +2156,11 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 		AffineConstraints<double> F_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
-			dof_handler,
+			dof_handler_def_grad,
 			4,
 			Def_Grad_bound<dim>(),
 			F_constraints,
-			fe.component_mask(Def_Grad));
+			fe_def_grad.component_mask(Def_Grad));
 		F_constraints.close();
 		all_constraints.merge(F_constraints);
 		all_constraints.close();
@@ -2139,14 +2172,14 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		setup_constrained_rhs.apply(rhs);
 
 
-		const auto& M2 = constrained_mass_matrix.block(2, 2);
+		const auto& M2 = constrained_mass_matrix_def_grad;
 
 
-		auto& def_grad = sol_n_plus_1.block(2);
+		auto& def_grad = sol_n_plus_1;
 
 
 
-		Vector<double> F_rhs = rhs.block(2);
+		Vector<double> F_rhs = def_grad_rhs;
 
 
 		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
@@ -2162,40 +2195,39 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 		// For updating the residual
 
-		Vector<double> F_DQ = (sol_n_plus_1.block(2) - sol_n.block(2));
-		F_DQ /= present_timestep;
+//		Vector<double> F_DQ = (sol_n_plus_1.block(2) - sol_n.block(2));
+//		F_DQ /= present_timestep;
 		//residual.block(2) = F_rhs - F_DQ;
 
-		return solver_control.last_step();
+		//return solver_control.last_step();
 	}
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1)
+	void Inelastic<dim>::solve_momentum_int(Vector<double>& momentum_sol_n, Vector<double>& momentum_sol_n_plus_1)
 	{
 
 
-		residual.block(0) = 0;
+		//residual.block(0) = 0;
 
 
-		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
-		const auto op_un_M = block_operator(un_M);
-		Vector<double> un_rhs = system_rhs;
-		un_rhs.block(1) = 0;
-		un_rhs.block(2) = 0;
-		Vector<double> old_sol = sol_n;
+        SparseMatrix<double>& un_M = unconstrained_mass_matrix_momentum;
+		const auto op_un_M = linear_operator(un_M);
+		Vector<double> un_rhs = momentum_rhs;
+
+		Vector<double> old_sol = momentum_sol_n;
 
 		un_rhs *= present_timestep;
-		un_M.block(0, 0).vmult_add(un_rhs.block(0), old_sol.block(0));
+		un_M.vmult_add(un_rhs, old_sol);
 
 		AffineConstraints<double> all_constraints;
 
 
 
 		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
+		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler_momentum,
 			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
-			fe.component_mask(Momentum));
+			fe_momentum.component_mask(Momentum));
 		u_constraints.close();
 
 		all_constraints.merge(u_constraints);
@@ -2208,14 +2240,14 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		setup_constrained_rhs.apply(rhs);
 
 
-		const auto& M0 = constrained_mass_matrix.block(0, 0);
+		const auto& M0 = constrained_mass_matrix_momentum;
 
 
-		auto& momentum = sol_n_plus_1.block(0);
+		auto& momentum = momentum_sol_n_plus_1;
 
 
 
-		Vector<double> u_rhs = rhs.block(0);
+		Vector<double> u_rhs = rhs;
 
 		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
@@ -2232,30 +2264,28 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		u_constraints.distribute(sol_n_plus_1);
 
 		// For updating the residual
-		Vector<double> u_DQ = (sol_n_plus_1.block(0) - sol_n.block(0));
-		u_DQ /= present_timestep;
+//		Vector<double> u_DQ = (sol_n_plus_1.block(0) - sol_n.block(0));
+//		u_DQ /= present_timestep;
 		//residual.block(0) = u_rhs - u_DQ;
 
 
-		return solver_control.last_step();
 	}
 
 	//solves system using direct solver
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1)
+	void Inelastic<dim>::solve_p(Vector<double>& pressure_sol_n, Vector<double>& pressure_sol_n_plus_1)
 	{
 
 		//residual.block(1) = 0;
 
-		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
-		const auto op_un_M = block_operator(un_M);
-		Vector<double> un_rhs = system_rhs;
-		un_rhs.block(0) = 0;
-		un_rhs.block(2) = 0;
-		Vector<double> old_sol = sol_n;
+		SparseMatrix<double>& un_M = unconstrained_it_matrix_pressure;
+		const auto op_un_M = linear_operator(un_M);
+		Vector<double> un_rhs = pressure_rhs;
+
+		Vector<double> old_sol = pressure_sol_n;
 
 		un_rhs *= present_timestep;
-		un_M.block(1, 1).vmult_add(un_rhs.block(1), old_sol.block(1));
+		un_M.vmult_add(un_rhs, old_sol);
 
 
 
@@ -2275,14 +2305,14 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		setup_constrained_rhs.apply(rhs);
 
 
-		const auto& M1 = constrained_mass_matrix.block(1, 1);
+		const auto& M1 = constrained_it_matrix_momentum;
 
 
-		auto& pressure = sol_n_plus_1.block(1);
+		auto& pressure = sol_n_plus_1_pressure;
 
 
 
-		Vector<double> p_rhs = rhs.block(1);
+		Vector<double> p_rhs = pressure_rhs;
 
 		/*SparseDirectUMFPACK M1_direct;
 		M1_direct.initialize(M1);
@@ -2297,26 +2327,26 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 		solver.solve(M1, pressure, p_rhs, p_preconditioner);
 
-		p_constraints.distribute(sol_n_plus_1);
+		p_constraints.distribute(sol_n_plus_1_pressure);
 
 		//For the residuals
-		Vector<double> p_DQ = (sol_n_plus_1.block(1) - sol_n.block(1));
-		p_DQ /= present_timestep;
+//		Vector<double> p_DQ = (sol_n_plus_1.block(1) - sol_n.block(1));
+//		p_DQ /= present_timestep;
 		//residual.block(1) = p_rhs - p_DQ;
 
-		return solver_control.last_step();
+//		return solver_control.last_step();
 
 	}
 
 
 	//solves system using direct solver
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_momentum(Vector<double>& sol_n, Vector<double>& sol_n_plus_1)
+	unsigned int Inelastic<dim>::solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum)
 	{
 		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
-		const auto op_un_M = block_operator(un_M);
-		Vector<double> un_rhs = system_rhs;
-		auto& sol = sol_n_plus_1;
+		const auto op_un_M = linear_operator(un_M);
+		Vector<double> un_rhs = momentum_rhs;
+		auto& sol = sol_n_plus_1_momentum;
 
 		un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, sol);
@@ -2325,19 +2355,19 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
 
-		const auto& M0 = constrained_mass_matrix.block(0, 0);
+		const auto& M0 = constrained_mass_matrix_momentum;
 
 
-		auto& momentum = sol_n_plus_1.block(0);
+		auto& momentum = sol_n_plus_1_momentum;
 
     
 
 		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
+		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler_momentum,
 			4,
-			Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
-			fe.component_mask(Momentum));
+			fe_momentum.component_mask(Momentum));
 		u_constraints.close();
 
 		auto setup_constrained_rhs = constrained_right_hand_side(
@@ -2346,7 +2376,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		rhs.reinit(sol);
 		setup_constrained_rhs.apply(rhs);
 
-		Vector<double> u_rhs = rhs.block(0);
+		Vector<double> u_rhs = momentum_rhs;
 
 		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
@@ -2361,9 +2391,9 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		u_preconditioner.initialize(M0, 1.2);
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
-		u_constraints.distribute(sol_n_plus_1);
+		u_constraints.distribute(sol_n_plus_1_momentum);
 
-		return solver_control.last_step();
+//		return solver_control.last_step();
 	}
 
 
@@ -2502,14 +2532,14 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		{
 			solve_ForwardEuler();
 		}
-		else if (parameters.rk_order == 2)
-		{
-			solve_ssprk2();
-		}
-		else if (parameters.rk_order == 3)
-		{
-			solve_ssprk3();
-		}
+//		else if (parameters.rk_order == 2)
+//		{
+//			solve_ssprk2();
+//		}
+//		else if (parameters.rk_order == 3)
+//		{
+//			solve_ssprk3();
+//		}
 		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
@@ -2524,16 +2554,14 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
 	template<int dim>
-	void Inelastic<dim>::update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus)
+	void Inelastic<dim>::update_displacement(const Vector<double>& sol_n_momentum, const double& coeff_n, const Vector<double>& sol_n_plus_1_momentum, const double& coeff_n_plus)
 	{
-		auto old_momentum = sol_n;
-		old_momentum.block(1) = 0;
-		old_momentum.block(2) = 0;
+		auto old_momentum = sol_n_momentum;
 
 
-		auto momentum = sol_n_plus;
-		momentum.block(1) = 0;
-		momentum.block(2) = 0;
+
+		auto momentum = sol_n_plus_1_momentum;
+
 		//Vector<double> momentum_vector = momentum;
 
 		cout << "Number of dofs : " << dof_handler.n_dofs() << std::endl;
@@ -2550,53 +2578,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 
 
-	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
-	/*template< int dim>
-	void Inelastic<dim>::move_mesh()
-	{
-		cout << "    Moving mesh..." << std::endl;
-		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-		for (auto& cell : dof_handler.active_cell_iterators())
-			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-				if (vertex_touched[cell->vertex_index(v)] == false)
-				{
-					vertex_touched[cell->vertex_index(v)] = true;
-					Point<dim> tmp_momentum;
-					Point<dim> tmp_loc = cell->vertex(v);
-					Point<dim> tmp;
-
-					for (unsigned int d = 0; d < dim; ++d) {
-						tmp[d] = tmp_loc[d] + total_displacement(cell->vertex_dof_index(v, d));
-					}
-					cell->vertex(v) = tmp;
-
-				}
-		cout << "Mesh was successfully moved " << std::endl;
-	}
-
-	template<int dim>
-	void Inelastic<dim>::move_mesh_back()
-	{
-		cout << "    Moving mesh back to reference coordinates" << std::endl;
-
-		std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-		for (auto& cell : dof_handler.active_cell_iterators())
-			for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-				if (vertex_touched[cell->vertex_index(v)] == false)
-				{
-					vertex_touched[cell->vertex_index(v)] = true;
-					Point<dim> tmp_loc = cell->vertex(v);
-					Point<dim> tmp;
-
-					for (unsigned int d = 0; d < dim; ++d) {
-
-						tmp[d] = tmp_loc[d] - total_displacement(cell->vertex_dof_index(v, d));
-					}
-					cell->vertex(v) = tmp;
-
-				}
-		cout << "Mesh was moved back" << std::endl;
-	}*/
+	
 
 	// This chunk of code allows for communication between current code state and quad point history
 	template<int dim>
