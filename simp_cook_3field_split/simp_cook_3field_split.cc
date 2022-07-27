@@ -479,17 +479,17 @@ namespace NonlinearElasticity
 		void		 assemble_pressure_mass();
 		void		 assemble_def_grad_mass();
         void         assemble_pressure_Lap(Vector<double>& sol_n);
-		void		 assemble_def_grad_rhs(Vector<double>& sol_n);
-		void		 assemble_momentum_int_rhs(Vector<double>& sol_n);
-		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1);
-		void		 assemble_momentum_rhs(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		 assemble_def_grad_rhs(Vector<double>& sol_n_momentum);
+		void		 assemble_momentum_int_rhs(Vector<double>& sol_n_def_grad, Vector<double>& sol_n_pressure);
+		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad);
+		void		 assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure);
 		void         solve_ForwardEuler();
 		void         solve_ssprk2();
 		void         solve_ssprk3();
-		unsigned int solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		unsigned int solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		unsigned int solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		unsigned int solve_momentum(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		solve_momentum(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void         output_results(Vector<double>& sol_n) const;
 
 		void do_timestep();
@@ -1984,23 +1984,15 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	void Inelastic<dim>::solve_ForwardEuler()
 	{
 		assemble_system(old_solution);
-		cout << "block(0,0) nonzero elements : " << unconstrained_mass_matrix.block(0, 0).n_nonzero_elements() << std::endl;
-		cout << "block(0,1) nonzero elements : " << unconstrained_mass_matrix.block(0, 1).n_nonzero_elements() << std::endl;
-		cout << "block(1,0) nonzero elements : " << unconstrained_mass_matrix.block(1, 0).n_nonzero_elements() << std::endl;
-		cout << "block(1,1) nonzero elements : " << unconstrained_mass_matrix.block(1, 1).n_nonzero_elements() << std::endl;
-		cout << "block(0,2) nonzero elements : " << unconstrained_mass_matrix.block(0, 2).n_nonzero_elements() << std::endl;
-		cout << "block(2,0) nonzero elements : " << unconstrained_mass_matrix.block(2, 0).n_nonzero_elements() << std::endl;
-		cout << "block(1,2) nonzero elements : " << unconstrained_mass_matrix.block(1, 2).n_nonzero_elements() << std::endl;
-		cout << "block(2,1) nonzero elements : " << unconstrained_mass_matrix.block(2, 1).n_nonzero_elements() << std::endl;
-		cout << "block(2,2) nonzero elements : " << unconstrained_mass_matrix.block(2, 2).n_nonzero_elements() << std::endl;
+
 
 
 		assemble_FF_rhs(old_solution);
-		const unsigned int n_iterations = solve_F(old_solution, solution);
+		solve_F(old_solution, solution);
 		assemble_momentum_int_rhs(old_solution);
-		const unsigned int n_iterations1 = solve_momentum_int(old_solution, solution);
+		solve_momentum_int(old_solution, solution);
 		assemble_pressure_rhs(solution);
-		const unsigned int n_iterations2 = solve_p(old_solution, solution);
+		solve_p(old_solution, solution);
 		//assemble_momentum_rhs(old_solution, solution);
 		//const unsigned int n_iterations3 = solve_momentum(old_solution, solution);
 		update_displacement(old_solution, 0.0, solution, 1.0);
@@ -2014,17 +2006,17 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 	{
 		assemble_system(old_solution);
 		assemble_FF_rhs(old_solution);
-		const unsigned int n_iterations = solve_F(old_solution, int_solution);
+		solve_F(old_solution, int_solution);
 		cout << "Successfully solved for FF" << std::endl;
 		assemble_momentum_int_rhs(old_solution);
-		const unsigned int n_iterations1 = solve_momentum_int(old_solution, int_solution);
+		solve_momentum_int(old_solution, int_solution);
 		cout << "Successfully solved for momentum int" << std::endl;
 		assemble_pressure_rhs(int_solution);
-		const unsigned int n_iterations2 = solve_p(old_solution, int_solution);
+		solve_p(old_solution, int_solution);
 		cout << "Successfully solved for pressure" << std::endl;
 
 		assemble_momentum_rhs(old_solution, int_solution);
-		const unsigned int n_iterations3 = solve_momentum(old_solution, int_solution);
+		solve_momentum(old_solution, int_solution);
 		cout << "Successfully solved for momentum" << std::endl;
 
 		update_displacement(old_solution, 0.0, solution, 1.0);
@@ -2033,19 +2025,19 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 
 		assemble_system(int_solution);
 		assemble_FF_rhs(int_solution);
-		const unsigned int n_iterations4 = solve_F(int_solution, solution);
+		solve_F(int_solution, solution);
 		cout << "Successfully solved for FF" << std::endl;
 
 		assemble_momentum_int_rhs(int_solution);
-		const unsigned int n_iterations5 = solve_momentum_int(int_solution, solution);
+		solve_momentum_int(int_solution, solution);
 		cout << "Successfully solved for momentum int" << std::endl;
 
 		assemble_pressure_rhs(solution);
-		const unsigned int n_iterations6 = solve_p(int_solution, solution);
+		solve_p(int_solution, solution);
 		cout << "Successfully solved for pressure" << std::endl;
 
 		assemble_momentum_rhs(int_solution, solution);
-		const unsigned int n_iterations7 = solve_momentum(int_solution, solution);
+		solve_momentum(int_solution, solution);
 		cout << "Successfully solved for momentum" << std::endl;
 
 		solution = 0.5 * old_solution + 0.5 * solution;
@@ -2061,26 +2053,26 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		cout << " Assembling system..." << std::flush;
 		assemble_system(old_solution);
 		assemble_FF_rhs(old_solution);
-		const unsigned int n_iterations = solve_F(old_solution, int_solution);
+		solve_F(old_solution, int_solution);
 		assemble_momentum_int_rhs(old_solution);
-		const unsigned int n_iterations1 = solve_momentum_int(old_solution, int_solution);
+		solve_momentum_int(old_solution, int_solution);
 		assemble_pressure_rhs(int_solution);
-		const unsigned int n_iterations2 = solve_p(old_solution, int_solution);
+		solve_p(old_solution, int_solution);
 		assemble_momentum_rhs(old_solution, int_solution);
-		const unsigned int n_iterations3 = solve_momentum(old_solution, int_solution);
+		solve_momentum(old_solution, int_solution);
 		update_displacement(old_solution, 0.0, solution, 1.0);
 		cout << std::endl;
 
 
 		assemble_system(int_solution);
 		assemble_FF_rhs(int_solution);
-		const unsigned int n_iterations4 = solve_F(int_solution, int_solution_2);
+		solve_F(int_solution, int_solution_2);
 		assemble_momentum_int_rhs(int_solution);
-		const unsigned int n_iterations5 = solve_momentum_int(int_solution, int_solution_2);
+		solve_momentum_int(int_solution, int_solution_2);
 		assemble_pressure_rhs(int_solution_2);
-		const unsigned int n_iterations6 = solve_p(int_solution, int_solution_2);
+		solve_p(int_solution, int_solution_2);
 		assemble_momentum_rhs(int_solution, int_solution_2);
-		const unsigned int n_iterations7 = solve_momentum(int_solution, int_solution_2);
+		solve_momentum(int_solution, int_solution_2);
 		int_solution_2 = 0.75 * old_solution + 0.25 * int_solution_2;
 		update_displacement(old_solution, 0.75, solution, 0.25);
 		cout << std::endl;
@@ -2089,13 +2081,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n)
 		cout << std::endl;
 		assemble_system(int_solution_2);
 		assemble_FF_rhs(int_solution_2);
-		const unsigned int n_iterations8 = solve_F(int_solution_2, solution);
+		solve_F(int_solution_2, solution);
 		assemble_momentum_int_rhs(int_solution_2);
-		const unsigned int n_iterations9 = solve_momentum_int(int_solution_2, solution);
+		 solve_momentum_int(int_solution_2, solution);
 		assemble_pressure_rhs(solution);
-		const unsigned int n_iterations10 = solve_p(int_solution_2, solution);
+		solve_p(int_solution_2, solution);
 		assemble_momentum_rhs(int_solution_2, solution);
-		const unsigned int n_iterations11 = solve_momentum(int_solution_2, solution);
+		solve_momentum(int_solution_2, solution);
 		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
 		update_displacement(old_solution, 1.0 / 3.0, solution, 2.0 / 3.0);
 		cout << std::endl;
