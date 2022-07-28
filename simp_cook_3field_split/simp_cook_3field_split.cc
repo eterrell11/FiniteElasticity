@@ -488,8 +488,8 @@ namespace NonlinearElasticity
 		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		void		solve_momentum(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		void         output_results(Vector<double>& sol_n) const;
+		void		solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum);
+		//void         output_results(Vector<double>& sol_n) const;
 
 		void do_timestep();
 
@@ -877,8 +877,10 @@ namespace NonlinearElasticity
 
             assemble_pressure_Lap(def_grad_old_solution);
             
-            unconstrained_it_matrix_pressure = unconstrained_mass_matrix_pressure + unconstrained_Lap_matrix_pressure;
-            constrained_it_matrix_pressure = constrained_mass_matrix_pressure + constrained_Lap_matrix_pressure;
+			unconstrained_it_matrix_pressure.copy_from(unconstrained_mass_matrix_pressure);
+			unconstrained_it_matrix_pressure.add(1.0, unconstrained_Lap_matrix_pressure);	
+			constrained_it_matrix_pressure.copy_from(constrained_mass_matrix_pressure);
+			constrained_it_matrix_pressure.add(1.0, constrained_Lap_matrix_pressure);
 			do_timestep();
         }
 	}
@@ -1040,7 +1042,7 @@ namespace NonlinearElasticity
 		constrained_sparsity_pattern_momentum.copy_from(dsp_momentum_constrained);
 		constrained_mass_matrix_momentum.reinit(constrained_sparsity_pattern_momentum);
 
-		BlockDynamicSparsityPattern dsp_momentum_unconstrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
+		DynamicSparsityPattern dsp_momentum_unconstrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
 		DoFTools::make_sparsity_pattern(dof_handler_momentum, dsp_momentum_unconstrained);
 		unconstrained_sparsity_pattern_momentum.copy_from(dsp_momentum_unconstrained);
 		unconstrained_mass_matrix_momentum.reinit(unconstrained_sparsity_pattern_momentum);
@@ -1054,7 +1056,7 @@ namespace NonlinearElasticity
         constrained_sparsity_pattern_pressure.copy_from(dsp_pressure_constrained);
         constrained_mass_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
 
-        BlockDynamicSparsityPattern dsp_pressure_unconstrained(dof_handler_pressure.n_dofs(), dof_handler_pressure.n_dofs());
+        DynamicSparsityPattern dsp_pressure_unconstrained(dof_handler_pressure.n_dofs(), dof_handler_pressure.n_dofs());
         DoFTools::make_sparsity_pattern(dof_handler_pressure, dsp_pressure_unconstrained);
         unconstrained_sparsity_pattern_pressure.copy_from(dsp_pressure_unconstrained);
         unconstrained_mass_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
@@ -1073,22 +1075,22 @@ namespace NonlinearElasticity
         constrained_sparsity_pattern_def_grad.copy_from(dsp_def_grad_constrained);
         constrained_mass_matrix_def_grad.reinit(constrained_sparsity_pattern_def_grad);
 
-        BlockDynamicSparsityPattern dsp_def_grad_unconstrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
+        DynamicSparsityPattern dsp_def_grad_unconstrained(dof_handler_def_grad.n_dofs(), dof_handler_def_grad.n_dofs());
         DoFTools::make_sparsity_pattern(dof_handler_def_grad, dsp_def_grad_unconstrained);
         unconstrained_sparsity_pattern_def_grad.copy_from(dsp_def_grad_unconstrained);
         unconstrained_mass_matrix_def_grad.reinit(unconstrained_sparsity_pattern_def_grad);
 
-		momentum_solution.reinit(dof_handler_momentum.n_dofs);
-		momentum_old_solution.reinit(dof_handler_momentum.n_dofs);
-		momentum_int_solution.reinit(dof_handler_momentum.n_dofs);
-		momentum_int_solution_2.reinit(dof_handler_momentum.n_dofs);
-		momentum_rhs.reinit(dof_handler_momentum.n_dofs);
+		momentum_solution.reinit(dof_handler_momentum.n_dofs());
+		momentum_old_solution.reinit(dof_handler_momentum.n_dofs());
+		momentum_int_solution.reinit(dof_handler_momentum.n_dofs());
+		momentum_int_solution_2.reinit(dof_handler_momentum.n_dofs());
+		momentum_rhs.reinit(dof_handler_momentum.n_dofs());
 
-        pressure_solution.reinit(dof_handler_pressure.n_dofs);
-        pressure_old_solution.reinit(dof_handler_pressure.n_dofs);
-        pressure_int_solution.reinit(dof_handler_pressure.n_dofs);
-        pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs);
-        pressure_rhs.reinit(dof_handler_pressure.n_dofs);
+        pressure_solution.reinit(dof_handler_pressure.n_dofs());
+        pressure_old_solution.reinit(dof_handler_pressure.n_dofs());
+        pressure_int_solution.reinit(dof_handler_pressure.n_dofs());
+        pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs());
+        pressure_rhs.reinit(dof_handler_pressure.n_dofs());
 
 
 
@@ -1242,16 +1244,13 @@ template <int dim>
 void Inelastic<dim>::assemble_def_grad_mass()
 {
 
-    std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
-    for (unsigned int i = 0; i < dim * dim; ++i) {
-        Def_Grad[i] = true;
-    }
+	FEValuesExtractors::Tensor<dim> Def_Grad(0);
     
     constrained_mass_matrix_def_grad = 0;
 
     unconstrained_mass_matrix_def_grad = 0;
 
-    FEValues<dim> fe_values(mapping_simplex,
+    FEValues<dim> fe_values_def_grad(mapping_simplex,
         fe_def_grad,
         quadrature_formula_def_grad,
         update_values |
@@ -1269,7 +1268,7 @@ void Inelastic<dim>::assemble_def_grad_mass()
 
 
 
-    Tensor<1, dim> fe_val_Def_Grad_i;
+    Tensor<2, dim> fe_val_Def_Grad_i;
 
 
     for (const auto& cell : dof_handler_def_grad.active_cell_iterators())
@@ -1277,21 +1276,21 @@ void Inelastic<dim>::assemble_def_grad_mass()
         
 
         cell_mass_matrix = 0;
-        fe_values.reinit(cell);
+        fe_values_def_grad.reinit(cell);
 
 
 
-        for (const unsigned int q_point : fe_values.quadrature_point_indices())
+        for (const unsigned int q_point : fe_values_def_grad.quadrature_point_indices())
         {
-            for (const unsigned int i : fe_values.dof_indices())
+            for (const unsigned int i : fe_values_def_grad.dof_indices())
             {
-                fe_val_Def_Grad_i = fe_values[Def_Grad].value(i, q_point);
-                for (const unsigned int j : fe_values.dof_indices())
+                fe_val_Def_Grad_i = fe_values_def_grad[Def_Grad].value(i, q_point);
+                for (const unsigned int j : fe_values_def_grad.dof_indices())
                 {
                     cell_mass_matrix(i, j) +=
-                        fe_val_Def_Grad_i * //Momentum terms
-                        fe_values[Def_Grad].value(j, q_point) *
-                    fe_values.JxW(q_point);
+                       scalar_product( fe_val_Def_Grad_i ,
+                        fe_values_def_grad[Def_Grad].value(j, q_point)) *
+                    fe_values_def_grad.JxW(q_point);
                 }
 
             }
@@ -1316,7 +1315,7 @@ template <int dim>
 void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 {
 
-    FEValuesExtractors::Vector Pressure(0);
+    FEValuesExtractors::Scalar Pressure(0);
 
 	constrained_Lap_matrix_pressure = 0;
 	unconstrained_Lap_matrix_pressure = 0;
@@ -1462,10 +1461,9 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	void Inelastic<dim>::assemble_def_grad_rhs(Vector<double>& sol_n_momentum)
 	{
 		def_grad_rhs = 0;
-        std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
-        for (unsigned int i = 0; i < dim * dim; ++i) {
-            Def_Grad[i] = true;
-        }
+		FEValuesExtractors::Tensor<dim> Def_Grad(0);
+
+
 		FEValues<dim> fe_values_def_grad(mapping_simplex,
 			fe_def_grad,
 			quadrature_formula_def_grad,
@@ -1867,7 +1865,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 					}
 				}
 				Jf = get_Jf(FF);
-				HH = get_HH(Jf, FF);
+				HH = get_HH(FF, Jf);
 				
 				//cout << "HH : " << HH << std::endl;
 				//cout << " FF : " << FF << std::endl;
@@ -1941,6 +1939,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	{
 		momentum_rhs = 0;
 
+		FEValuesExtractors::Vector Momentum(0);
+
 		FEValues<dim> fe_values_momentum(mapping_simplex,
 			fe_momentum,
 			quadrature_formula_momentum,
@@ -1962,7 +1962,6 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		std::vector<double> sol_vec_pressure(n_q_points);
 		std::vector<double> old_sol_vec_pressure(n_q_points);
-
 
 
 
@@ -1992,18 +1991,17 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			temp_pressure = 0;
 			old_temp_pressure = 0;
 			//old_pressure = 0;
-			sol_counter = 0;
 			cell_rhs = 0;
-			fe_values.reinit(cell);
+			fe_values_momentum.reinit(cell);
 
 			fe_values_momentum.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
 			fe_values_momentum.get_function_values(sol_n_pressure, old_sol_vec_pressure);
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
 				HH = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].HH_store;
-				temp_pressure = sol_vec_pressure[q_point](sol_counter);
-				old_temp_pressure = old_sol_vec[q_point](sol_counter);
+				temp_pressure = sol_vec_pressure[q_point];
+				old_temp_pressure = old_sol_vec_pressure[q_point];
 
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
@@ -2141,11 +2139,16 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		//residual.block(2) = 0;
 
+		std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
+		for (unsigned int i = 0; i < dim * dim; ++i) {
+			Def_Grad[i] = true;
+		}
+
 		SparseMatrix<double>& un_M = unconstrained_mass_matrix_def_grad;
 		const auto op_un_M = linear_operator(un_M);
 		Vector<double> un_rhs = def_grad_rhs;
 
-		Vector<double> old_sol = sol_n;
+		Vector<double> old_sol = def_grad_sol_n;
 
 		un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, old_sol);
@@ -2178,23 +2181,23 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		const auto& M2 = constrained_mass_matrix_def_grad;
 
 
-		auto& def_grad = sol_n_plus_1;
+		auto& def_grad = def_grad_sol_n_plus_1;
 
 
 
 		Vector<double> F_rhs = def_grad_rhs;
 
 
-		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverControl            solver_control(1000, 1e-16 * def_grad_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
 
-		cout << "norm of right hand side : " << system_rhs.l2_norm() << std::endl;
+		cout << "norm of right hand side : " << def_grad_rhs.l2_norm() << std::endl;
 
 		solver.solve(M2, def_grad, F_rhs, F_preconditioner);
-		all_constraints.distribute(sol_n_plus_1);
+		all_constraints.distribute(def_grad_sol_n_plus_1);
 
 		// For updating the residual
 
@@ -2210,7 +2213,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 		//residual.block(0) = 0;
-
+		FEValuesExtractors::Vector Momentum(0);
 
         SparseMatrix<double>& un_M = unconstrained_mass_matrix_momentum;
 		const auto op_un_M = linear_operator(un_M);
@@ -2255,16 +2258,16 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);*/
-		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
-		cout << "norm of right hand side : " << system_rhs.l2_norm() << std::endl;
+		cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
 		PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
 		u_preconditioner.initialize(M0, 1.2);
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
-		u_constraints.distribute(sol_n_plus_1);
+		u_constraints.distribute(momentum_sol_n_plus_1);
 
 		// For updating the residual
 //		Vector<double> u_DQ = (sol_n_plus_1.block(0) - sol_n.block(0));
@@ -2308,10 +2311,10 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		setup_constrained_rhs.apply(rhs);
 
 
-		const auto& M1 = constrained_it_matrix_momentum;
+		const auto& M1 = constrained_it_matrix_pressure;
 
 
-		auto& pressure = sol_n_plus_1_pressure;
+		auto& pressure = pressure_sol_n_plus_1;
 
 
 
@@ -2321,8 +2324,8 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		M1_direct.initialize(M1);
 		M1_direct.vmult(pressure, p_rhs);*/
 
-		cout << "norm of right hand side : " << system_rhs.l2_norm() << std::endl;
-		SolverControl            solver_control(100000, 1e-10 * system_rhs.l2_norm());
+		cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
+		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
 		PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
@@ -2330,7 +2333,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		solver.solve(M1, pressure, p_rhs, p_preconditioner);
 
-		p_constraints.distribute(sol_n_plus_1_pressure);
+		p_constraints.distribute(pressure_sol_n_plus_1);
 
 		//For the residuals
 //		Vector<double> p_DQ = (sol_n_plus_1.block(1) - sol_n.block(1));
@@ -2344,9 +2347,12 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//solves system using direct solver
 	template <int dim>
-	unsigned int Inelastic<dim>::solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum)
+	void Inelastic<dim>::solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum)
 	{
-		BlockSparseMatrix<double>& un_M = unconstrained_mass_matrix;
+
+		FEValuesExtractors::Vector Momentum(0);
+
+		SparseMatrix<double>& un_M = unconstrained_mass_matrix_momentum;
 		const auto op_un_M = linear_operator(un_M);
 		Vector<double> un_rhs = momentum_rhs;
 		auto& sol = sol_n_plus_1_momentum;
@@ -2385,9 +2391,9 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);*/
 
-		cout << "norm of right hand side : " << system_rhs.l2_norm() << std::endl;
+		cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
-		SolverControl            solver_control(1000, 1e-16 * system_rhs.l2_norm());
+		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
 		PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
@@ -2408,110 +2414,110 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 	//Spits out solution into vectors then into .vtks
-	template<int dim>
-	void Inelastic<dim>::output_results(Vector<double>& sol_n) const
-	{
+	//template<int dim>
+	//void Inelastic<dim>::output_results(Vector<double>& sol_n) const
+	//{
 
-		FFPostprocessor<dim> FF_out;
-		DataOut<dim> data_out;
-		data_out.attach_dof_handler(dof_handler);
-
-
-
-
-		std::vector<std::string> solution_names1(dim, "momentum");
-		std::vector<DataComponentInterpretation::DataComponentInterpretation>
-			interpretation1(
-				dim,
-				DataComponentInterpretation::component_is_part_of_vector);
-
-
-		std::vector<std::string> solution_names2(1, "pressure");
-		std::vector<DataComponentInterpretation::DataComponentInterpretation>
-			interpretation2(
-				1,
-				DataComponentInterpretation::component_is_scalar);
-
-
-		std::vector<std::string> solution_names3(dim * dim, "deformation_gradient");
-		std::vector<DataComponentInterpretation::DataComponentInterpretation>
-			interpretation3(
-				dim * dim,
-				DataComponentInterpretation::component_is_part_of_tensor);
-
-		solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
-		solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
-
-		interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
-		interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
-
-		data_out.add_data_vector(sol_n,
-			solution_names1,
-			DataOut<dim>::type_dof_data,
-			interpretation1);
-
-		data_out.add_data_vector(total_displacement, FF_out);
-		Vector<double> norm_of_pk1(triangulation.n_active_cells());
-		{
-			for (auto& cell : triangulation.active_cell_iterators()) {
-				Tensor<2, dim> accumulated_stress;
-				for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-					accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-				norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
-			}
-		}
-		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-
-
-		//const std::vector<types::global_dof_index> dofs_per_component =
-		//	DoFTools::count_dofs_per_fe_component(dof_handler);
-		//const unsigned int n_u = dofs_per_component[0] * dim,
-		//	n_p = dofs_per_component[dim],
-		//	n_f = dofs_per_component[dim + 1] * dim * dim;
+	//	FFPostprocessor<dim> FF_out;
+	//	DataOut<dim> data_out;
+	//	data_out.attach_dof_handler(dof_handler);
 
 
 
-		//Vector<double> displacement_block; //So I can add dimensions to the displacement output
-		//displacement_block.reinit(3);
-		//displacement_block.block(0).reinit(n_u);
-		//displacement_block.block(1).reinit(n_p);
-		//displacement_block.block(2).reinit(n_f);
-		//displacement_block.collect_sizes();
 
-		//displacement_block.block(0) = total_displacement;
-
-		//std::vector<std::string> solution_names4(dim, "Displacement");
-
-		//std::vector<std::string> solution_names5(1, "Blank_1");
-
-		//std::vector<std::string> solution_names6(dim * dim, "Blank_2");
-
-		//solution_names4.insert(solution_names4.end(), solution_names5.begin(), solution_names5.end());
-		//solution_names4.insert(solution_names4.end(), solution_names6.begin(), solution_names6.end());
-
-		//std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(dim, DataComponentInterpretation::component_is_part_of_vector);
-		DisplacementPostprocessor<dim> displacement_postprocessor;
+	//	std::vector<std::string> solution_names1(dim, "momentum");
+	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+	//		interpretation1(
+	//			dim,
+	//			DataComponentInterpretation::component_is_part_of_vector);
 
 
-
-		data_out.add_data_vector(total_displacement, displacement_postprocessor);
-
-		PressurePostprocessor<dim> pressure_postprocessor;
-		data_out.add_data_vector(total_displacement, pressure_postprocessor);
-
-		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
-		GridTools::get_subdomain_association(triangulation, partition_int);
+	//	std::vector<std::string> solution_names2(1, "pressure");
+	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+	//		interpretation2(
+	//			1,
+	//			DataComponentInterpretation::component_is_scalar);
 
 
-		data_out.build_patches(1);
+	//	std::vector<std::string> solution_names3(dim * dim, "deformation_gradient");
+	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
+	//		interpretation3(
+	//			dim * dim,
+	//			DataComponentInterpretation::component_is_part_of_tensor);
 
-		DataOutBase::VtkFlags vtk_flags;
-		vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
-		data_out.set_flags(vtk_flags);
+	//	solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
+	//	solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
 
-		std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
-		data_out.write_vtu(output);
-	}
+	//	interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
+	//	interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
+
+	//	data_out.add_data_vector(sol_n,
+	//		solution_names1,
+	//		DataOut<dim>::type_dof_data,
+	//		interpretation1);
+
+	//	data_out.add_data_vector(total_displacement, FF_out);
+	//	Vector<double> norm_of_pk1(triangulation.n_active_cells());
+	//	{
+	//		for (auto& cell : triangulation.active_cell_iterators()) {
+	//			Tensor<2, dim> accumulated_stress;
+	//			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
+	//				accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
+	//			norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
+	//		}
+	//	}
+	//	data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
+
+
+	//	//const std::vector<types::global_dof_index> dofs_per_component =
+	//	//	DoFTools::count_dofs_per_fe_component(dof_handler);
+	//	//const unsigned int n_u = dofs_per_component[0] * dim,
+	//	//	n_p = dofs_per_component[dim],
+	//	//	n_f = dofs_per_component[dim + 1] * dim * dim;
+
+
+
+	//	//Vector<double> displacement_block; //So I can add dimensions to the displacement output
+	//	//displacement_block.reinit(3);
+	//	//displacement_block.block(0).reinit(n_u);
+	//	//displacement_block.block(1).reinit(n_p);
+	//	//displacement_block.block(2).reinit(n_f);
+	//	//displacement_block.collect_sizes();
+
+	//	//displacement_block.block(0) = total_displacement;
+
+	//	//std::vector<std::string> solution_names4(dim, "Displacement");
+
+	//	//std::vector<std::string> solution_names5(1, "Blank_1");
+
+	//	//std::vector<std::string> solution_names6(dim * dim, "Blank_2");
+
+	//	//solution_names4.insert(solution_names4.end(), solution_names5.begin(), solution_names5.end());
+	//	//solution_names4.insert(solution_names4.end(), solution_names6.begin(), solution_names6.end());
+
+	//	//std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(dim, DataComponentInterpretation::component_is_part_of_vector);
+	//	DisplacementPostprocessor<dim> displacement_postprocessor;
+
+
+
+	//	data_out.add_data_vector(total_displacement, displacement_postprocessor);
+
+	//	PressurePostprocessor<dim> pressure_postprocessor;
+	//	data_out.add_data_vector(total_displacement, pressure_postprocessor);
+
+	//	std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
+	//	GridTools::get_subdomain_association(triangulation, partition_int);
+
+
+	//	data_out.build_patches(1);
+
+	//	DataOutBase::VtkFlags vtk_flags;
+	//	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
+	//	data_out.set_flags(vtk_flags);
+
+	//	std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
+	//	data_out.write_vtu(output);
+	//}
 
 
 
@@ -2546,11 +2552,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
-			output_results(solution);
+			//output_results(solution);
 			save_counter++;
 		}
 		//move_mesh_back();
-		std::swap(old_solution, solution);
+		std::swap(momentum_old_solution, momentum_solution);
+		std::swap(pressure_old_solution, pressure_solution);
+		std::swap(def_grad_old_solution, def_grad_solution);
 
 		cout << std::endl << std::endl;
 	}
@@ -2567,9 +2575,9 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		//Vector<double> momentum_vector = momentum;
 
-		cout << "Number of dofs : " << dof_handler.n_dofs() << std::endl;
-		cout << "size of displacement : " << total_displacement.size() << std::endl;
-		cout << "size of momentum : " << old_momentum.size() << std::endl;
+		//cout << "Number of dofs : " << dof_handler.n_dofs() << std::endl;
+		//cout << "size of displacement : " << total_displacement.size() << std::endl;
+		//cout << "size of momentum : " << old_momentum.size() << std::endl;
 
 		if (coeff_n != 0.0) {
 			total_displacement -= incremental_displacement;
@@ -2590,13 +2598,13 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		triangulation.clear_user_data();
 		std::vector<PointHistory<dim>> tmp;
 		quadrature_point_history.swap(tmp);
-		quadrature_point_history.resize(triangulation.n_active_cells() * quadrature_formula.size());
+		quadrature_point_history.resize(triangulation.n_active_cells() * quadrature_formula_momentum.size());
 		unsigned int history_index = 0;
 		for (auto& cell : triangulation.active_cell_iterators())
 			if (cell->is_locally_owned())
 			{
 				cell->set_user_pointer(&quadrature_point_history[history_index]);
-				history_index += quadrature_formula.size();
+				history_index += quadrature_formula_momentum.size();
 			}
 
 		Assert(history_index == quadrature_point_history.size(),
