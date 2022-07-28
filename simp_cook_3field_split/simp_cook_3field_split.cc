@@ -463,11 +463,11 @@ namespace NonlinearElasticity
 
 
 	template <int dim>
-	class Inelastic
+	class Incompressible
 	{
 	public:
-		Inelastic(const std::string& input_file);
-		~Inelastic();
+		Incompressible(const std::string& input_file);
+		~Incompressible();
 		void run();
 
 	private:
@@ -507,9 +507,9 @@ namespace NonlinearElasticity
 		DoFHandler<dim>    dof_handler_momentum;
 		DoFHandler<dim>	   dof_handler_def_grad;
 		DoFHandler<dim>    dof_handler_pressure;
-		FE_SimplexP<dim> fe_momentum;
-		FE_SimplexP<dim> fe_pressure;
-		FE_SimplexP<dim> fe_def_grad;
+		FESystem<dim> fe_momentum;
+		FESystem<dim> fe_pressure;
+		FESystem<dim> fe_def_grad;
 
 
 		MappingFE<dim> mapping_simplex;
@@ -754,7 +754,7 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	InitialMomentum<dim>::InitialMomentum(double& InitialVelocity)
-		: Function<dim>(dim + dim * dim + 1)
+		: Function<dim>(dim)
 		, velocity(InitialVelocity)
 	{}
 
@@ -763,14 +763,9 @@ namespace NonlinearElasticity
 		InitialMomentum<dim>::vector_value(const Point<dim>& /*p*/,
 			Vector<double>& values) const
 	{
-		Assert(values.size() == (dim + dim * dim + 1), ExcDimensionMismatch(values.size(), dim));
+		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
 		values = 0;
 
-		values(dim + 1) = 1;
-		values(2 * dim + 2) = 1;
-		if (dim == 3) {
-			values(12) = 1;
-		}
 	}
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
@@ -787,17 +782,17 @@ namespace NonlinearElasticity
 	class Def_Grad_bound : public Function<dim>
 	{
 	public:
-		Def_Grad_bound() : Function<dim>(dim + dim * dim + 1)
+		Def_Grad_bound() : Function<dim>(dim * dim)
 		{}
 		void
 			vector_value(const Point<dim>& /*p*/,
 				Vector<double>& values) const override
 		{
 			values = 0;
-			values(dim + 1) = 1;
-			values(2 * dim + 2) = 1;
+			values(0) = 1;
+			values(dim+1) = 1;
 			if (dim == 3) {
-				values(12) = 1;
+				values(8) = 1;
 			}
 		}
 	};
@@ -820,15 +815,15 @@ namespace NonlinearElasticity
 
 
 	template<int dim> // Constructor for the main class
-	Inelastic<dim>::Inelastic(const std::string& input_file)
+	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
 		, mapping_simplex(FE_SimplexP<dim>(parameters.order))
 		, dof_handler_momentum(triangulation)
 		, dof_handler_pressure(triangulation)
 		, dof_handler_def_grad(triangulation)
-		, fe_momentum(parameters.order+1)
-		, fe_pressure(parameters.order)
-		, fe_def_grad(parameters.order)
+		, fe_momentum(FE_SimplexP<dim>(parameters.order+1),dim)
+		, fe_pressure(FE_SimplexP<dim>(parameters.order),1)
+		, fe_def_grad(FE_SimplexP<dim>(parameters.order),dim*dim)
 		, quadrature_formula_momentum(parameters.order + 2)
 		, quadrature_formula_pressure(parameters.order + 1)
 		, quadrature_formula_def_grad(parameters.order + 1)
@@ -841,7 +836,7 @@ namespace NonlinearElasticity
 
 	//This is a destructor.
 	template <int dim>
-	Inelastic<dim>::~Inelastic()
+	Incompressible<dim>::~Incompressible()
 	{
 		dof_handler_momentum.clear();
         dof_handler_pressure.clear();
@@ -851,7 +846,7 @@ namespace NonlinearElasticity
 
 	// Split up the run function from the grid_generator to replace refinement cycles with timesteps
 	template<int dim>
-	void Inelastic<dim>::run()
+	void Incompressible<dim>::run()
 	{
 		create_coarse_grid(triangulation);
 		setup_system();
@@ -886,7 +881,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Inelastic<dim>::create_coarse_grid(Triangulation<2>& triangulation)
+	void Incompressible<dim>::create_coarse_grid(Triangulation<2>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -927,7 +922,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Inelastic<dim>::create_coarse_grid(Triangulation<3>& triangulation)
+	void Incompressible<dim>::create_coarse_grid(Triangulation<3>& triangulation)
 	{
 		//std::vector<Point<dim>> vertices;
 		std::vector<Point<3>> vertices = {
@@ -980,7 +975,7 @@ namespace NonlinearElasticity
 
 
 	template <int dim>
-	void Inelastic<dim>::setup_system()
+	void Incompressible<dim>::setup_system()
 	{
 
 		dof_handler_momentum.distribute_dofs(fe_momentum);
@@ -997,12 +992,9 @@ namespace NonlinearElasticity
 		std::cout << "Setting up zero boundary conditions" << std::endl;
 
 		FEValuesExtractors::Vector Momentum(0);
-		FEValuesExtractors::Scalar Pressure(0);
-		std::vector<bool> Def_Grad(0); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
-		for (unsigned int i = 0; i < dim * dim; ++i) {
-			Def_Grad[i] = true;
-		}
+		
         
+
 // HOMOGENEOUS CONSTRAINTS
         homogeneous_constraints_momentum.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
@@ -1010,7 +1002,7 @@ namespace NonlinearElasticity
 			4,
 			Functions::ZeroFunction<dim>(dim),
 			homogeneous_constraints_momentum,
-			fe_momentum.component_mask(Momentum));
+            fe_momentum.component_mask(Momentum) );
         homogeneous_constraints_momentum.close();
 
         homogeneous_constraints_pressure.clear();
@@ -1018,19 +1010,17 @@ namespace NonlinearElasticity
 		//	dof_handler,
 		//	4,
 		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-		//	homogeneous_constraints_pressure,
-		//	fe.component_mask(Pressure));
+		//	homogeneous_constraints_pressure);
         homogeneous_constraints_pressure.close();
+        std::cout << "Boundary conditions established" << std::endl;
 
         homogeneous_constraints_def_grad.clear();
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler_def_grad,
 			4,
 			Def_Grad_bound<dim>(),
-            homogeneous_constraints_def_grad,
-			fe_def_grad.component_mask(Def_Grad));
+            homogeneous_constraints_def_grad);
         homogeneous_constraints_def_grad.close();
-
 
 
 //DYNAMIC SPARSITY PATTERNS
@@ -1085,6 +1075,12 @@ namespace NonlinearElasticity
 		momentum_int_solution.reinit(dof_handler_momentum.n_dofs());
 		momentum_int_solution_2.reinit(dof_handler_momentum.n_dofs());
 		momentum_rhs.reinit(dof_handler_momentum.n_dofs());
+        
+        def_grad_solution.reinit(dof_handler_def_grad.n_dofs());
+        def_grad_old_solution.reinit(dof_handler_def_grad.n_dofs());
+        def_grad_int_solution.reinit(dof_handler_def_grad.n_dofs());
+        def_grad_int_solution_2.reinit(dof_handler_def_grad.n_dofs());
+        def_grad_rhs.reinit(dof_handler_def_grad.n_dofs());
 
         pressure_solution.reinit(dof_handler_pressure.n_dofs());
         pressure_old_solution.reinit(dof_handler_pressure.n_dofs());
@@ -1093,16 +1089,17 @@ namespace NonlinearElasticity
         pressure_rhs.reinit(dof_handler_pressure.n_dofs());
 
 
-
 		cout << "Applying initial conditions" << std::endl;
 		VectorTools::interpolate(dof_handler_momentum, InitialMomentum<dim>(parameters.InitialVelocity), momentum_old_solution);
+        
+        VectorTools::interpolate(dof_handler_def_grad, Def_Grad_bound<dim>(), def_grad_old_solution);
 
 		incremental_displacement.reinit(dof_handler_momentum.n_dofs());
         total_displacement.reinit(dof_handler_momentum.n_dofs());
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_mass()
+	void Incompressible<dim>::assemble_momentum_mass()
 	{
 
         FEValuesExtractors::Vector Momentum(0);
@@ -1173,7 +1170,7 @@ namespace NonlinearElasticity
 	}
 
 template <int dim>
-void Inelastic<dim>::assemble_pressure_mass()
+void Incompressible<dim>::assemble_pressure_mass()
 {
     FEValuesExtractors::Vector Pressure(0);
 
@@ -1241,7 +1238,7 @@ void Inelastic<dim>::assemble_pressure_mass()
 }
 
 template <int dim>
-void Inelastic<dim>::assemble_def_grad_mass()
+void Incompressible<dim>::assemble_def_grad_mass()
 {
 
 	FEValuesExtractors::Tensor<dim> Def_Grad(0);
@@ -1312,7 +1309,7 @@ void Inelastic<dim>::assemble_def_grad_mass()
 }
 
 template <int dim>
-void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
+void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 {
 
     FEValuesExtractors::Scalar Pressure(0);
@@ -1458,7 +1455,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 	template <int dim>
-	void Inelastic<dim>::assemble_def_grad_rhs(Vector<double>& sol_n_momentum)
+	void Incompressible<dim>::assemble_def_grad_rhs(Vector<double>& sol_n_momentum)
 	{
 		def_grad_rhs = 0;
 		FEValuesExtractors::Tensor<dim> Def_Grad(0);
@@ -1595,7 +1592,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_int_rhs(Vector<double>& sol_n_def_grad, Vector<double>& sol_n_pressure)
+	void Incompressible<dim>::assemble_momentum_int_rhs(Vector<double>& sol_n_def_grad, Vector<double>& sol_n_pressure)
 	{
 		momentum_rhs = 0;
 
@@ -1722,7 +1719,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
 
-				for (unsigned int i; i < dofs_per_cell; ++i)
+				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += (-scalar_product(fe_values_momentum[Momentum].gradient(i, q_point), pk1) +
 						fe_values_momentum[Momentum].value(i, q_point) * rhs_values[q_point]) * fe_values_momentum.JxW(q_point);
@@ -1756,7 +1753,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		}
 	}
 	template <int dim>
-	void Inelastic<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad)
+	void Incompressible<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad)
 	{
 		pressure_rhs = 0;
         
@@ -1935,7 +1932,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	}
 
 	template <int dim>
-	void Inelastic<dim>::assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure)
+	void Incompressible<dim>::assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure)
 	{
 		momentum_rhs = 0;
 
@@ -2019,7 +2016,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	}
 
 	template<int dim>
-	void Inelastic<dim>::solve_ForwardEuler()
+	void Incompressible<dim>::solve_ForwardEuler()
 	{
 
 		assemble_def_grad_rhs(momentum_old_solution);
@@ -2037,7 +2034,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 //	template<int dim>
-//	void Inelastic<dim>::solve_ssprk2()
+//	void Incompressible<dim>::solve_ssprk2()
 //	{
 //		assemble_system(old_solution);
 //		assemble_def_grad_rhs(old_solution);
@@ -2083,7 +2080,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 //
 //	//Assembles system, solves system, updates quad data.
 //	template<int dim>
-//	void Inelastic<dim>::solve_ssprk3()
+//	void Incompressible<dim>::solve_ssprk3()
 //	{
 //		cout << " Assembling system..." << std::flush;
 //		assemble_system(old_solution);
@@ -2133,7 +2130,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//solves system using direct solver
 	template <int dim>
-    void Inelastic<dim>::solve_F(Vector<double>& def_grad_sol_n, Vector<double>& def_grad_sol_n_plus_1)
+    void Incompressible<dim>::solve_F(Vector<double>& def_grad_sol_n, Vector<double>& def_grad_sol_n_plus_1)
 	{
 
 
@@ -2208,7 +2205,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		//return solver_control.last_step();
 	}
 	template <int dim>
-	void Inelastic<dim>::solve_momentum_int(Vector<double>& momentum_sol_n, Vector<double>& momentum_sol_n_plus_1)
+	void Incompressible<dim>::solve_momentum_int(Vector<double>& momentum_sol_n, Vector<double>& momentum_sol_n_plus_1)
 	{
 
 
@@ -2279,7 +2276,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//solves system using direct solver
 	template <int dim>
-	void Inelastic<dim>::solve_p(Vector<double>& pressure_sol_n, Vector<double>& pressure_sol_n_plus_1)
+	void Incompressible<dim>::solve_p(Vector<double>& pressure_sol_n, Vector<double>& pressure_sol_n_plus_1)
 	{
 
 		//residual.block(1) = 0;
@@ -2347,7 +2344,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//solves system using direct solver
 	template <int dim>
-	void Inelastic<dim>::solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum)
+	void Incompressible<dim>::solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum)
 	{
 
 		FEValuesExtractors::Vector Momentum(0);
@@ -2415,7 +2412,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//Spits out solution into vectors then into .vtks
 	//template<int dim>
-	//void Inelastic<dim>::output_results(Vector<double>& sol_n) const
+	//void Incompressible<dim>::output_results(Vector<double>& sol_n) const
 	//{
 
 	//	FFPostprocessor<dim> FF_out;
@@ -2524,7 +2521,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 	template <int dim>
-	void Inelastic<dim>::do_timestep()
+	void Incompressible<dim>::do_timestep()
 	{
 		present_time += present_timestep;
 		++timestep_no;
@@ -2565,7 +2562,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 	template<int dim>
-	void Inelastic<dim>::update_displacement(const Vector<double>& sol_n_momentum, const double& coeff_n, const Vector<double>& sol_n_plus_1_momentum, const double& coeff_n_plus)
+	void Incompressible<dim>::update_displacement(const Vector<double>& sol_n_momentum, const double& coeff_n, const Vector<double>& sol_n_plus_1_momentum, const double& coeff_n_plus)
 	{
 		auto old_momentum = sol_n_momentum;
 
@@ -2593,7 +2590,7 @@ void Inelastic<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	// This chunk of code allows for communication between current code state and quad point history
 	template<int dim>
-	void Inelastic<dim>::setup_quadrature_point_history()
+	void Incompressible<dim>::setup_quadrature_point_history()
 	{
 		triangulation.clear_user_data();
 		std::vector<PointHistory<dim>> tmp;
@@ -2624,8 +2621,8 @@ int main(int /*argc*/, char** /*argv*/)
 		using namespace dealii;
 		using namespace NonlinearElasticity;
 
-		NonlinearElasticity::Inelastic<2> inelastic("parameter_file.prm");
-		inelastic.run();
+		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
+		incompressible.run();
 	}
 	catch (std::exception& exc)
 	{
