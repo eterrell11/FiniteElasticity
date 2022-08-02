@@ -984,8 +984,11 @@ namespace NonlinearElasticity
 	{
 
 		dof_handler_momentum.distribute_dofs(fe_momentum);
+        DoFRenumbering::boost::Cuthill_McKee(dof_handler_momentum);
         dof_handler_def_grad.distribute_dofs(fe_def_grad);
+        DoFRenumbering::boost::Cuthill_McKee(dof_handler_def_grad);
         dof_handler_pressure.distribute_dofs(fe_pressure);
+        DoFRenumbering::boost::Cuthill_McKee(dof_handler_pressure);
 
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
@@ -2067,7 +2070,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		cout << "Solving for intermediate momentum" << std::endl;
 		solve_momentum_int(momentum_old_solution, momentum_solution);
 		cout << "Assembling pressure rhs" << std::endl;
-		assemble_pressure_rhs(momentum_solution, def_grad_solution);
+		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
 		cout << "Norm of pressure rhs : " << def_grad_rhs.l2_norm() << std::endl;
 		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_old_solution, pressure_solution);
