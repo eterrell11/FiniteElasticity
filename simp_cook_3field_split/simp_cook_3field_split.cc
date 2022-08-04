@@ -826,10 +826,10 @@ namespace NonlinearElasticity
 		, fe_momentum(FE_SimplexP<dim>(parameters.order+1),dim)
 		, fe_pressure(FE_SimplexP<dim>(parameters.order),1)
 		, fe_def_grad(FE_SimplexP<dim>(parameters.order),dim*dim)
-		, quadrature_formula_momentum(parameters.order + 2)
-		, quadrature_formula_pressure(parameters.order + 1)
-		, quadrature_formula_def_grad(parameters.order + 1)
-		, face_quadrature_formula_momentum(parameters.order + 3)
+		, quadrature_formula_momentum(parameters.order + 3)
+		, quadrature_formula_pressure(parameters.order + 3)
+		, quadrature_formula_def_grad(parameters.order + 3)
+		, face_quadrature_formula_momentum(parameters.order + 2)
 		, face_quadrature_formula_pressure(parameters.order + 2)
 		, face_quadrature_formula_def_grad(parameters.order + 2)
 		, timestep_no(0)
@@ -1562,7 +1562,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				}
 
 				
-				for (unsigned int i; i < dofs_per_cell; ++i)
+				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
 					//cell_rhs(i) += -scalar_product(fe_values[Def_Grad].gradient(i, q_point), outer_product(temp_momentum, II)) * fe_values.JxW(q_point);
 					cell_rhs(i) += -fe_values_def_grad[Def_Grad].divergence(i, q_point) * temp_momentum * fe_values_def_grad.JxW(q_point);
@@ -1692,6 +1692,12 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		auto cell_def_grad = dof_handler_def_grad.begin_active();
 		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
+            
+//            Assert(cell->index() == cell_pressure->index(), ExcMessage("should match"))
+//            Assert(cell->index() == cell_def_grad->index(), ExcMessage("should match"))
+//            Assert(cell->level() == cell_pressure->level(), ExcMessage("should match"))
+//            Assert(cell->level() == cell_def_grad->level(), ExcMessage("should match"))
+            
 			FF = 0;
 			Jf = 0;
 			HH = 0;
@@ -1729,10 +1735,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 					}
 				}
 
-				//Stabilization terms
-				//FF += alpha * (real_FF - FF) /*+ tau_FFp * FF_residual*/;
-				//temp_pressure += beta * mu * (real_Jf - 1.0 - temp_pressure / kappa);
-
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
 				local_quadrature_points_history[q_point].HH_store = HH;
@@ -1740,9 +1742,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
 
-				//cout << "FF : " << FF << std::endl;
-				//cout << "PK1 : " << pk1 << std::endl;
-				//cout << "HH : " << HH << std::endl;
 				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += (-scalar_product(fe_values_momentum[Momentum].gradient(i, q_point), pk1) +
