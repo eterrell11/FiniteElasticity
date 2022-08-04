@@ -491,7 +491,7 @@ namespace NonlinearElasticity
 		void		solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum);
-		//void         output_results(Vector<double>& sol_n) const;
+		void         output_results(Vector<double>& momentum_solution, Vector<double>& pressure_solution, Vector<double>& def_grad_solution) const;
 
 		void do_timestep();
 
@@ -829,7 +829,7 @@ namespace NonlinearElasticity
 		, quadrature_formula_momentum(parameters.order + 2)
 		, quadrature_formula_pressure(parameters.order + 1)
 		, quadrature_formula_def_grad(parameters.order + 1)
-		, face_quadrature_formula_momentum(parameters.order + 2)
+		, face_quadrature_formula_momentum(parameters.order + 3)
 		, face_quadrature_formula_pressure(parameters.order + 2)
 		, face_quadrature_formula_def_grad(parameters.order + 2)
 		, timestep_no(0)
@@ -860,7 +860,7 @@ namespace NonlinearElasticity
 		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		//output_results(old_solution);
+		output_results(momentum_old_solution, pressure_old_solution, def_grad_old_solution);
 		cout << "Saving results at time : " << present_time << std::endl;
 		save_counter = 1;
         
@@ -1026,7 +1026,7 @@ namespace NonlinearElasticity
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler_def_grad,
 			4,
-			Def_Grad_bound<dim>(),
+			Functions::ZeroFunction<dim>(dim*dim),
             homogeneous_constraints_def_grad);
         homogeneous_constraints_def_grad.close();
 
@@ -1740,9 +1740,9 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
 
-				cout << "FF : " << FF << std::endl;
-				cout << "PK1 : " << pk1 << std::endl;
-				cout << "HH : " << HH << std::endl;
+				//cout << "FF : " << FF << std::endl;
+				//cout << "PK1 : " << pk1 << std::endl;
+				//cout << "HH : " << HH << std::endl;
 				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += (-scalar_product(fe_values_momentum[Momentum].gradient(i, q_point), pk1) +
@@ -1902,8 +1902,8 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
 
-				cout << "HH : " << HH << std::endl;
-				cout << " FF : " << FF << std::endl;
+				//cout << "HH : " << HH << std::endl;
+				//cout << " FF : " << FF << std::endl;
 				//temp_momentum += tau_pJ * temp_momentum_residual;
 
 				//cout << "Jf : " << Jf << std::endl;
@@ -1912,7 +1912,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 					cell_rhs(i) += -scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum *
 						Jf) *
 						fe_values_pressure.JxW(q_point);
-					cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
+					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
 			}
 			for (const auto& face : cell->face_iterators())
@@ -2020,7 +2020,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		double Jf;
 		//double old_pressure;
 
-
+		auto cell_pressure = dof_handler_pressure.begin_active();
 		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
 
@@ -2031,9 +2031,9 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			//old_pressure = 0;
 			cell_rhs = 0;
 			fe_values_momentum.reinit(cell);
+			fe_values_pressure.reinit(cell_pressure);
 
-			fe_values_momentum.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
-			fe_values_momentum.get_function_values(sol_n_pressure, old_sol_vec_pressure);
+			fe_values_pressure.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
 
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
@@ -2053,6 +2053,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				momentum_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
+			cell_pressure++;
 		}
 	}
 
@@ -2066,17 +2067,17 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		solve_F(def_grad_old_solution, def_grad_solution);
 		cout << "Assembling intermediate momentum rhs" << std::endl;
 		assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
-		cout << "Norm of intermediate momentum rhs : " << def_grad_rhs.l2_norm() << std::endl;
+		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
 		cout << "Solving for intermediate momentum" << std::endl;
 		solve_momentum_int(momentum_old_solution, momentum_solution);
 		cout << "Assembling pressure rhs" << std::endl;
 		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
-		cout << "Norm of pressure rhs : " << def_grad_rhs.l2_norm() << std::endl;
+		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
 		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_old_solution, pressure_solution);
 		cout << "Assembling momentum rhs" << std::endl;
 		assemble_momentum_rhs(pressure_old_solution, pressure_solution);
-		cout << "Norm of def grad rhs : " << def_grad_rhs.l2_norm() << std::endl;
+		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
 		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_old_solution, momentum_solution);
 		cout << "Updating displacement" << std::endl;
@@ -2188,7 +2189,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 		//residual.block(2) = 0;
-		cout << "SEG FAULT IS PAST HERE" << std::endl;
 
 		std::vector<bool> Def_Grad(dim * dim); //Should be Tensor<2>, but component_mask only works with symmetrics or vectors
 		for (unsigned int i = 0; i < dim * dim; ++i) {
@@ -2235,7 +2235,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 
-		Vector<double> F_rhs = def_grad_rhs;
+		Vector<double> F_rhs = rhs;
 
 
 		SolverControl            solver_control(1000, 1e-16 * def_grad_rhs.l2_norm());
@@ -2244,7 +2244,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		PreconditionJacobi<SparseMatrix<double>> F_preconditioner;
 		F_preconditioner.initialize(M2, 1.2);
 
-		cout << "norm of right hand side : " << def_grad_rhs.l2_norm() << std::endl;
+		//cout << "norm of right hand side : " << def_grad_rhs.l2_norm() << std::endl;
 
 		solver.solve(M2, def_grad, F_rhs, F_preconditioner);
 		all_constraints.distribute(def_grad_sol_n_plus_1);
@@ -2311,7 +2311,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
-		cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
+		//cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
 		PreconditionJacobi<SparseMatrix<double>> u_preconditioner;
 		u_preconditioner.initialize(M0, 1.2);
@@ -2368,13 +2368,13 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 
-		Vector<double> p_rhs = pressure_rhs;
+		Vector<double> p_rhs = rhs;
 
 		/*SparseDirectUMFPACK M1_direct;
 		M1_direct.initialize(M1);
 		M1_direct.vmult(pressure, p_rhs);*/
 
-		cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
+		//cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
 		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
 
@@ -2435,13 +2435,13 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		rhs.reinit(sol);
 		setup_constrained_rhs.apply(rhs);
 
-		Vector<double> u_rhs = momentum_rhs;
+		Vector<double> u_rhs = rhs;
 
 		/*SparseDirectUMFPACK M0_direct;
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);*/
 
-		cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
+		//cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
 		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
 		SolverCG<Vector<double>>  solver(solver_control);
@@ -2464,110 +2464,77 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 	//Spits out solution into vectors then into .vtks
-	//template<int dim>
-	//void Incompressible<dim>::output_results(Vector<double>& sol_n) const
-	//{
+	template<int dim> 
+	void Incompressible<dim>::output_results(Vector<double>& momentum_solution,
+		Vector<double>& pressure_solution,
+		Vector<double>& def_grad_solution) const
+	{
+		const FESystem<dim> joint_fe(fe_momentum, 1, fe_pressure, 1, fe_def_grad, 1);
+		DoFHandler<dim> joint_dof_handler(triangulation);
+		joint_dof_handler.distribute_dofs(joint_fe);
+		//Assert(joint_dof_handler.n_dofs() == ((dim+1)*))
+		Vector<double> joint_solution(joint_dof_handler.n_dofs());
+		std::vector <types::global_dof_index> local_joint_dof_indices(
+			joint_fe.n_dofs_per_cell()),
+			local_momentum_dof_indices(fe_momentum.n_dofs_per_cell()),
+			local_pressure_dof_indices(fe_pressure.n_dofs_per_cell()),
+			local_def_grad_dof_indices(fe_def_grad.n_dofs_per_cell());
 
-	//	FFPostprocessor<dim> FF_out;
-	//	DataOut<dim> data_out;
-	//	data_out.attach_dof_handler(dof_handler);
+		typename DoFHandler<dim>::active_cell_iterator
+			joint_cell = joint_dof_handler.begin_active(),
+			joint_end_cell = joint_dof_handler.end(),
+			momentum_cell = dof_handler_momentum.begin_active(),
+			pressure_cell = dof_handler_pressure.begin_active(),
+			def_grad_cell = dof_handler_def_grad.begin_active();
+		for (; joint_cell != joint_end_cell; ++joint_cell, ++momentum_cell, ++pressure_cell, ++def_grad_cell) {
+			joint_cell->get_dof_indices(local_joint_dof_indices);
+			momentum_cell->get_dof_indices(local_momentum_dof_indices);
+			pressure_cell->get_dof_indices(local_pressure_dof_indices);
+			def_grad_cell->get_dof_indices(local_def_grad_dof_indices);
+			for (unsigned int i = 0; i < joint_fe.n_dofs_per_cell(); ++i) {
+				switch (joint_fe.system_to_base_index(i).first.first)
+				{
+				case 0:
+					Assert(joint_fe.system_to_base_index(i).second < local_momentum_dof_indices.size(), ExcInternalError());
+					joint_solution(local_joint_dof_indices[i]) = momentum_solution(local_momentum_dof_indices[joint_fe.system_to_base_index(i).second]);
+					break;
+				case 1: 
+					Assert(joint_fe.system_to_base_index(i).second < local_pressure_dof_indices.size(), ExcInternalError());
+					joint_solution(local_joint_dof_indices[i]) = pressure_solution(local_pressure_dof_indices[joint_fe.system_to_base_index(i).second]);
+					break;
+				case 2: 
+					Assert(joint_fe.system_to_base_index(i).second < local_def_grad_dof_indices.size(), ExcInternalError());
+					joint_solution(local_joint_dof_indices[i]) = def_grad_solution(local_def_grad_dof_indices[joint_fe.system_to_base_index(i).second]);
+					break;
+				default:
+					Assert(false, ExcInternalError());
+				}
+			}
+		}
+		std::vector<std::string> joint_solution_names(dim, "momentum");
+		joint_solution_names.emplace_back("pressure");
+		std::vector<std::string> def_grad_names(dim * dim, "Deformation_Gradient");
+		joint_solution_names.insert(joint_solution_names.end(), def_grad_names.begin(), def_grad_names.end());
 
+		DataOut<dim> data_out;
+		data_out.attach_dof_handler(joint_dof_handler);
+		std::vector<DataComponentInterpretation::DataComponentInterpretation> component_interpretation(
+			dim + 1, DataComponentInterpretation::component_is_part_of_vector);
+		component_interpretation[dim] = DataComponentInterpretation::component_is_scalar;
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>def_grad_interpretation(
+			dim * dim, DataComponentInterpretation::component_is_part_of_tensor);
+		component_interpretation.insert(component_interpretation.end(), def_grad_interpretation.begin(), def_grad_interpretation.end());
 
+		data_out.add_data_vector(joint_solution,
+			joint_solution_names,
+			DataOut<dim>::type_dof_data,
+			component_interpretation);
+		data_out.build_patches(1);
+		std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
+		data_out.write_vtu(output);
 
-
-	//	std::vector<std::string> solution_names1(dim, "momentum");
-	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-	//		interpretation1(
-	//			dim,
-	//			DataComponentInterpretation::component_is_part_of_vector);
-
-
-	//	std::vector<std::string> solution_names2(1, "pressure");
-	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-	//		interpretation2(
-	//			1,
-	//			DataComponentInterpretation::component_is_scalar);
-
-
-	//	std::vector<std::string> solution_names3(dim * dim, "deformation_gradient");
-	//	std::vector<DataComponentInterpretation::DataComponentInterpretation>
-	//		interpretation3(
-	//			dim * dim,
-	//			DataComponentInterpretation::component_is_part_of_tensor);
-
-	//	solution_names1.insert(solution_names1.end(), solution_names2.begin(), solution_names2.end());
-	//	solution_names1.insert(solution_names1.end(), solution_names3.begin(), solution_names3.end());
-
-	//	interpretation1.insert(interpretation1.end(), interpretation2.begin(), interpretation2.end());
-	//	interpretation1.insert(interpretation1.end(), interpretation3.begin(), interpretation3.end());
-
-	//	data_out.add_data_vector(sol_n,
-	//		solution_names1,
-	//		DataOut<dim>::type_dof_data,
-	//		interpretation1);
-
-	//	data_out.add_data_vector(total_displacement, FF_out);
-	//	Vector<double> norm_of_pk1(triangulation.n_active_cells());
-	//	{
-	//		for (auto& cell : triangulation.active_cell_iterators()) {
-	//			Tensor<2, dim> accumulated_stress;
-	//			for (unsigned int q = 0; q < quadrature_formula.size(); ++q)
-	//				accumulated_stress += reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q].pk1_store;
-	//			norm_of_pk1(cell->active_cell_index()) = (accumulated_stress / quadrature_formula.size()).norm();
-	//		}
-	//	}
-	//	data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
-
-
-	//	//const std::vector<types::global_dof_index> dofs_per_component =
-	//	//	DoFTools::count_dofs_per_fe_component(dof_handler);
-	//	//const unsigned int n_u = dofs_per_component[0] * dim,
-	//	//	n_p = dofs_per_component[dim],
-	//	//	n_f = dofs_per_component[dim + 1] * dim * dim;
-
-
-
-	//	//Vector<double> displacement_block; //So I can add dimensions to the displacement output
-	//	//displacement_block.reinit(3);
-	//	//displacement_block.block(0).reinit(n_u);
-	//	//displacement_block.block(1).reinit(n_p);
-	//	//displacement_block.block(2).reinit(n_f);
-	//	//displacement_block.collect_sizes();
-
-	//	//displacement_block.block(0) = total_displacement;
-
-	//	//std::vector<std::string> solution_names4(dim, "Displacement");
-
-	//	//std::vector<std::string> solution_names5(1, "Blank_1");
-
-	//	//std::vector<std::string> solution_names6(dim * dim, "Blank_2");
-
-	//	//solution_names4.insert(solution_names4.end(), solution_names5.begin(), solution_names5.end());
-	//	//solution_names4.insert(solution_names4.end(), solution_names6.begin(), solution_names6.end());
-
-	//	//std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(dim, DataComponentInterpretation::component_is_part_of_vector);
-	//	DisplacementPostprocessor<dim> displacement_postprocessor;
-
-
-
-	//	data_out.add_data_vector(total_displacement, displacement_postprocessor);
-
-	//	PressurePostprocessor<dim> pressure_postprocessor;
-	//	data_out.add_data_vector(total_displacement, pressure_postprocessor);
-
-	//	std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
-	//	GridTools::get_subdomain_association(triangulation, partition_int);
-
-
-	//	data_out.build_patches(1);
-
-	//	DataOutBase::VtkFlags vtk_flags;
-	//	vtk_flags.compression_level = DataOutBase::VtkFlags::ZlibCompressionLevel::default_compression;
-	//	data_out.set_flags(vtk_flags);
-
-	//	std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
-	//	data_out.write_vtu(output);
-	//}
+	}
+	
 
 
 
@@ -2599,13 +2566,11 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 //		{
 //			solve_ssprk3();
 //		}
-		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
-			//output_results(solution);
+			output_results(momentum_solution, pressure_solution, def_grad_solution);
 			save_counter++;
 		}
-		//move_mesh_back();
 		std::swap(momentum_old_solution, momentum_solution);
 		std::swap(pressure_old_solution, pressure_solution);
 		std::swap(def_grad_old_solution, def_grad_solution);
