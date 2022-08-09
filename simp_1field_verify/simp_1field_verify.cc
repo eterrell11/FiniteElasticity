@@ -546,8 +546,8 @@ namespace NonlinearElasticity
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
-			values[0] = /*(std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
-			values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time)*/ BodyForce;
+			values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
+			values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
 		}
 		virtual void
 			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double & present_time)
@@ -601,12 +601,12 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	void
-		InitialMomentum<dim>::vector_value(const Point<dim>& /*p*/,
+		InitialMomentum<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values = 0;
-
+        values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+        values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
 	}
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
@@ -778,7 +778,7 @@ namespace NonlinearElasticity
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler,
-			0,
+			1,
 			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
 			fe.component_mask(Momentum));
@@ -1089,7 +1089,7 @@ namespace NonlinearElasticity
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler,
-			0,
+			1,
 			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
 			fe.component_mask(Momentum));
