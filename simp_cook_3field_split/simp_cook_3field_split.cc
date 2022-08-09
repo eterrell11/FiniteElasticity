@@ -485,7 +485,7 @@ namespace NonlinearElasticity
 		void		 assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum, Vector<double>& sol_n_plus_1_def_grad);
 		void		 assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure);
 		void         solve_ForwardEuler();
-//		void         solve_ssprk2();
+		void         solve_ssprk2();
 //		void         solve_ssprk3();
 		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		solve_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
@@ -497,9 +497,6 @@ namespace NonlinearElasticity
 
 		void update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus);
 
-
-		//void move_mesh();
-		//void move_mesh_back();
 
 		void setup_quadrature_point_history();
 
@@ -1569,37 +1566,37 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				}
 			}
 
-			for (const auto& face : cell->face_iterators())
-			{
+			//for (const auto& face : cell->face_iterators())
+			//{
 
-				face_temp_momentum = 0;
-				if (face->at_boundary())
-				{
-					fe_face_values_def_grad.reinit(cell, face);
-					fe_face_values_momentum.reinit(cell_momentum, face);
-					fe_face_values_momentum.get_function_values(sol_n_momentum, face_sol_vec);
+			//	face_temp_momentum = 0;
+			//	if (face->at_boundary())
+			//	{
+			//		fe_face_values_def_grad.reinit(cell, face);
+			//		fe_face_values_momentum.reinit(cell_momentum, face);
+			//		fe_face_values_momentum.get_function_values(sol_n_momentum, face_sol_vec);
 
-					for (const unsigned int q_point : fe_face_values_def_grad.quadrature_point_indices())
-					{
-						for (int i = 0; i < dim; i++) {
-							face_temp_momentum[i] = face_sol_vec[q_point](i);
-						}
+			//		for (const unsigned int q_point : fe_face_values_def_grad.quadrature_point_indices())
+			//		{
+			//			for (int i = 0; i < dim; i++) {
+			//				face_temp_momentum[i] = face_sol_vec[q_point](i);
+			//			}
 
-						for (const unsigned int i : fe_values_def_grad.dof_indices())
-						{
-							//if (face->boundary_id() == 5) {
-							cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
-								fe_face_values_def_grad[Def_Grad].value(i, q_point) * face_temp_momentum * fe_face_values_def_grad.normal_vector(q_point) *
-								fe_face_values_def_grad.JxW(q_point); // Deformation gradient face terms
-						//}
-						//else {
-						//	cell_rhs(i) +=  scalar_product(fe_face_values[Def_Grad].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
-						//		fe_face_values.JxW(q_point); // Deformation gradient face terms
-						//}
-						}
-					}
-				}
-			}
+			//			for (const unsigned int i : fe_values_def_grad.dof_indices())
+			//			{
+			//				//if (face->boundary_id() == 5) {
+			//				cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
+			//					fe_face_values_def_grad[Def_Grad].value(i, q_point) * face_temp_momentum * fe_face_values_def_grad.normal_vector(q_point) *
+			//					fe_face_values_def_grad.JxW(q_point); // Deformation gradient face terms
+			//			//}
+			//			//else {
+			//			//	cell_rhs(i) +=  scalar_product(fe_face_values[Def_Grad].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
+			//			//		fe_face_values.JxW(q_point); // Deformation gradient face terms
+			//			//}
+			//			}
+			//		}
+			//	}
+			//}
 
 
 			cell->get_dof_indices(local_dof_indices);
@@ -1908,59 +1905,57 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
-					cell_rhs(i) += -scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum *
-						Jf) *
+					cell_rhs(i) += -scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum ) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
 			}
-			for (const auto& face : cell->face_iterators())
-			{
+			//for (const auto& face : cell->face_iterators())
+			//{
 
-				if (face->at_boundary())
-				{
+			//	if (face->at_boundary())
+			//	{
 
-					fe_face_values_pressure.reinit(cell, face);
-					fe_face_values_momentum.reinit(cell_momentum, face);
-					fe_face_values_def_grad.reinit(cell_def_grad, face);
-					fe_face_values_momentum.get_function_values(sol_n_plus_1_momentum, face_sol_vec_momentum);
-					fe_face_values_def_grad.get_function_values(sol_n_plus_1_def_grad, face_sol_vec_def_grad);
+			//		fe_face_values_pressure.reinit(cell, face);
+			//		fe_face_values_momentum.reinit(cell_momentum, face);
+			//		fe_face_values_def_grad.reinit(cell_def_grad, face);
+			//		fe_face_values_momentum.get_function_values(sol_n_plus_1_momentum, face_sol_vec_momentum);
+			//		fe_face_values_def_grad.get_function_values(sol_n_plus_1_def_grad, face_sol_vec_def_grad);
 
-					if (face->boundary_id() == 5) {
-						for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
-						{
-							face_temp_momentum = 0;
-							face_FF = 0;
-							Jf = 0;
-							face_HH = 0;
+			//		if (face->boundary_id() == 5) {
+			//			for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
+			//			{
+			//				face_temp_momentum = 0;
+			//				face_FF = 0;
+			//				Jf = 0;
+			//				face_HH = 0;
 
-							for (int i = 0; i < dim; i++) {
-								face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);							}
-							sol_counter = 0;
-							for (int i = 0; i < dim; i++) {
-								for (int j = 0; j < dim; j++) {
-									face_FF[i][j] = face_sol_vec_def_grad[q_point](sol_counter);
-									++sol_counter;
-								}
-							}
+			//				for (int i = 0; i < dim; i++) {
+			//					face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);							}
+			//				sol_counter = 0;
+			//				for (int i = 0; i < dim; i++) {
+			//					for (int j = 0; j < dim; j++) {
+			//						face_FF[i][j] = face_sol_vec_def_grad[q_point](sol_counter);
+			//						++sol_counter;
+			//					}
+			//				}
 
-							Jf = get_Jf(face_FF);
-							face_HH = get_HH(face_FF, Jf);
-							//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
-							for (unsigned int i = 0; i < dofs_per_cell; ++i)
-							{
-								cell_rhs(i) += fe_face_values_pressure[Pressure].value(i, q_point) *
-									transpose(face_HH) *
-									face_temp_momentum *
-									Jf *
-									fe_face_values_pressure.normal_vector(q_point) *
-									fe_face_values_pressure.JxW(q_point);
-							}
+			//				Jf = get_Jf(face_FF);
+			//				face_HH = get_HH(face_FF, Jf);
+			//				//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
+			//				for (unsigned int i = 0; i < dofs_per_cell; ++i)
+			//				{
+			//					cell_rhs(i) += fe_face_values_pressure[Pressure].value(i, q_point) *
+			//						transpose(face_HH) *
+			//						face_temp_momentum *
+			//						fe_face_values_pressure.normal_vector(q_point) *
+			//						fe_face_values_pressure.JxW(q_point);
+			//				}
 
-						}
-					}
-				}
-			}
+			//			}
+			//		}
+			//	}
+			//}
 
 			cell->get_dof_indices(local_dof_indices);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
@@ -2086,50 +2081,61 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	}
 
 
-//	template<int dim>
-//	void Incompressible<dim>::solve_ssprk2()
-//	{
-//		assemble_system(old_solution);
-//		assemble_def_grad_rhs(old_solution);
-//		solve_F(old_solution, int_solution);
-//		cout << "Successfully solved for FF" << std::endl;
-//		assemble_momentum_int_rhs(old_solution);
-//		solve_momentum_int(old_solution, int_solution);
-//		cout << "Successfully solved for momentum int" << std::endl;
-//		assemble_pressure_rhs(int_solution);
-//		solve_p(old_solution, int_solution);
-//		cout << "Successfully solved for pressure" << std::endl;
-//
-//		assemble_momentum_rhs(old_solution, int_solution);
-//		solve_momentum(old_solution, int_solution);
-//		cout << "Successfully solved for momentum" << std::endl;
-//
-//		update_displacement(old_solution, 0.0, solution, 1.0);
-//		cout << std::endl;
-//
-//
-//		assemble_system(int_solution);
-//		assemble_def_grad_rhs(int_solution);
-//		solve_F(int_solution, solution);
-//		cout << "Successfully solved for FF" << std::endl;
-//
-//		assemble_momentum_int_rhs(int_solution);
-//		solve_momentum_int(int_solution, solution);
-//		cout << "Successfully solved for momentum int" << std::endl;
-//
-//		assemble_pressure_rhs(solution);
-//		solve_p(int_solution, solution);
-//		cout << "Successfully solved for pressure" << std::endl;
-//
-//		assemble_momentum_rhs(int_solution, solution);
-//		solve_momentum(int_solution, solution);
-//		cout << "Successfully solved for momentum" << std::endl;
-//
-//		solution = 0.5 * old_solution + 0.5 * solution;
-//		update_displacement(old_solution, 0.5, solution, 0.5);
-//		cout << std::endl;
-//
-//	}
+	template<int dim>
+	void Incompressible<dim>::solve_ssprk2()
+	{
+	assemble_def_grad_rhs(momentum_old_solution);
+	cout << "Norm of def grad rhs : " << def_grad_rhs.l2_norm() << std::endl;
+	cout << "Solving for def grad" << std::endl;
+	solve_F(def_grad_old_solution, def_grad_int_solution);
+	cout << "Assembling intermediate momentum rhs" << std::endl;
+	assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
+	cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	cout << "Solving for intermediate momentum" << std::endl;
+	solve_momentum_int(momentum_old_solution, momentum_int_solution);
+	cout << "Assembling pressure rhs" << std::endl;
+	assemble_pressure_rhs(momentum_int_solution, def_grad_old_solution);
+	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
+	cout << "Solving for pressure" << std::endl;
+	solve_p(pressure_old_solution, pressure_int_solution);
+	cout << "Assembling momentum rhs" << std::endl;
+	assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
+	cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	cout << "Solving for updated momentum" << std::endl;
+	solve_momentum(momentum_old_solution, momentum_int_solution);
+	cout << "Updating displacement" << std::endl;
+	update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
+	cout << std::endl;
+
+	assemble_pressure_Lap(def_grad_int_solution);
+	assemble_def_grad_rhs(momentum_int_solution);
+	cout << "Norm of def grad rhs : " << def_grad_rhs.l2_norm() << std::endl;
+	cout << "Solving for def grad" << std::endl;
+	solve_F(def_grad_int_solution, def_grad_solution);
+	cout << "Assembling intermediate momentum rhs" << std::endl;
+	assemble_momentum_int_rhs(def_grad_int_solution, pressure_int_solution);
+	cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	cout << "Solving for intermediate momentum" << std::endl;
+	solve_momentum_int(momentum_int_solution, momentum_solution);
+	cout << "Assembling pressure rhs" << std::endl;
+	assemble_pressure_rhs(momentum_solution, def_grad_int_solution);
+	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
+	cout << "Solving for pressure" << std::endl;
+	solve_p(pressure_int_solution, pressure_solution);
+	cout << "Assembling momentum rhs" << std::endl;
+	assemble_momentum_rhs(pressure_int_solution, pressure_solution);
+	cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	cout << "Solving for updated momentum" << std::endl;
+	solve_momentum(momentum_int_solution, momentum_solution);
+	cout << "Updating displacement" << std::endl;
+
+	momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
+	def_grad_solution = 0.5 * def_grad_old_solution + 0.5 * def_grad_solution;
+	pressure_solution = 0.5 * pressure_old_solution + 0.5 * pressure_solution;
+
+	update_displacement(momentum_old_solution, 0.5, momentum_solution, 0.5);
+	cout << std::endl;
+	}
 //
 //	//Assembles system, solves system, updates quad data.
 //	template<int dim>
@@ -2557,10 +2563,10 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		{
 			solve_ForwardEuler();
 		}
-//		else if (parameters.rk_order == 2)
-//		{
-//			solve_ssprk2();
-//		}
+		else if (parameters.rk_order == 2)
+		{
+			solve_ssprk2();
+		}
 //		else if (parameters.rk_order == 3)
 //		{
 //			solve_ssprk3();
