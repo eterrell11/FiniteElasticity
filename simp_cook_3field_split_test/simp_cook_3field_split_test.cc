@@ -1421,7 +1421,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
             //FF += alpha * (real_FF - FF);
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
-			HH = get_HH(FF, Jf);
+            HH = unit_symmetric_tensor<dim>();
             //real_HH = get_HH(real_FF, real_Jf);
 
             //cout << "q_point momentum : " << temp_momentum << std::endl;
