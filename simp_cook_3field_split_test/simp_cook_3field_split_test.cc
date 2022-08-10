@@ -2414,7 +2414,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 	//Spits out solution into vectors then into .vtks
 	template<int dim> 
-	void Incompressible<dim>::(Vector<double>& momentum_solution,
+	void Incompressible<dim>::output_results(Vector<double>& momentum_solution,
 		Vector<double>& pressure_solution,
 		Vector<double>& def_grad_solution) const
 	{
