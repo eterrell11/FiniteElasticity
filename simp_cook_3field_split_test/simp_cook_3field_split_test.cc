@@ -615,7 +615,7 @@ namespace NonlinearElasticity
 				for (unsigned int d = 0; d < dim; ++d)
 					for (unsigned int e = 0; e < dim; ++e)
 						computed_quantities[p][Tensor<2, dim>::component_to_unrolled_index(TableIndices<2>(d, e))]
-						= I[d][e] + input_data.solution_gradients[p][d][e];
+						= input_data.solution_gradients[p][d][e];
 			}
 		}
 	};
@@ -725,7 +725,7 @@ namespace NonlinearElasticity
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[dim - 1] = TractionMagnitude;
+			values[dim - 1] = 0;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
 		{
@@ -813,7 +813,7 @@ namespace NonlinearElasticity
 	template<int dim> // Constructor for the main class
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
-		, mapping_simplex(FE_SimplexP<dim>(parameters.order))
+		, mapping_simplex(FE_SimplexP<dim>(parameters.order+1))
 		, dof_handler_momentum(triangulation)
 		, dof_handler_pressure(triangulation)
 		, dof_handler_def_grad(triangulation)
@@ -978,11 +978,8 @@ namespace NonlinearElasticity
 	{
 
 		dof_handler_momentum.distribute_dofs(fe_momentum);
-        DoFRenumbering::boost::Cuthill_McKee(dof_handler_momentum);
         dof_handler_def_grad.distribute_dofs(fe_def_grad);
-        DoFRenumbering::boost::Cuthill_McKee(dof_handler_def_grad);
         dof_handler_pressure.distribute_dofs(fe_pressure);
-        DoFRenumbering::boost::Cuthill_McKee(dof_handler_pressure);
 
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
@@ -1026,7 +1023,7 @@ namespace NonlinearElasticity
 
 
 //DYNAMIC SPARSITY PATTERNS
-		DynamicSparsityPattern dsp_momentum_constrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
+		DynamicSparsityPattern dsp_momentum_constrained(dof_handler_momentum.n_dofs());
 		DoFTools::make_sparsity_pattern(dof_handler_momentum,
 			dsp_momentum_constrained,
 			homogeneous_constraints_momentum,
@@ -1034,7 +1031,7 @@ namespace NonlinearElasticity
 		constrained_sparsity_pattern_momentum.copy_from(dsp_momentum_constrained);
 		constrained_mass_matrix_momentum.reinit(constrained_sparsity_pattern_momentum);
 
-		DynamicSparsityPattern dsp_momentum_unconstrained(dof_handler_momentum.n_dofs(), dof_handler_momentum.n_dofs());
+		DynamicSparsityPattern dsp_momentum_unconstrained(dof_handler_momentum.n_dofs());
 		DoFTools::make_sparsity_pattern(dof_handler_momentum, dsp_momentum_unconstrained);
 		unconstrained_sparsity_pattern_momentum.copy_from(dsp_momentum_unconstrained);
 		unconstrained_mass_matrix_momentum.reinit(unconstrained_sparsity_pattern_momentum);
@@ -1147,10 +1144,10 @@ namespace NonlinearElasticity
 					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						cell_mass_matrix(i, j) +=
-							fe_val_Momentum_i * //Momentum terms
-							fe_values[Momentum].value(j, q_point) *
-                        fe_values.JxW(q_point);
+                        cell_mass_matrix(i, j) +=
+                            fe_val_Momentum_i * //Momentum terms
+                            fe_values[Momentum].value(j, q_point) *
+                            fe_values.JxW(q_point);
 					}
 
 				}
@@ -1999,26 +1996,12 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	template<int dim>
 	void Incompressible<dim>::solve_ForwardEuler()
 	{
-		cout << "Assembling def grad rhs" << std::endl;
 		assemble_def_grad_rhs(momentum_old_solution);
-		cout << "Norm of def grad rhs : " << def_grad_rhs.l2_norm() << std::endl;
-		cout << "Solving for def grad" << std::endl;
 		solve_F(def_grad_old_solution, def_grad_solution);
-		cout << "Assembling intermediate momentum rhs" << std::endl;
 		assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
-		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for intermediate momentum" << std::endl;
 		solve_momentum_int(momentum_old_solution, momentum_solution);
-		cout << "Assembling pressure rhs" << std::endl;
 		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
-		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
-		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_old_solution, pressure_solution);
-		cout << "Assembling momentum rhs" << std::endl;
-//		assemble_momentum_rhs(pressure_old_solution, pressure_solution);
-//		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-//		cout << "Solving for updated momentum" << std::endl;
-//		solve_momentum(momentum_old_solution, momentum_solution);
 		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_solution, 1.0);
 		cout << std::endl;
@@ -2043,11 +2026,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
 	cout << "Solving for pressure" << std::endl;
 	solve_p(pressure_old_solution, pressure_int_solution);
-	cout << "Assembling momentum rhs" << std::endl;
-	//assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
-	//cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-	//cout << "Solving for updated momentum" << std::endl;
-	//solve_momentum(momentum_old_solution, momentum_int_solution);
 	cout << "Updating displacement" << std::endl;
 	update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
 	cout << std::endl;
@@ -2067,11 +2045,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
 	cout << "Solving for pressure" << std::endl;
 	solve_p(pressure_int_solution, pressure_solution);
-	cout << "Assembling momentum rhs" << std::endl;
-	//assemble_momentum_rhs(pressure_int_solution, pressure_solution);
-	//cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-	//cout << "Solving for updated momentum" << std::endl;
-	//solve_momentum(momentum_int_solution, momentum_solution);
 	cout << "Updating displacement" << std::endl;
 
 	momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
@@ -2229,7 +2202,8 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 		AffineConstraints<double> u_constraints;
-		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler_momentum,
+		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
+                                                         dof_handler_momentum,
 			1,
 			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
@@ -2419,6 +2393,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		Vector<double>& pressure_solution,
 		Vector<double>& def_grad_solution) const
 	{
+        
 		const FESystem<dim> joint_fe(fe_momentum, 1, fe_momentum, 1, fe_pressure, 1, fe_def_grad, 1);
 		DoFHandler<dim> joint_dof_handler(triangulation);
 		joint_dof_handler.distribute_dofs(joint_fe);
@@ -2492,6 +2467,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		data_out.build_patches(1);
 		std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
 		data_out.write_vtu(output);
+        
 
 	}
 	
@@ -2543,16 +2519,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	void Incompressible<dim>::update_displacement(const Vector<double>& sol_n_momentum, const double& coeff_n, const Vector<double>& sol_n_plus_1_momentum, const double& coeff_n_plus)
 	{
 		auto old_momentum = sol_n_momentum;
-
-
-
 		auto momentum = sol_n_plus_1_momentum;
-
-		//Vector<double> momentum_vector = momentum;
-
-		//cout << "Number of dofs : " << dof_handler.n_dofs() << std::endl;
-		//cout << "size of displacement : " << total_displacement.size() << std::endl;
-		//cout << "size of momentum : " << old_momentum.size() << std::endl;
 
 		if (coeff_n != 0.0) {
 			total_displacement -= incremental_displacement;
