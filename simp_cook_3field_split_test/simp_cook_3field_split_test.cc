@@ -1996,12 +1996,12 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	template<int dim>
 	void Incompressible<dim>::solve_ForwardEuler()
 	{
-		assemble_def_grad_rhs(momentum_old_solution);
-		solve_F(def_grad_old_solution, def_grad_solution);
+//		assemble_def_grad_rhs(momentum_old_solution);
+//		solve_F(def_grad_old_solution, def_grad_solution);
 		assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
 		solve_momentum_int(momentum_old_solution, momentum_solution);
-		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
-		solve_p(pressure_old_solution, pressure_solution);
+//		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
+//		solve_p(pressure_old_solution, pressure_solution);
 		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_solution, 1.0);
 		cout << std::endl;
