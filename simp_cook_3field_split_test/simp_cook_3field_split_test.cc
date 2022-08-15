@@ -441,28 +441,6 @@ namespace NonlinearElasticity
 
 
 
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 2> get_rotation_matrix(const std::vector<Tensor<1, 2>>& grad_u)
-	{
-		const double curl = (grad_u[1][0] - grad_u[0][1]);
-		const double angle = std::atan(curl);
-		return Physics::Transformations::Rotations::rotation_matrix_2d(-angle);
-	}
-
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 3> get_rotation_matrix(const std::vector<Tensor<1, 3>>& grad_u)
-	{
-		const Point<3> curl(grad_u[2][1] - grad_u[1][2], grad_u[0][2] - grad_u[2][0], grad_u[1][0] - grad_u[0][1]);
-		const double tan_angle = std::sqrt(curl * curl);
-		const double angle = std::atan(tan_angle);
-		const Point<3> axis = curl / tan_angle;
-		return Physics::Transformations::Rotations::rotation_matrix_3d(axis,
-			-angle);
-	}
-
-
 
 	template <int dim>
 	class Incompressible
@@ -695,89 +673,87 @@ namespace NonlinearElasticity
 
 	// Creates RHS forcing function that pushes tissue downward depending on its distance from the y-z plane
 	// i.e. "downward" gravitational force applied everywhere except at bottom of hemisphere
-	template<int dim>
-	class RightHandSide : public Function<dim>
-	{
-	public:
-		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& BodyForce, double& present_time)
+template<int dim>
+class RightHandSide : public Function<dim>
+{
+public:
+    virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& BodyForce, double& present_time)
 
-		{
-			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
-			Assert(dim >= 2, ExcInternalError());
-			values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
-			values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
+    {
+        //Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+        Assert(dim >= 2, ExcInternalError());
+        values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
+        values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI * numbers::PI * std::sin(numbers::PI * present_time);
+    }
+    virtual void
+        rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double & present_time)
+    {
+        const unsigned int n_points = points.size();
+        Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+        for (unsigned int p = 0; p < n_points; ++p)
+            RightHandSide<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time);
+    }
+};
 
-		}
-		virtual void
-			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time)
-		{
-			const unsigned int n_points = points.size();
-			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-			for (unsigned int p = 0; p < n_points; ++p)
-				RightHandSide<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time);
-		}
-	};
-
-	template<int dim>
-	class TractionVector : public Function<dim>
-	{
-	public:
-		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude)
-		{
-			Assert(dim >= 2, ExcInternalError());
-			values[dim - 1] = 0;
-		}
-		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
-		{
-			const unsigned int n_points = points.size();
-			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-			for (unsigned int p = 0; p < n_points; ++p)
-				TractionVector<dim>::traction_vector_value(points[p], value_list[p], TractionMagnitude);
-		}
-	};
-
+template<int dim>
+class TractionVector : public Function<dim>
+{
+public:
+    virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude)
+    {
+        Assert(dim >= 2, ExcInternalError());
+        values[dim - 1] = TractionMagnitude;
+    }
+    virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
+    {
+        const unsigned int n_points = points.size();
+        Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+        for (unsigned int p = 0; p < n_points; ++p)
+            TractionVector<dim>::traction_vector_value(points[p], value_list[p], TractionMagnitude);
+    }
+};
 
 
-	template <int dim>
-	class InitialMomentum : public Function<dim>
-	{
-	public:
-		InitialMomentum(double& InitialVelocity);
-		virtual void vector_value(const Point<dim>& p,
-			Vector<double>& values) const override;
-		virtual void
-			vector_value_list(const std::vector<Point<dim>>& points,
-				std::vector<Vector<double>>& value_list) const override;
-	private:
-		const double velocity;
-	};
 
-	template <int dim>
-	InitialMomentum<dim>::InitialMomentum(double& InitialVelocity)
-		: Function<dim>(dim)
-		, velocity(InitialVelocity)
-	{}
+template <int dim>
+class InitialMomentum : public Function<dim>
+{
+public:
+    InitialMomentum(double& InitialVelocity);
+    virtual void vector_value(const Point<dim>& p,
+        Vector<double>& values) const override;
+    virtual void
+        vector_value_list(const std::vector<Point<dim>>& points,
+            std::vector<Vector<double>>& value_list) const override;
+private:
+    const double velocity;
+};
 
-	template <int dim>
-	void
-		InitialMomentum<dim>::vector_value(const Point<dim>& p,
-			Vector<double>& values) const
-	{
-		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
-		values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+template <int dim>
+InitialMomentum<dim>::InitialMomentum(double& InitialVelocity)
+    : Function<dim>(dim)
+    , velocity(InitialVelocity)
+{}
 
-	}
-	template <int dim>
-	void InitialMomentum<dim>::vector_value_list(
-		const std::vector<Point<dim>>& points,
-		std::vector<Vector<double>>& value_list) const
-	{
-		const unsigned int n_points = points.size();
-		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-		for (unsigned int p = 0; p < n_points; ++p)
-			InitialMomentum<dim>::vector_value(points[p], value_list[p]);
-	}
+template <int dim>
+void
+    InitialMomentum<dim>::vector_value(const Point<dim>& p,
+        Vector<double>& values) const
+{
+    Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
+    values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+    values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+}
+template <int dim>
+void InitialMomentum<dim>::vector_value_list(
+    const std::vector<Point<dim>>& points,
+    std::vector<Vector<double>>& value_list) const
+{
+    const unsigned int n_points = points.size();
+    Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+    for (unsigned int p = 0; p < n_points; ++p)
+        InitialMomentum<dim>::vector_value(points[p], value_list[p]);
+}
 
 	template <int dim>
 	class Def_Grad_bound : public Function<dim>
@@ -820,12 +796,12 @@ namespace NonlinearElasticity
 		, fe_momentum(FE_SimplexP<dim>(parameters.order+1),dim)
 		, fe_pressure(FE_SimplexP<dim>(parameters.order),1)
 		, fe_def_grad(FE_SimplexP<dim>(parameters.order),dim*dim)
-		, quadrature_formula_momentum(parameters.order + 3)
-		, quadrature_formula_pressure(parameters.order + 3)
-		, quadrature_formula_def_grad(parameters.order + 3)
+		, quadrature_formula_momentum(parameters.order + 2)
+		, quadrature_formula_pressure(parameters.order + 1)
+		, quadrature_formula_def_grad(parameters.order + 1)
 		, face_quadrature_formula_momentum(parameters.order + 2)
-		, face_quadrature_formula_pressure(parameters.order + 2)
-		, face_quadrature_formula_def_grad(parameters.order + 2)
+		, face_quadrature_formula_pressure(parameters.order + 1)
+		, face_quadrature_formula_def_grad(parameters.order + 1)
 		, timestep_no(0)
 	{}
 
@@ -869,8 +845,8 @@ namespace NonlinearElasticity
             unconstrained_it_matrix_pressure = 0;
             constrained_it_matrix_pressure = 0;
 
-            assemble_pressure_Lap(def_grad_old_solution);
-			cout << "Lap matrix assembled" << std::endl;
+            //assemble_pressure_Lap(def_grad_old_solution);
+			//cout << "Lap matrix assembled" << std::endl;
 			unconstrained_it_matrix_pressure.copy_from(unconstrained_mass_matrix_pressure);
 			unconstrained_it_matrix_pressure.add(1.0, unconstrained_Lap_matrix_pressure);	
 			constrained_it_matrix_pressure.copy_from(constrained_mass_matrix_pressure);
@@ -1101,7 +1077,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::assemble_momentum_mass()
 	{
 
-        FEValuesExtractors::Vector Momentum(0);
+        const FEValuesExtractors::Vector Momentum(0);
 
         constrained_mass_matrix_momentum = 0;
 
@@ -1152,9 +1128,6 @@ namespace NonlinearElasticity
 
 				}
 			}
-
-
-
 			cell->get_dof_indices(local_dof_indices);
 			homogeneous_constraints_momentum.distribute_local_to_global(
 				cell_mass_matrix,
@@ -1605,24 +1578,23 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	{
 		momentum_rhs = 0;
 
-        FEValuesExtractors::Vector Momentum(0);
 
-		FEValues<dim> fe_values_momentum(mapping_simplex,
-			fe_momentum,
-			quadrature_formula_momentum,
-			update_values |
-			update_gradients |
-			update_quadrature_points |
-			update_JxW_values);
+        FEValues<dim> fe_values_momentum(mapping_simplex,
+            fe_momentum,
+            quadrature_formula_momentum,
+            update_values |
+            update_gradients |
+            update_quadrature_points |
+            update_JxW_values);
 
-
-		FEFaceValues<dim> fe_face_values_momentum(mapping_simplex,
-			fe_momentum,
-			face_quadrature_formula_momentum,
-			update_values |
-			update_normal_vectors |
-			update_quadrature_points |
-			update_JxW_values);
+        FEFaceValues<dim> fe_face_values_momentum(mapping_simplex,
+            fe_momentum,
+            face_quadrature_formula_momentum,
+            update_values |
+            update_gradients |
+            update_normal_vectors |
+            update_quadrature_points |
+            update_JxW_values);
 
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula_momentum.size();
@@ -1644,19 +1616,15 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		TractionVector<dim> traction_vector;
 		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
+        
+        const FEValuesExtractors::Vector Momentum(0);
+
 
 		Tensor<2, dim> FF;
 		Tensor<2, dim> pk1;
         double temp_pressure;
 		Tensor<2, dim> HH;
 		double Jf;
-
-
-
-		double alpha = parameters.alpha;
-		double beta = parameters.beta;
-		double tau_FFp = parameters.tau_FFp * present_timestep;
-		double tau_pJ = parameters.tau_pJ * present_timestep;
 
 
 		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
@@ -1672,10 +1640,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			fe_values_momentum.reinit(cell);
 
 			right_hand_side.rhs_vector_value_list(fe_values_momentum.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time);
-
-
-			//fe_values.get_function_values(residual, residual_vec);
-            
+            fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 
 
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
@@ -1683,37 +1648,16 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
                 
 				
 
-				fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 				FF = get_real_FF(displacement_grads[q_point]);
 				//pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
 
 
 				for (unsigned int i : fe_values_momentum.dof_indices())
 				{
-					cell_rhs(i) += (-scalar_product(fe_values_momentum[Momentum].gradient(i, q_point), FF) +
-						fe_values_momentum[Momentum].value(i, q_point) * rhs_values[q_point]) * fe_values_momentum.JxW(q_point);
+                    cell_rhs(i) += (-scalar_product(fe_values_momentum[Momentum].gradient(i, q_point), FF) +
+                        fe_values_momentum[Momentum].value(i, q_point) * rhs_values[q_point]) * fe_values_momentum.JxW(q_point);
 				}
 			}
-//			for (const auto& face : cell->face_iterators())
-//			{
-//				if (face->at_boundary())
-//				{
-//					fe_face_values_momentum.reinit(cell, face);
-//					traction_vector.traction_vector_value_list(fe_face_values_momentum.get_quadrature_points(), traction_values, parameters.TractionMagnitude);
-//
-//					for (const unsigned int q_point : fe_face_values_momentum.quadrature_point_indices())
-//					{
-//						for (const unsigned int i : fe_face_values_momentum.dof_indices())
-//						{
-//							if (face->boundary_id() == 5) {
-//								cell_rhs(i) += fe_face_values_momentum[Momentum].value(i, q_point) * traction_values[q_point] * fe_face_values_momentum.JxW(q_point);
-//
-//							}
-//
-//						}
-//					}
-//				}
-//			}
 
 			cell->get_dof_indices(local_dof_indices);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
@@ -2184,14 +2128,9 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	void Incompressible<dim>::solve_momentum_int(Vector<double>& momentum_sol_n, Vector<double>& momentum_sol_n_plus_1)
 	{
 
-
-		//residual.block(0) = 0;
-		FEValuesExtractors::Vector Momentum(0);
-
         SparseMatrix<double>& un_M = unconstrained_mass_matrix_momentum;
 		const auto op_un_M = linear_operator(un_M);
-		Vector<double> un_rhs = momentum_rhs;
-
+        Vector<double> un_rhs = momentum_rhs;
 		Vector<double> old_sol = momentum_sol_n;
 
 		un_rhs *= present_timestep;
@@ -2199,15 +2138,16 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		AffineConstraints<double> all_constraints;
 
+        FEValuesExtractors::Vector Momentum(0);
 
 
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
                                                          dof_handler_momentum,
-			1,
-			Functions::ZeroFunction<dim>(dim),
-			u_constraints,
-			fe_momentum.component_mask(Momentum));
+                                                         1,
+                                                         Functions::ZeroFunction<dim>(dim),
+                                                         u_constraints,
+                                                         fe_momentum.component_mask(Momentum));
 		u_constraints.close();
 
 		all_constraints.merge(u_constraints);
