@@ -517,12 +517,12 @@ namespace NonlinearElasticity
         AffineConstraints<double> homogeneous_constraints_def_grad;
         AffineConstraints<double> homogeneous_constraints_pressure;
 
-		const QGauss<dim> quadrature_formula_momentum;
-		const QGauss<dim - 1> face_quadrature_formula_momentum;
-		const QGauss<dim> quadrature_formula_def_grad;
-		const QGauss<dim - 1> face_quadrature_formula_def_grad;
-		const QGauss<dim> quadrature_formula_pressure;
-		const QGauss<dim - 1> face_quadrature_formula_pressure;
+		const QGaussSimplex<dim> quadrature_formula_momentum;
+		const QGaussSimplex<dim - 1> face_quadrature_formula_momentum;
+		const QGaussSimplex<dim> quadrature_formula_def_grad;
+		const QGaussSimplex<dim - 1> face_quadrature_formula_def_grad;
+		const QGaussSimplex<dim> quadrature_formula_pressure;
+		const QGaussSimplex<dim - 1> face_quadrature_formula_pressure;
 
 		std::vector<PointHistory<dim>> quadrature_point_history;
 
