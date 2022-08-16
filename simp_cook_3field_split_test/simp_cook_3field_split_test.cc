@@ -795,12 +795,12 @@ void InitialMomentum<dim>::vector_value_list(
 		, dof_handler_def_grad(triangulation)
 		, fe_momentum(FE_SimplexP<dim>(parameters.order+1),dim)
 		, fe_pressure(FE_SimplexP<dim>(parameters.order),1)
-		, fe_def_grad(FE_SimplexP<dim>(parameters.order),dim*dim)
+		, fe_def_grad(FE_SimplexP<dim>(parameters.order+1),dim*dim)
 		, quadrature_formula_momentum(parameters.order + 3)
-		, quadrature_formula_pressure(parameters.order + 1)
-		, quadrature_formula_def_grad(parameters.order + 1)
+		, quadrature_formula_pressure(parameters.order + 3)
+		, quadrature_formula_def_grad(parameters.order + 3)
 		, face_quadrature_formula_momentum(parameters.order + 3)
-		, face_quadrature_formula_pressure(parameters.order + 1)
+		, face_quadrature_formula_pressure(parameters.order + 2)
 		, face_quadrature_formula_def_grad(parameters.order + 1)
 		, timestep_no(0)
 	{}
@@ -845,8 +845,8 @@ void InitialMomentum<dim>::vector_value_list(
             unconstrained_it_matrix_pressure = 0;
             constrained_it_matrix_pressure = 0;
 
-            //assemble_pressure_Lap(def_grad_old_solution);
-			//cout << "Lap matrix assembled" << std::endl;
+            assemble_pressure_Lap(def_grad_old_solution);
+			cout << "Lap matrix assembled" << std::endl;
 			unconstrained_it_matrix_pressure.copy_from(unconstrained_mass_matrix_pressure);
 			unconstrained_it_matrix_pressure.add(1.0, unconstrained_Lap_matrix_pressure);	
 			constrained_it_matrix_pressure.copy_from(constrained_mass_matrix_pressure);
@@ -1940,12 +1940,12 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 	template<int dim>
 	void Incompressible<dim>::solve_ForwardEuler()
 	{
-//		assemble_def_grad_rhs(momentum_old_solution);
-//		solve_F(def_grad_old_solution, def_grad_solution);
+		assemble_def_grad_rhs(momentum_old_solution);
+		solve_F(def_grad_old_solution, def_grad_solution);
 		assemble_momentum_int_rhs(def_grad_old_solution, pressure_old_solution);
 		solve_momentum_int(momentum_old_solution, momentum_solution);
-//		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
-//		solve_p(pressure_old_solution, pressure_solution);
+		assemble_pressure_rhs(momentum_solution, def_grad_old_solution);
+		solve_p(pressure_old_solution, pressure_solution);
 		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_solution, 1.0);
 		cout << std::endl;
@@ -2080,8 +2080,8 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		AffineConstraints<double> F_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
 			dof_handler_def_grad,
-			2,
-			Def_Grad_bound<dim>(),
+			1,
+			Functions::ZeroFunction<dim>(dim*dim),
 			F_constraints,
 			fe_def_grad.component_mask(Def_Grad));
 		F_constraints.close();
