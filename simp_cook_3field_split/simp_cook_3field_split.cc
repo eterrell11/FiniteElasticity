@@ -1425,6 +1425,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
 			HH = get_HH(FF, Jf);
+            HH = local_quadrature_points_history[q_point].HH_store;
             //real_HH = get_HH(real_FF, real_Jf);
 
             //cout << "q_point momentum : " << temp_momentum << std::endl;
@@ -1528,7 +1529,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 
 
-
+        Tensor<2, dim> II = unit_symmetric_tensor<dim>();
 
 		Tensor<1, dim> temp_momentum;
 		Tensor<1, dim> face_temp_momentum;
@@ -1585,9 +1586,9 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 						for (const unsigned int i : fe_values_def_grad.dof_indices())
 						{
 							//if (face->boundary_id() == 5) {
-							cell_rhs(i) +=   /*scalar_product(fe_face_values[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values.normal_vector(q_point)))*/
-								fe_face_values_def_grad[Def_Grad].value(i, q_point) * face_temp_momentum * fe_face_values_def_grad.normal_vector(q_point) *
-								fe_face_values_def_grad.JxW(q_point); // Deformation gradient face terms
+							cell_rhs(i) +=   scalar_product(fe_face_values_def_grad[Def_Grad].value(i, q_point), contract<2, 0>(outer_product(temp_momentum, II), fe_face_values_def_grad.normal_vector(q_point)))
+								/*fe_face_values_def_grad[Def_Grad].value(i, q_point) * face_temp_momentum * fe_face_values_def_grad.normal_vector(q_point) *
+								fe_face_values_def_grad.JxW(q_point)*/; // Deformation gradient face terms
 						//}
 						//else {
 						//	cell_rhs(i) +=  scalar_product(fe_face_values[Def_Grad].value(i, q_point), outer_product(temp_momentum,II)*fe_face_values.normal_vector(q_point)) *
@@ -1670,20 +1671,14 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 		TractionVector<dim> traction_vector;
 		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
 
+        std::vector<std::vector<Tensor<1,dim>>> displacement_grads(quadrature_formula_momentum.size(), std::vector<Tensor<1,dim>>(dim));
+        
 		Tensor<2, dim> FF;
-		//Tensor<2, dim> FF_residual;
+        Tensor<2, dim> HH;
+        double Jf;
 		Tensor<2, dim> pk1;
         double temp_pressure;
 
-		//double temp_pressure_residual;
-		Tensor<2, dim> HH;
-		double Jf;
-
-
-		double alpha = parameters.alpha;
-		double beta = parameters.beta;
-		double tau_FFp = parameters.tau_FFp * present_timestep;
-		double tau_pJ = parameters.tau_pJ * present_timestep;
 
 		auto cell_pressure = dof_handler_pressure.begin_active();
 		auto cell_def_grad = dof_handler_def_grad.begin_active();
@@ -1706,6 +1701,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			fe_values_pressure.reinit(cell_pressure);
 			fe_values_def_grad.reinit(cell_def_grad);
 
+            fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 			right_hand_side.rhs_vector_value_list(fe_values_momentum.get_quadrature_points(), rhs_values, parameters.BodyForce);
 
 
@@ -1722,22 +1718,24 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 				
 				temp_pressure = sol_vec_pressure[q_point];
 				//temp_pressure_residual = residual_vec[q_point](sol_counter);
-				double sol_counter = 0;
-				for (unsigned int i = 0; i < dim; i++) {
-					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
-						FF[i][j] = sol_vec_def_grad[q_point](sol_counter);
-						//FF_residual[i][j] = residual_vec[q_point](sol_counter);
-						sol_counter++;
-
-					}
-				}
-
+//				double sol_counter = 0;
+//				for (unsigned int i = 0; i < dim; i++) {
+//					for (unsigned int j = 0; j < dim; j++) { // Extracts deformation gradient values, puts them in tensor form
+//						FF[i][j] = sol_vec_def_grad[q_point](sol_counter);
+//						//FF_residual[i][j] = residual_vec[q_point](sol_counter);
+//						sol_counter++;
+//
+//					}
+//				}
+                
+                FF = get_real_FF(displacement_grads[q_point]);
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
 				local_quadrature_points_history[q_point].HH_store = HH;
 
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
+                local_quadrature_points_history[q_point].HH_store = HH;
 
 				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
@@ -1816,6 +1814,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			face_quadrature_formula_momentum,
 			update_values |
 			update_normal_vectors |
+            update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
@@ -1847,6 +1846,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
+        std::vector<std::vector<Tensor<1,dim>>> displacement_grads(quadrature_formula_momentum.size(), std::vector<Tensor<1,dim>>(dim));
 
 
 		Tensor<2, dim> FF;
@@ -1921,8 +1921,10 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 					fe_face_values_def_grad.reinit(cell_def_grad, face);
 					fe_face_values_momentum.get_function_values(sol_n_plus_1_momentum, face_sol_vec_momentum);
 					fe_face_values_def_grad.get_function_values(sol_n_plus_1_def_grad, face_sol_vec_def_grad);
+                    
+                    fe_face_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 
-					if (face->boundary_id() == 5) {
+					if (face->boundary_id() != 4) {
 						for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
 						{
 							face_temp_momentum = 0;
@@ -1933,13 +1935,13 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 							for (int i = 0; i < dim; i++) {
 								face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);							}
 							sol_counter = 0;
-							for (int i = 0; i < dim; i++) {
-								for (int j = 0; j < dim; j++) {
-									face_FF[i][j] = face_sol_vec_def_grad[q_point](sol_counter);
-									++sol_counter;
-								}
-							}
-
+//							for (int i = 0; i < dim; i++) {
+//								for (int j = 0; j < dim; j++) {
+//									face_FF[i][j] = face_sol_vec_def_grad[q_point](sol_counter);
+//									++sol_counter;
+//								}
+//							}
+                            face_FF = get_real_FF(displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
 							face_HH = get_HH(face_FF, Jf);
 							//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
@@ -2028,6 +2030,7 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
 			fe_values_pressure.reinit(cell_pressure);
 
 			fe_values_pressure.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
+            fe_values_pressure.get_function_values(sol_n_pressure, old_sol_vec_pressure);
 
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
