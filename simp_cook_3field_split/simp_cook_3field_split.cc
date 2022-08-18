@@ -441,28 +441,6 @@ namespace NonlinearElasticity
 
 
 
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 2> get_rotation_matrix(const std::vector<Tensor<1, 2>>& grad_u)
-	{
-		const double curl = (grad_u[1][0] - grad_u[0][1]);
-		const double angle = std::atan(curl);
-		return Physics::Transformations::Rotations::rotation_matrix_2d(-angle);
-	}
-
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 3> get_rotation_matrix(const std::vector<Tensor<1, 3>>& grad_u)
-	{
-		const Point<3> curl(grad_u[2][1] - grad_u[1][2], grad_u[0][2] - grad_u[2][0], grad_u[1][0] - grad_u[0][1]);
-		const double tan_angle = std::sqrt(curl * curl);
-		const double angle = std::atan(tan_angle);
-		const Point<3> axis = curl / tan_angle;
-		return Physics::Transformations::Rotations::rotation_matrix_3d(axis,
-			-angle);
-	}
-
-
 
 	template <int dim>
 	class Incompressible
@@ -1425,9 +1403,9 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
 			HH = get_HH(FF, Jf);
-            HH = local_quadrature_points_history[q_point].HH_store;
+            local_quadrature_points_history[q_point].HH_store = HH;
             //real_HH = get_HH(real_FF, real_Jf);
-
+            //cout << "HH values : " << HH << std::endl;
             //cout << "q_point momentum : " << temp_momentum << std::endl;
            
 			/*cout << "real FF : " << real_FF << std::endl;
@@ -1731,7 +1709,6 @@ void Incompressible<dim>::assemble_pressure_Lap(Vector<double>& sol_n_def_grad)
                 FF = get_real_FF(displacement_grads[q_point]);
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
-				local_quadrature_points_history[q_point].HH_store = HH;
 
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
