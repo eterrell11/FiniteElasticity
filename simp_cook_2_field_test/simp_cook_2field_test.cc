@@ -334,7 +334,7 @@ namespace NonlinearElasticity
 		Tensor<2, dim> I = unit_symmetric_tensor<dim>();
 		for (unsigned int i = 0; i < dim; ++i) {
 			for (unsigned int j = 0; j < dim; ++j) {
-				FF[i][j] = I[i][j] + grad_p[i][j];
+				FF[i][j] =grad_p[i][j];
 			}
 		}
 		return FF;
@@ -383,7 +383,7 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + (pressure * full_HH);
+		full_pk1_stress = full_FF;
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
@@ -829,7 +829,7 @@ namespace NonlinearElasticity
 		Triangulation<dim> quad_triangulation;
 
 		std::vector<Point<2>> vertices = {
-			{-1.0,-1.0} , {1.0,-1.0}, {1.0, 1.0}, {-1.0, 1.0} };
+			{-1.0,-1.0} , {-1.0,1.0}, {1.0, 1.0}, {1.0, -1.0} };
 
 		const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
 			cell_vertices = { {{0,3,1,2}} };
@@ -951,9 +951,9 @@ namespace NonlinearElasticity
 
         homogeneous_constraints_pressure.clear();
 		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
-		//	dof_handler,
-		//	4,
-		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+		//	dof_handler_pressure,
+		//	1,
+		//	Functions::ZeroFunction<dim>(1),
 		//	homogeneous_constraints_pressure);
         homogeneous_constraints_pressure.close();
         std::cout << "Boundary conditions established" << std::endl;
@@ -1245,7 +1245,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
             //FF += alpha * (real_FF - FF);
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
-			HH = get_HH(FF, Jf);
+			HH = unit_symmetric_tensor<dim>();
             local_quadrature_points_history[q_point].HH_store = HH;
             //real_HH = get_HH(real_FF, real_Jf);
             //cout << "HH values : " << HH << std::endl;
@@ -1399,7 +1399,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
                 local_quadrature_points_history[q_point].pk1_store = pk1;
-                local_quadrature_points_history[q_point].HH_store = HH;
 
 				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
@@ -1534,7 +1533,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				}
                 FF = get_real_FF(displacement_grads[q_point]);
 				Jf = get_Jf(FF);
-				HH = get_HH(FF, Jf);
+				HH = unit_symmetric_tensor<dim>();
 
 				//cout << "HH : " << HH << std::endl;
 				//cout << " FF : " << FF << std::endl;
@@ -1574,7 +1573,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
                             face_FF = get_real_FF(displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
-							face_HH = get_HH(face_FF, Jf);
+							face_HH = unit_symmetric_tensor<dim>();
 							//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
 							for (unsigned int i = 0; i < dofs_per_cell; ++i)
 							{
@@ -1698,10 +1697,10 @@ void Incompressible<dim>::assemble_pressure_Lap()
 		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_old_solution, pressure_solution);
 		cout << "Assembling momentum rhs" << std::endl;
-		assemble_momentum_rhs(pressure_old_solution, pressure_solution);
-		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for updated momentum" << std::endl;
-		solve_momentum(momentum_old_solution, momentum_solution);
+		//assemble_momentum_rhs(pressure_old_solution, pressure_solution);
+		//cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+		//cout << "Solving for updated momentum" << std::endl;
+		//solve_momentum(momentum_old_solution, momentum_solution);
 		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_solution, 1.0);
 		cout << std::endl;
@@ -1722,11 +1721,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
 	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
 	cout << "Solving for pressure" << std::endl;
 	solve_p(pressure_old_solution, pressure_int_solution);
-	cout << "Assembling momentum rhs" << std::endl;
-	assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
-	cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-	cout << "Solving for updated momentum" << std::endl;
-	solve_momentum(momentum_old_solution, momentum_int_solution);
+	//cout << "Assembling momentum rhs" << std::endl;
+	//assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
+	//cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	//cout << "Solving for updated momentum" << std::endl;
+	//solve_momentum(momentum_old_solution, momentum_int_solution);
 	cout << "Updating displacement" << std::endl;
 	update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
 	cout << std::endl;
@@ -1742,11 +1741,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
 	cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
 	cout << "Solving for pressure" << std::endl;
 	solve_p(pressure_int_solution, pressure_solution);
-	cout << "Assembling momentum rhs" << std::endl;
-	assemble_momentum_rhs(pressure_int_solution, pressure_solution);
-	cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-	cout << "Solving for updated momentum" << std::endl;
-	solve_momentum(momentum_int_solution, momentum_solution);
+	//cout << "Assembling momentum rhs" << std::endl;
+	//assemble_momentum_rhs(pressure_int_solution, pressure_solution);
+	//cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+	//cout << "Solving for updated momentum" << std::endl;
+	//solve_momentum(momentum_int_solution, momentum_solution);
 	cout << "Updating displacement" << std::endl;
 
 	momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
@@ -1830,7 +1829,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 		AffineConstraints<double> u_constraints;
 		dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler_momentum,
-			4,
+			1,
 			Functions::ZeroFunction<dim>(dim),
 			u_constraints,
 			fe_momentum.component_mask(Momentum));
@@ -1897,11 +1896,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		AffineConstraints<double> p_constraints;
-		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
-		//	4,
-		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-		//	p_constraints,
-		//	fe.component_mask(Pressure));
+		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
+		//	dof_handler_pressure,
+		//	1,
+		//	Functions::ZeroFunction<dim>(1),
+		//	p_constraints);
 		p_constraints.close();
 
 		auto setup_constrained_rhs = constrained_right_hand_side(
@@ -1920,9 +1919,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 		Vector<double> p_rhs = rhs;
 
-		/*SparseDirectUMFPACK M1_direct;
-		M1_direct.initialize(M1);
-		M1_direct.vmult(pressure, p_rhs);*/
+
 
 		//cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
 		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
