@@ -68,6 +68,9 @@
 //For sparse direct solvers
 #include <deal.II/lac/sparse_direct.h>
 
+//for ILU preconditioner
+#include <deal.II/lac/sparse_ilu.h>
+
 //For allowing an input file to be read
 #include <deal.II/base/parameter_handler.h>
 
@@ -1133,7 +1136,7 @@ void Incompressible<dim>::assemble_pressure_mass()
                 fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
                 for (const unsigned int j : fe_values.dof_indices())
                 {
-                    cell_mass_matrix(i, j) += 1.0 / kappa *
+                    cell_mass_matrix(i, j) += 1.0 / (kappa * present_timestep) *
                         fe_val_Pressure_i * //Momentum terms
                         fe_values[Pressure].value(j, q_point) *
                     fe_values.JxW(q_point);
@@ -1244,7 +1247,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
             //FF += alpha * (real_FF - FF);
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
-			HH = get_HH(FF, Jf);
+			HH = unit_symmetric_tensor<dim>();
             local_quadrature_points_history[q_point].HH_store = HH;
             //real_HH = get_HH(real_FF, real_Jf);
             //cout << "HH values : " << HH << std::endl;
@@ -1259,12 +1262,12 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
             for (const unsigned int i : fe_values_pressure.dof_indices())
             {
-                fe_grad_Pressure_i = fe_values_pressure[Pressure].gradient(i, q_point);
+                fe_grad_Pressure_i = fe_values_pressure.shape_grad(i, q_point);
                 for (const unsigned int j : fe_values_pressure.dof_indices())
                 {
-                    cell_Lap_matrix(i, j) += present_timestep * present_timestep *
+                    cell_Lap_matrix(i, j) += present_timestep *
                         scalar_product(HH * fe_grad_Pressure_i,
-                            HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
+                            HH * fe_values_pressure.shape_grad(j, q_point)) *
                         fe_values_pressure.JxW(q_point);
                 }
 
@@ -1278,9 +1281,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
             cell_Lap_matrix,
             local_dof_indices,
             constrained_Lap_matrix_pressure);
-        for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-            for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+        for (const unsigned int i : fe_values_pressure.dof_indices()) {
+            for (const unsigned int j : fe_values_pressure.dof_indices()) {
                 unconstrained_Lap_matrix_pressure.add(local_dof_indices[i], local_dof_indices[j], cell_Lap_matrix(i, j));
+                //cout << "Laplacian matrix entries at " << local_dof_indices[i]<< "," <<local_dof_indices[j] <<" : " << cell_Lap_matrix(i,j) << std::endl;
+
             }
         }
         momentum_cell++;
@@ -1542,7 +1547,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
-					cell_rhs(i) += -scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum ) *
+					cell_rhs(i) += -scalar_product(fe_values_pressure.shape_grad(i, q_point), transpose(HH) * temp_momentum ) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1550,7 +1555,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			for (const auto& face : cell->face_iterators())
 			{
 
-				if (face->at_boundary())
+				if (face->at_boundary() && parameters.nu!=0.5)
 				{
 
 					fe_face_values_pressure.reinit(cell, face);
@@ -1577,7 +1582,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 							//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
 							for (unsigned int i = 0; i < dofs_per_cell; ++i)
 							{
-								cell_rhs(i) += fe_face_values_pressure[Pressure].value(i, q_point) *
+								cell_rhs(i) += fe_face_values_pressure.shape_value(i, q_point) *
 									transpose(face_HH) *
 									face_temp_momentum *
 									fe_face_values_pressure.normal_vector(q_point) *
@@ -1889,7 +1894,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 		Vector<double> old_sol = pressure_sol_n;
 
-		un_rhs *= present_timestep;
+        //un_rhs *= present_timestep;
 		un_M.vmult_add(un_rhs, old_sol);
 
 
@@ -1925,10 +1930,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 		//cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
 		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
-		SolverMinRes<Vector<double>>  solver(solver_control);
+		SolverGMRES<Vector<double>>  solver(solver_control);
 
-		PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
-		p_preconditioner.initialize(M1, 1.2);
+        SparseILU<double>::AdditionalData additional_data(0,100);
+        SparseILU<double> p_preconditioner;
+        p_preconditioner.initialize(M1, additional_data);
 
 		solver.solve(M1, pressure, p_rhs, p_preconditioner);
 
