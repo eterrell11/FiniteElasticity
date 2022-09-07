@@ -311,13 +311,7 @@ namespace NonlinearElasticity
 
 
 
-	//Class for storing pk1 tensor values, pressure values, and cofactor values
-	template <int dim>
-	struct PointHistory
-	{
-		Tensor<2, dim> pk1_store;
-		Tensor<2, dim> HH_store;
-	};
+
 
 	//Class for defining Kappa
 	template <int dim>
@@ -485,7 +479,6 @@ namespace NonlinearElasticity
 		void update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus);
 
 
-		void setup_quadrature_point_history();
 
 		Parameters::AllParameters parameters;
 
@@ -506,7 +499,6 @@ namespace NonlinearElasticity
 		const QGaussSimplex<dim> quadrature_formula_pressure;
 		const QGaussSimplex<dim - 1> face_quadrature_formula_pressure;
 
-		std::vector<PointHistory<dim>> quadrature_point_history;
 
 		SparsityPattern constrained_sparsity_pattern_momentum;
 		SparsityPattern unconstrained_sparsity_pattern_momentum;
@@ -873,7 +865,6 @@ namespace NonlinearElasticity
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 		triangulation.refine_global(parameters.n_ref);
 
-		setup_quadrature_point_history();
 	}
 
 	template <int dim>
@@ -920,7 +911,6 @@ namespace NonlinearElasticity
 					}
 				}
 		triangulation.refine_global(parameters.n_ref);
-		setup_quadrature_point_history();
 	}
 
 
@@ -1233,7 +1223,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
     auto momentum_cell = dof_handler_momentum.begin_active();
 	for( auto cell : dof_handler_pressure.active_cell_iterators())
 	{
-        PointHistory<dim>* local_quadrature_points_history = reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
         //real_FF = 0;
         FF = 0;
         HH = 0;
@@ -1258,7 +1247,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
 			HH = get_HH(FF, Jf);
-            local_quadrature_points_history[q_point].HH_store = HH;
             //real_HH = get_HH(real_FF, real_Jf);
             //cout << "HH values : " << HH << std::endl;
             //cout << "q_point momentum : " << temp_momentum << std::endl;
@@ -1396,9 +1384,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 			fe_values_pressure.get_function_values(sol_n_pressure, sol_vec_pressure);
 			//fe_values.get_function_values(residual, residual_vec);
-            
-            PointHistory<dim>* local_quadrature_points_history =
-                reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
+
 
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
@@ -1412,8 +1398,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				HH = get_HH(FF, Jf);
 
 				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
-                local_quadrature_points_history[q_point].pk1_store = pk1;
-                local_quadrature_points_history[q_point].HH_store = HH;
 
 				for (unsigned int i=0; i < dofs_per_cell; ++i)
 				{
@@ -1590,7 +1574,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
                             face_FF = get_real_FF(displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
 							face_HH = get_HH(face_FF, Jf);
-							//cofactor = reinterpret_cast<pointhistory<dim>*>(cell->user_pointer())[q_point].cofactor_store;
 							for (unsigned int i = 0; i < dofs_per_cell; ++i)
 							{
 								cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
@@ -1642,6 +1625,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 		std::vector<double> sol_vec_pressure(n_q_points);
 		std::vector<double> old_sol_vec_pressure(n_q_points);
 
+		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(quadrature_formula_momentum.size(), std::vector<Tensor<1, dim>>(dim));
 
 
 
@@ -1657,6 +1641,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 		double temp_pressure;
 		double old_temp_pressure;
+		Tensor<2, dim> FF;
 		Tensor<2, dim> HH;
 		double Jf;
 		//double old_pressure;
@@ -1676,10 +1661,13 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 			fe_values_pressure.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
             fe_values_pressure.get_function_values(sol_n_pressure, old_sol_vec_pressure);
+			fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
-				HH = reinterpret_cast<PointHistory<dim>*>(cell->user_pointer())[q_point].HH_store;
+				FF = get_real_FF(displacement_grads[q_point]);
+				Jf = get_Jf(FF);
+				HH = get_HH(FF, Jf);
 				temp_pressure = sol_vec_pressure[q_point];
 				old_temp_pressure = old_sol_vec_pressure[q_point];
 
@@ -2208,28 +2196,6 @@ void Incompressible<dim>::update_it_matrix()
 
 	
 
-	// This chunk of code allows for communication between current code state and quad point history
-	template<int dim>
-	void Incompressible<dim>::setup_quadrature_point_history()
-	{
-		triangulation.clear_user_data();
-		std::vector<PointHistory<dim>> tmp;
-		quadrature_point_history.swap(tmp);
-		quadrature_point_history.resize(triangulation.n_active_cells() * quadrature_formula_momentum.size());
-		unsigned int history_index = 0;
-		for (auto& cell : triangulation.active_cell_iterators())
-			if (cell->is_locally_owned())
-			{
-				cell->set_user_pointer(&quadrature_point_history[history_index]);
-				history_index += quadrature_formula_momentum.size();
-			}
-
-		Assert(history_index == quadrature_point_history.size(),
-			ExcInternalError());
-	}
-
-
-}
 
 
 
