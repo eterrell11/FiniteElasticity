@@ -1477,6 +1477,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
+		const unsigned int boundary_dofs_per_cell = fe_pressure.
 		const unsigned int n_q_points = quadrature_formula_pressure.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_pressure.size();
 
