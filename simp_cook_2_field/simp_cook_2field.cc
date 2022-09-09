@@ -470,8 +470,8 @@ namespace NonlinearElasticity
 		void         solve_ssprk2();
 		void         solve_ssprk3();
 		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		void		solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		void		solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum);
+		void		 solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		 solve_momentum(Vector<double>& sol_n_momentum, Vector<double>& sol_n_plus_1_momentum);
 		void         output_results(Vector<double>& momentum_solution, Vector<double>& pressure_solution) const;
 
 		void do_timestep();
@@ -536,7 +536,7 @@ namespace NonlinearElasticity
 
 		Vector<double> incremental_displacement;
 		Vector<double> total_displacement;
-
+		Vector<double> pressure_boundary;
 
 		double present_time;
 		double present_timestep;
@@ -1011,6 +1011,8 @@ namespace NonlinearElasticity
         pressure_int_solution.reinit(dof_handler_pressure.n_dofs());
         pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs());
         pressure_rhs.reinit(dof_handler_pressure.n_dofs());
+
+		pressure_boundary.reinit(dof_handler_pressure.n_boundary_dofs());
 
 
 		cout << "Applying initial conditions" << std::endl;
@@ -2192,7 +2194,7 @@ void Incompressible<dim>::update_it_matrix()
 
 	}
 
-
+	}
 
 	
 
