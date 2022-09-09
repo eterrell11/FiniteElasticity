@@ -1013,6 +1013,8 @@ namespace NonlinearElasticity
         pressure_rhs.reinit(dof_handler_pressure.n_dofs());
 
 		pressure_boundary.reinit(dof_handler_pressure.n_boundary_dofs());
+        cout << "number of pressure dofs on boundary: " << dof_handler_pressure.n_boundary_dofs() << std::endl;
+        cout << "number of pressure dofs total: " << dof_handler_pressure.n_dofs() <<std::endl;
 
 
 		cout << "Applying initial conditions" << std::endl;
@@ -1328,9 +1330,12 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			update_quadrature_points |
 			update_JxW_values);
 
+
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula_momentum.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_momentum.size();
+
+        cout << n_face_q_points << " is the number of face quadrature points" << std::endl;
 
 		std::vector<double> sol_vec_pressure(n_q_points);
 		//std::vector<Vector<double>> residual_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
@@ -1477,7 +1482,6 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
-		const unsigned int boundary_dofs_per_cell = fe_pressure.
 		const unsigned int n_q_points = quadrature_formula_pressure.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_pressure.size();
 
@@ -1942,11 +1946,11 @@ void Incompressible<dim>::update_it_matrix()
 
 
 		AffineConstraints<double> p_constraints;
-		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
+		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
+        //dof_handler,
 		//	4,
-		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
-		//	p_constraints,
-		//	fe.component_mask(Pressure));
+		//	Functions::ZeroFunction<dim>(1),
+		//	p_constraints);
 		p_constraints.close();
 
 		auto setup_constrained_rhs = constrained_right_hand_side(
