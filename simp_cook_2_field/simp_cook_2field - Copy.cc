@@ -112,7 +112,7 @@ namespace NonlinearElasticity
 					Patterns::Double(-1.0, 0.5),
 					"Poisson's ratio");
                 prm.declare_entry("Density",
-                                  "1",
+                                  "1000",
                                   Patterns::Double(),
                                   "Density");
 			}
@@ -494,8 +494,6 @@ namespace NonlinearElasticity
 		AffineConstraints<double> homogeneous_constraints_momentum;
         AffineConstraints<double> homogeneous_constraints_pressure;
 
-		AffineConstraints<double> pressure_constraints;
-        
 		const QGaussSimplex<dim> quadrature_formula_momentum;
 		const QGaussSimplex<dim - 1> face_quadrature_formula_momentum;
 		const QGaussSimplex<dim> quadrature_formula_pressure;
@@ -533,13 +531,12 @@ namespace NonlinearElasticity
 		Vector<double> pressure_old_solution;
 		Vector<double> pressure_int_solution;   //For RK2 and higher order
 		Vector<double> pressure_int_solution_2; //For RK3 and higher order
-        
-        Vector<double> pressure_boundary;
 
 		//Vector<double> residual;
 
 		Vector<double> incremental_displacement;
 		Vector<double> total_displacement;
+		Vector<double> pressure_boundary;
 
 		double present_time;
 		double present_timestep;
@@ -836,7 +833,7 @@ namespace NonlinearElasticity
 		Triangulation<dim> quad_triangulation;
 
 		std::vector<Point<2>> vertices = {
-			{0.0,0.0} , {0.0,0.44}, {0.48, 0.6}, {0.48, 0.44} };
+			{0.0,0.0} , {0.0,0.44}, {0.48, 0.44}, {0.48, 0.0} };
 
 		const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
 			cell_vertices = { {{0,3,1,2}} };
@@ -927,9 +924,9 @@ namespace NonlinearElasticity
 	{
 
 		dof_handler_momentum.distribute_dofs(fe_momentum);
-        //DoFRenumbering::boost::Cuthill_McKee(dof_handler_momentum);
+        DoFRenumbering::boost::Cuthill_McKee(dof_handler_momentum);
         dof_handler_pressure.distribute_dofs(fe_pressure);
-        //DoFRenumbering::boost::Cuthill_McKee(dof_handler_pressure);
+        DoFRenumbering::boost::Cuthill_McKee(dof_handler_pressure);
 
 
 		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
@@ -1014,12 +1011,8 @@ namespace NonlinearElasticity
         pressure_int_solution.reinit(dof_handler_pressure.n_dofs());
         pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs());
         pressure_rhs.reinit(dof_handler_pressure.n_dofs());
-        
-        //pressure_boundary.reinit(dof_handler_pressure.n_dofs());
 
 		pressure_boundary.reinit(dof_handler_pressure.n_boundary_dofs());
-        cout << "number of pressure dofs on boundary: " << dof_handler_pressure.n_boundary_dofs() << std::endl;
-        cout << "number of pressure dofs total: " << dof_handler_pressure.n_dofs() <<std::endl;
 
 
 		cout << "Applying initial conditions" << std::endl;
@@ -1269,12 +1262,12 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
             for (const unsigned int i : fe_values_pressure.dof_indices())
             {
-                fe_grad_Pressure_i = fe_values_pressure[Pressure].gradient(i, q_point);
+                fe_grad_Pressure_i = fe_values_pressure.shape_grad(i, q_point);
                 for (const unsigned int j : fe_values_pressure.dof_indices())
                 {
                     cell_Lap_matrix(i, j) += present_timestep / rho_0 *
                         scalar_product(HH * fe_grad_Pressure_i,
-                            HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
+                            HH * fe_values_pressure.shape_grad(j, q_point)) *
                         fe_values_pressure.JxW(q_point);
                 }
 
@@ -1335,12 +1328,9 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			update_quadrature_points |
 			update_JxW_values);
 
-
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula_momentum.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_momentum.size();
-
-        cout << n_face_q_points << " is the number of face quadrature points" << std::endl;
 
 		std::vector<double> sol_vec_pressure(n_q_points);
 		//std::vector<Vector<double>> residual_vec(n_q_points, Vector<double>(dim + 1 + dim * dim));
@@ -1487,6 +1477,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
+		//const unsigned int boundary_dofs_per_cell = fe_pressure.
 		const unsigned int n_q_points = quadrature_formula_pressure.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_pressure.size();
 
@@ -1554,7 +1545,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
-					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum) *
+					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure.shape_grad(i, q_point), transpose(HH) * temp_momentum ) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1562,7 +1553,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			for (const auto& face : cell->face_iterators())
 			{
 
-				if (face->at_boundary())
+				if (face->at_boundary() && parameters.nu!=0.5)
 				{
 
 					fe_face_values_pressure.reinit(cell, face);
@@ -1586,24 +1577,15 @@ void Incompressible<dim>::assemble_pressure_Lap()
                             face_FF = get_real_FF(displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
 							face_HH = get_HH(face_FF, Jf);
-                            if (parameters.nu !=0.5)
-                            {
-                                for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                                {
-                                    cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
-                                    transpose(face_HH) *
-                                    face_temp_momentum *
+							for (unsigned int i = 0; i < dofs_per_cell; ++i)
+							{
+								cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
+									transpose(face_HH) *
+									face_temp_momentum *
 									fe_face_values_pressure.normal_vector(q_point) *
 									fe_face_values_pressure.JxW(q_point);
-                                }
-                            }
-                            if (parameters.nu == 0.5){
-                                face->get_dof_indices(local_dof_indices);
-                                for(unsigned int i =0; i<dofs_per_cell; ++i){
-									pressure_constraints.add_line(local_dof_indices[i]);
-									pressure_constraints.set_inhomogeneity(local_dof_indices[i], 0);
-                                }
-                            }
+							}
+
 						}
 					}
 				}
@@ -1922,7 +1904,7 @@ void Incompressible<dim>::update_it_matrix()
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);*/
 		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
-		SolverMinRes<Vector<double>>  solver(solver_control);
+		SolverCG<Vector<double>>  solver(solver_control);
 
 		//cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
@@ -1960,11 +1942,11 @@ void Incompressible<dim>::update_it_matrix()
 
 
 		AffineConstraints<double> p_constraints;
-		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex,
-        //dof_handler,
+		//dealii::VectorTools::interpolate_boundary_values(mapping_simplex, dof_handler,
 		//	4,
-		//	Functions::ZeroFunction<dim>(1),
-		//	p_constraints);
+		//	Functions::ZeroFunction<dim>(dim + 1 + dim * dim),
+		//	p_constraints,
+		//	fe.component_mask(Pressure));
 		p_constraints.close();
 
 		auto setup_constrained_rhs = constrained_right_hand_side(
