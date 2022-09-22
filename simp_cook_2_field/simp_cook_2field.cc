@@ -1393,8 +1393,10 @@ void Incompressible<dim>::assemble_pressure_Lap()
             fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 			right_hand_side.rhs_vector_value_list(fe_values_momentum.get_quadrature_points(), rhs_values, parameters.BodyForce);
 
-
-			fe_values_pressure.get_function_values(sol_n_pressure, sol_vec_pressure);
+            sol_n_pressure.add(-sol_n_pressure.mean_value());
+			
+            
+            fe_values_pressure.get_function_values(sol_n_pressure, sol_vec_pressure);
 			//fe_values.get_function_values(residual, residual_vec);
 
 
@@ -1446,6 +1448,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			cell_pressure++;
 		}
 	}
+
 	template <int dim>
 	void Incompressible<dim>::assemble_pressure_rhs(Vector<double>& sol_n_plus_1_momentum)
 	{
@@ -1487,6 +1490,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		const unsigned int dofs_per_cell = fe_pressure.dofs_per_cell;
+        const unsigned int dofs_per_face = fe_pressure.dofs_per_face;
 		const unsigned int n_q_points = quadrature_formula_pressure.size();
 		const unsigned int n_face_q_points = face_quadrature_formula_pressure.size();
 
@@ -1503,9 +1507,10 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+        std::vector<types::global_dof_index> local_face_dof_indices(dofs_per_face);
 
         std::vector<std::vector<Tensor<1,dim>>> displacement_grads(quadrature_formula_momentum.size(), std::vector<Tensor<1,dim>>(dim));
-
+        std::vector<std::vector<Tensor<1,dim>>> face_displacement_grads(n_face_q_points, std::vector<Tensor<1,dim>>(dim));
 
 		Tensor<2, dim> FF;
 		Tensor<2, dim> face_FF;
@@ -1570,7 +1575,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 					fe_face_values_momentum.get_function_values(sol_n_plus_1_momentum, face_sol_vec_momentum);
 
 
-                    fe_face_values_momentum.get_function_gradients(total_displacement, displacement_grads);
+                    fe_face_values_momentum.get_function_gradients(total_displacement, face_displacement_grads);
 
 					if (face->boundary_id() != 4) {
 						for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
@@ -1583,7 +1588,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 							for (int i = 0; i < dim; i++) {
 								face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);}
 
-                            face_FF = get_real_FF(displacement_grads[q_point]);
+                            face_FF = get_real_FF(face_displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
 							face_HH = get_HH(face_FF, Jf);
                             if (parameters.nu !=0.5)
@@ -1598,10 +1603,10 @@ void Incompressible<dim>::assemble_pressure_Lap()
                                 }
                             }
                             if (parameters.nu == 0.5){
-                                face->get_dof_indices(local_dof_indices);
-                                for(unsigned int i =0; i<dofs_per_cell; ++i){
-									pressure_constraints.add_line(local_dof_indices[i]);
-									pressure_constraints.set_inhomogeneity(local_dof_indices[i], 0);
+                                face->get_dof_indices(local_face_dof_indices);
+                                for(unsigned int i =0; i<dofs_per_face; ++i){
+									pressure_constraints.add_line(local_face_dof_indices[i]);
+									pressure_constraints.set_inhomogeneity(local_face_dof_indices[i], 0);
                                 }
                             }
 						}
@@ -1639,15 +1644,37 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
+        
+        FEFaceValues<dim> fe_face_values_pressure(mapping_simplex,
+            fe_pressure,
+            face_quadrature_formula_pressure,
+            update_values |
+            update_normal_vectors |
+            update_quadrature_points |
+            update_JxW_values);
+
+        FEFaceValues<dim> fe_face_values_momentum(mapping_simplex,
+            fe_momentum,
+            face_quadrature_formula_momentum,
+            update_values |
+            update_normal_vectors |
+            update_gradients |
+            update_quadrature_points |
+            update_JxW_values);
 
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
 		const unsigned int n_q_points = quadrature_formula_momentum.size();
+        const unsigned int n_face_q_points = face_quadrature_formula_momentum.size();
+
 
 		std::vector<double> sol_vec_pressure(n_q_points);
 		std::vector<double> old_sol_vec_pressure(n_q_points);
+        
+        std::vector<double> sol_vec_face_pressure(n_face_q_points);
+        std::vector<double> old_sol_vec_face_pressure(n_face_q_points);
 
-		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(quadrature_formula_momentum.size(), std::vector<Tensor<1, dim>>(dim));
-
+		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(n_q_points, std::vector<Tensor<1, dim>>(dim));
+        std::vector<std::vector<Tensor<1, dim>>> face_displacement_grads(n_face_q_points, std::vector<Tensor<1, dim>>(dim));
 
 
 
@@ -1682,8 +1709,12 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 			fe_values_pressure.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
             fe_values_pressure.get_function_values(sol_n_pressure, old_sol_vec_pressure);
-			fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
+            sol_n_plus_1_pressure.add(-sol_n_plus_1_pressure.mean_value());
+            sol_n_pressure.add(-sol_n_pressure.mean_value());
 
+            
+			fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
+            fe_values_momentum.get_function_gradients(total_displacement, face_displacement_grads);
 			for (const unsigned int q_point : fe_values_momentum.quadrature_point_indices())
 			{
 				FF = get_real_FF(displacement_grads[q_point]);
@@ -1698,7 +1729,33 @@ void Incompressible<dim>::assemble_pressure_Lap()
 						fe_values_momentum.JxW(q_point);
 				}
 			}
-			
+            for (const auto& face : cell->face_iterators())
+            {
+                if (face->at_boundary())
+                {
+                    fe_face_values_momentum.reinit(cell, face);
+                    fe_face_values_pressure.reinit(cell_pressure, face);
+                    fe_face_values_pressure.get_function_values(sol_n_plus_1_pressure,sol_vec_face_pressure);
+                    fe_face_values_pressure.get_function_values(sol_n_pressure, old_sol_vec_face_pressure);
+                    for (const unsigned int q_point : fe_face_values_momentum.quadrature_point_indices())
+                    {
+                        FF = get_real_FF(face_displacement_grads[q_point]);
+                        Jf = get_Jf(FF);
+                        HH = get_HH(FF, Jf);
+                        double temp_face_pressure = sol_vec_face_pressure[q_point];
+                        double old_temp_face_pressure = old_sol_vec_face_pressure[q_point];
+                        
+                        for (const unsigned int i : fe_face_values_momentum.dof_indices())
+                        {
+                            if (face->boundary_id() == 5) {
+                                cell_rhs(i) += fe_face_values_momentum[Momentum].value(i, q_point) * (temp_face_pressure- old_temp_face_pressure) * HH * fe_face_values_momentum.normal_vector(q_point)* fe_face_values_momentum.JxW(q_point);
+
+                            }
+
+                        }
+                    }
+                }
+            }
 
 			cell->get_dof_indices(local_dof_indices);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
@@ -1989,16 +2046,19 @@ void Incompressible<dim>::update_it_matrix()
 
 		//cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
 		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
-		SolverGMRES<Vector<double>>  solver(solver_control);
+		SolverCG<Vector<double>>  solver(solver_control);
 
-        SparseILU<double>::AdditionalData additional_data(0,100);
-        SparseILU<double> p_preconditioner;
-        p_preconditioner.initialize(M1, additional_data);
+        //SparseILU<double>::AdditionalData additional_data(0,100);
+        //SparseILU<double> p_preconditioner;
+        PreconditionJacobi<SparseMatrix<double>> p_preconditioner;
+        p_preconditioner.initialize(M1, 1.2);
 
 		solver.solve(M1, pressure, p_rhs, p_preconditioner);
 
 		p_constraints.distribute(pressure_sol_n_plus_1);
 
+        //Try averageing pressure field
+        //pressure_sol_n_plus_1.add(-pressure_sol_n_plus_1.mean_value());
 		//For the residuals
 //		Vector<double> p_DQ = (sol_n_plus_1.block(1) - sol_n.block(1));
 //		p_DQ /= present_timestep;
