@@ -1979,7 +1979,7 @@ void Incompressible<dim>::update_it_matrix()
 		M0_direct.initialize(M0);
 		M0_direct.vmult(momentum, u_rhs);*/
 		SolverControl            solver_control(1000, 1e-16 * momentum_rhs.l2_norm());
-		SolverMinRes<Vector<double>>  solver(solver_control);
+		SolverCG<Vector<double>>  solver(solver_control);
 
 		//cout << "norm of right hand side : " << momentum_rhs.l2_norm() << std::endl;
 
@@ -2046,7 +2046,7 @@ void Incompressible<dim>::update_it_matrix()
 
 		//cout << "norm of right hand side : " << pressure_rhs.l2_norm() << std::endl;
 		SolverControl            solver_control(100000, 1e-10 * pressure_rhs.l2_norm());
-		SolverCG<Vector<double>>  solver(solver_control);
+		SolverMinRes<Vector<double>>  solver(solver_control);
 
         //SparseILU<double>::AdditionalData additional_data(0,100);
         //SparseILU<double> p_preconditioner;
