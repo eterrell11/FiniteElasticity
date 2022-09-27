@@ -873,7 +873,8 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::create_coarse_grid(Triangulation<3>& triangulation)
 	{
-		//std::vector<Point<dim>> vertices;
+        Triangulation<dim> quad_triangulation;
+        
 		std::vector<Point<3>> vertices = {
 			{0.0 , 0.0 , 0.0} , {0.0, 0.1, 0.0}, {0.0, 0.0 , 0.22} , {0.0, 0.1, 0.22}, {0.0, 0.0, 0.44}, {0.0, 0.1, 0.44},
 			{0.12, 0.0, 0.11}, {0.12, 0.1, 0.11}, {0.12, 0.0, 0.295}, {0.12, 0.1, 0.295}, {0.12, 0.0, 0.48}, {0.12, 0.1, 0.48},
@@ -898,10 +899,10 @@ namespace NonlinearElasticity
 			}
 			cells[i].material_id = 0;
 		}
-		triangulation.create_triangulation(vertices, cells, SubCellData());
+		quad_triangulation.create_triangulation(vertices, cells, SubCellData());
 
 
-		for (const auto& cell : triangulation.active_cell_iterators())
+		for (const auto& cell : quad_triangulation.active_cell_iterators())
 			for (const auto& face : cell->face_iterators())
 				if (face->at_boundary())
 				{
@@ -913,7 +914,9 @@ namespace NonlinearElasticity
 						face->set_boundary_id(5);
 					}
 				}
-		triangulation.refine_global(parameters.n_ref);
+        GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
+
+		//triangulation.refine_global(parameters.n_ref);
 	}
 
 
@@ -1559,7 +1562,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
-					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum) *
+					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), HH * temp_momentum) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1596,7 +1599,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
                                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                                 {
                                     cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
-                                    transpose(face_HH) *
+                                    face_HH *
                                     face_temp_momentum *
 									fe_face_values_pressure.normal_vector(q_point) *
 									fe_face_values_pressure.JxW(q_point);
@@ -2288,7 +2291,7 @@ int main(int /*argc*/, char** /*argv*/)
 		using namespace dealii;
 		using namespace NonlinearElasticity;
 
-		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
