@@ -1291,6 +1291,8 @@ void Incompressible<dim>::assemble_pressure_Lap()
             cell_Lap_matrix,
             local_dof_indices,
             constrained_Lap_matrix_pressure);
+        
+        //cout << "contribution for cell Lap matrix : " << cell_Lap_matrix.frobenius_norm() <<std::endl;
         for (const unsigned int i : fe_values_pressure.dof_indices()) {
             for (const unsigned int j : fe_values_pressure.dof_indices()) {
                 unconstrained_Lap_matrix_pressure.add(local_dof_indices[i], local_dof_indices[j], cell_Lap_matrix(i, j));
@@ -1562,7 +1564,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
-					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), HH * temp_momentum) *
+					cell_rhs(i) += -(1/rho_0) * scalar_product(fe_values_pressure[Pressure].gradient(i, q_point), transpose(HH) * temp_momentum) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1580,7 +1582,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
                     fe_face_values_momentum.get_function_gradients(total_displacement, face_displacement_grads);
 
-					if (face->boundary_id() != 4) {
+                    if (face->boundary_id() != 1) { //cout << "boundary contributions!" << std::endl;
 						for (const unsigned int q_point : fe_face_values_pressure.quadrature_point_indices())
 						{
 							face_temp_momentum = 0;
@@ -1588,21 +1590,26 @@ void Incompressible<dim>::assemble_pressure_Lap()
 							Jf = 0;
 							face_HH = 0;
 
-							for (int i = 0; i < dim; i++) {
-								face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);}
+							for (int i = 0; i < dim; i++)
+                            {
+								face_temp_momentum[i] = face_sol_vec_momentum[q_point](i);
+                            }
 
                             face_FF = get_real_FF(face_displacement_grads[q_point]);
 							Jf = get_Jf(face_FF);
 							face_HH = get_HH(face_FF, Jf);
+                            
+
                             if (parameters.nu !=0.5)
                             {
                                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                                 {
                                     cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
-                                    face_HH *
+                                    transpose(face_HH) *
                                     face_temp_momentum *
 									fe_face_values_pressure.normal_vector(q_point) *
 									fe_face_values_pressure.JxW(q_point);
+                                    
                                 }
                             }
                             if (parameters.nu == 0.5){
@@ -1618,6 +1625,8 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			}
 
 			cell->get_dof_indices(local_dof_indices);
+            //cout << "contribution for cell rhs: " << cell_rhs << std::endl;
+
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				pressure_rhs(local_dof_indices[i]) += cell_rhs(i);
 			}
