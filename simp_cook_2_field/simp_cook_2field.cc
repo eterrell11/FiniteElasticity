@@ -1398,7 +1398,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
             fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
 			right_hand_side.rhs_vector_value_list(fe_values_momentum.get_quadrature_points(), rhs_values, parameters.BodyForce);
 
-            sol_n_pressure.add(-sol_n_pressure.mean_value());
+            //sol_n_pressure.add(-sol_n_pressure.mean_value());
 			
             
             fe_values_pressure.get_function_values(sol_n_pressure, sol_vec_pressure);
@@ -1721,8 +1721,8 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 			fe_values_pressure.get_function_values(sol_n_plus_1_pressure, sol_vec_pressure);
             fe_values_pressure.get_function_values(sol_n_pressure, old_sol_vec_pressure);
-            sol_n_plus_1_pressure.add(-sol_n_plus_1_pressure.mean_value());
-            sol_n_pressure.add(-sol_n_pressure.mean_value());
+//            sol_n_plus_1_pressure.add(-sol_n_plus_1_pressure.mean_value());
+//            sol_n_pressure.add(-sol_n_pressure.mean_value());
 
             
 			fe_values_momentum.get_function_gradients(total_displacement, displacement_grads);
