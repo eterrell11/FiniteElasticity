@@ -181,7 +181,8 @@ namespace NonlinearElasticity
 			double beta;
 			int rk_order;
 			int n_ref;
-			unsigned int order;
+			unsigned int momentum_order;
+			unsigned int pressure_order;
 			double tau_FFp;
 			double tau_pJ;
 			static void declare_parameters(ParameterHandler& prm);
@@ -211,6 +212,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Integer(0),
 					"Momentum order");
+				prm.declare_entry("Pressure order",
+					"1",
+					Patterns::Integer(0),
+					"Pressure order");
 				prm.declare_entry("Tau_FFp",
 					"0.01",
 					Patterns::Double(),
@@ -231,7 +236,8 @@ namespace NonlinearElasticity
 				beta = prm.get_double("beta");
 				rk_order = prm.get_integer("Time integrator order");
 				n_ref = prm.get_integer("n_ref");
-				order = prm.get_integer("Momentum order");
+				momentum_order = prm.get_integer("Momentum order");
+				pressure_order = prm.get_integer("Pressure order");
 				tau_FFp = prm.get_double("Tau_FFp");
 				tau_pJ = prm.get_double("Tau_pJ");
 			}
@@ -769,15 +775,15 @@ namespace NonlinearElasticity
 	template<int dim> // Constructor for the main class
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
-		, mapping_simplex(FE_SimplexP_Bubbles<dim>(parameters.order))
+		, mapping_simplex(FE_SimplexP_Bubbles<dim>(parameters.momentum_order))
 		, dof_handler_momentum(triangulation)
 		, dof_handler_pressure(triangulation)
-		, fe_momentum(FE_SimplexP_Bubbles<dim>(parameters.order+1),dim)
-		, fe_pressure(FE_SimplexP_Bubbles<dim>(parameters.order),1)
-		, quadrature_formula_momentum(parameters.order + 3)
-		, quadrature_formula_pressure(parameters.order + 3)
-		, face_quadrature_formula_momentum(parameters.order + 2)
-		, face_quadrature_formula_pressure(parameters.order + 2)
+		, fe_momentum(FE_SimplexP_Bubbles<dim>(parameters.momentum_order),dim)
+		, fe_pressure(FE_SimplexP<dim>(parameters.pressure_order),1)
+		, quadrature_formula_momentum(parameters.momentum_order + 2)
+		, quadrature_formula_pressure(parameters.momentum_order + 2)
+		, face_quadrature_formula_momentum(parameters.momentum_order + 1)
+		, face_quadrature_formula_pressure(parameters.momentum_order + 1)
 		, timestep_no(0)
 	{}
 
@@ -2157,6 +2163,7 @@ void Incompressible<dim>::update_it_matrix()
 	void Incompressible<dim>::output_results(Vector<double>& momentum_solution,
 		Vector<double>& pressure_solution) const
 	{
+		cout << "I get here" << std::endl;
 		const FESystem<dim> joint_fe(fe_momentum, 1, fe_momentum, 1, fe_pressure, 1);
 		DoFHandler<dim> joint_dof_handler(triangulation);
 		joint_dof_handler.distribute_dofs(joint_fe);
