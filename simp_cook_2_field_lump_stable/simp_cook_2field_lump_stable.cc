@@ -1596,7 +1596,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += -(1/rho_0) *
-						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau_pJ*(HH * pressure_grad+rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/present_timestep)) *
+						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau_pJ*(/*HH * pressure_grad+*/rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/present_timestep)) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1635,19 +1635,19 @@ void Incompressible<dim>::assemble_pressure_Lap()
 							face_HH = get_HH(face_FF, Jf);
                             
 
-                            if (parameters.nu !=0.5)
+                            if (parameters.nu !=0.51)
                             {
                                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                                 {
                                     cell_rhs(i) += (1/rho_0) * fe_face_values_pressure.shape_value(i, q_point) *
                                     transpose(face_HH) *
-                                    (face_temp_momentum + tau_pJ * (face_HH * face_pressure_grad + rho_0 * rhs_values[q_point] - (face_temp_momentum - old_face_temp_momentum) / present_timestep)) *
+                                    (face_temp_momentum) *
 									fe_face_values_pressure.normal_vector(q_point) *
 									fe_face_values_pressure.JxW(q_point);
                                     
                                 }
                             }
-                            if (parameters.nu == 0.5){
+                            if (parameters.nu == 0.51){
                                 face->get_dof_indices(local_face_dof_indices);
                                 for(unsigned int i =0; i<dofs_per_face; ++i){
 									pressure_constraints.add_line(local_face_dof_indices[i]);
@@ -2076,8 +2076,8 @@ void Incompressible<dim>::update_it_matrix()
 		setup_constrained_rhs.apply(rhs);
 
 
-		const auto& M1 = constrained_it_matrix_pressure;
-
+		auto& M1 = constrained_it_matrix_pressure;
+		M1.add(-parameters.tau_pJ, constrained_Lap_matrix_pressure);
 
 		auto& pressure = pressure_sol_n_plus_1;
 
@@ -2284,7 +2284,7 @@ void Incompressible<dim>::update_it_matrix()
 		{
 			solve_ssprk3();
 		}
-		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
+		if ( present_time > save_counter * save_time- 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
 			output_results(momentum_solution, pressure_solution);
 			save_counter++;
