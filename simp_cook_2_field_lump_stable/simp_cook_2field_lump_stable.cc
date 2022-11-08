@@ -523,6 +523,7 @@ namespace NonlinearElasticity
 
 		SparseMatrix<double> constrained_Lap_matrix_pressure;
 		SparseMatrix<double> unconstrained_Lap_matrix_pressure;
+		SparseMatrix<double> stability_Lap_matrix; 
         
         SparseMatrix<double> constrained_it_matrix_pressure;
         SparseMatrix<double> unconstrained_it_matrix_pressure;
@@ -1009,7 +1010,7 @@ namespace NonlinearElasticity
 
         constrained_it_matrix_pressure.reinit(constrained_sparsity_pattern_pressure);
         unconstrained_it_matrix_pressure.reinit(unconstrained_sparsity_pattern_pressure);
-        
+		stability_Lap_matrix.reinit(constrained_sparsity_pattern_pressure);
         
 
 		momentum_solution.reinit(dof_handler_momentum.n_dofs());
@@ -1214,7 +1215,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
     FullMatrix<double> cell_Lap_matrix(dofs_per_cell, dofs_per_cell);
-
+	FullMatrix<double> cell_stab_matrix(dofs_per_cell, dofs_per_cell);
 
 
 
@@ -1238,6 +1239,9 @@ void Incompressible<dim>::assemble_pressure_Lap()
     //Stability parameters
     double alpha = parameters.alpha;
     double beta = parameters.beta;
+	double tau;
+	double area;
+	double c_shear;
 
     auto momentum_cell = dof_handler_momentum.begin_active();
 	for( auto cell : dof_handler_pressure.active_cell_iterators())
@@ -1246,12 +1250,21 @@ void Incompressible<dim>::assemble_pressure_Lap()
         FF = 0;
         HH = 0;
         Jf = 0;
+		area = 0;
+		c_shear = 0;
+		tau = 0;
         //temp_pressure = 0;
 
         //real_Jf = 0;
        // real_pressure = 0;
 
+
+
         cell_Lap_matrix = 0;
+		cell_stab_matrix = 0;
+
+		area = std::sqrt(cell->measure());
+
         fe_values_pressure.reinit(cell);
         fe_values_momentum.reinit(momentum_cell);
 
@@ -1266,15 +1279,14 @@ void Incompressible<dim>::assemble_pressure_Lap()
             //real_Jf = get_Jf(real_FF);
             Jf = get_Jf(FF);
 			HH = get_HH(FF, Jf);
-            //real_HH = get_HH(real_FF, real_Jf);
-            //cout << "HH values : " << HH << std::endl;
-            //cout << "q_point momentum : " << temp_momentum << std::endl;
-           
-			/*cout << "real FF : " << real_FF << std::endl;
-            for (int i = 0; i < dim; i++)
-                for (int j = 0; j < dim; j++)
-                    cout << "displacement_grads[" << i << j << "]: " << displacement_grads[q_point][i][j] << std::endl;*/
-                    //cout << "displacement grads : " << displacement_grads[q_point] << std::endl;
+
+
+			c_shear = std::cbrt(Jf) * std::sqrt(mu / rho_0);
+			tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(present_timestep, area / c_shear));
+			//cout << "tau is : "<< tau << std::endl;
+			//cout << "c_shear is : "<< c_shear << std::endl;
+			//cout << "area is : "<< area << std::endl;
+
 
 
             for (const unsigned int i : fe_values_pressure.dof_indices())
@@ -1286,6 +1298,10 @@ void Incompressible<dim>::assemble_pressure_Lap()
                         scalar_product(HH * fe_grad_Pressure_i,
                             HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
                         fe_values_pressure.JxW(q_point);
+					cell_stab_matrix(i , j ) += tau * present_timestep / rho_0 *
+						scalar_product(HH * fe_grad_Pressure_i,
+							HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
+						fe_values_pressure.JxW(q_point);
                 }
 
             }
@@ -1298,13 +1314,15 @@ void Incompressible<dim>::assemble_pressure_Lap()
             cell_Lap_matrix,
             local_dof_indices,
             constrained_Lap_matrix_pressure);
-        
+		homogeneous_constraints_pressure.distribute_local_to_global(
+			cell_stab_matrix,
+			local_dof_indices,
+			stability_Lap_matrix);
+
         //cout << "contribution for cell Lap matrix : " << cell_Lap_matrix.frobenius_norm() <<std::endl;
         for (const unsigned int i : fe_values_pressure.dof_indices()) {
             for (const unsigned int j : fe_values_pressure.dof_indices()) {
                 unconstrained_Lap_matrix_pressure.add(local_dof_indices[i], local_dof_indices[j], cell_Lap_matrix(i, j));
-                //cout << "Laplacian matrix entries at " << local_dof_indices[i]<< "," <<local_dof_indices[j] <<" : " << cell_Lap_matrix(i,j) << std::endl;
-
             }
         }
         momentum_cell++;
@@ -1548,7 +1566,9 @@ void Incompressible<dim>::assemble_pressure_Lap()
 		int sol_counter;
 		Tensor<2, dim> pk1;
 
-		double tau_pJ = parameters.tau_pJ * present_timestep;
+		double tau;
+		double area;
+		double c_shear;
 
 		RightHandSide<dim> right_hand_side;
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
@@ -1563,12 +1583,16 @@ void Incompressible<dim>::assemble_pressure_Lap()
 			pk1 = 0;
 			HH = 0;
 			temp_momentum = 0;
-			//temp_momentum_residual = 0;
 			cell_rhs = 0;
+			tau = 0;
+			area = 0;
+			c_shear = 0;
 			fe_values_pressure.reinit(cell);
 			fe_values_momentum.reinit(cell_momentum);
 
 			sol_counter = 0;
+
+			area = std::sqrt(cell->measure());
 
 
 			right_hand_side.rhs_vector_value_list(fe_values_momentum.get_quadrature_points(), rhs_values, parameters.BodyForce);
@@ -1588,15 +1612,18 @@ void Incompressible<dim>::assemble_pressure_Lap()
                 FF = get_real_FF(displacement_grads[q_point]);
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
-				//cout << "HH : " << HH << std::endl;
-				//cout << " FF : " << FF << std::endl;
-				//temp_momentum += tau_pJ * temp_momentum_residual;
+				
+
+
+
+				c_shear = std::cbrt(Jf) * std::sqrt(mu / rho_0);
+				tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(present_timestep, area / c_shear));
 
 				//cout << "Jf : " << Jf << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += -(1/rho_0) *
-						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau_pJ*(/*HH * pressure_grad+*/rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/present_timestep)) *
+						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau*(rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/present_timestep)) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -2077,7 +2104,7 @@ void Incompressible<dim>::update_it_matrix()
 
 
 		auto& M1 = constrained_it_matrix_pressure;
-		M1.add(-parameters.tau_pJ, constrained_Lap_matrix_pressure);
+		M1.add(1.0, stability_Lap_matrix);
 
 		auto& pressure = pressure_sol_n_plus_1;
 
