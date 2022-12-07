@@ -477,6 +477,7 @@ namespace NonlinearElasticity
 		void		 assemble_momentum_rhs(Vector<double>& sol_n_pressure, Vector<double>& sol_n_plus_1_pressure);
 		void         solve_ForwardEuler();
 		void         solve_ssprk2();
+		void         solve_modified_trap();
 		void         solve_ssprk3();
 		void		 solve_momentum_int(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		 solve_p(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
@@ -1909,7 +1910,7 @@ void Incompressible<dim>::update_it_matrix()
 
 
 	template<int dim>
-	void Incompressible<dim>::solve_ssprk2()
+	void Incompressible<dim>::solve_modified_trap()
 	{
     update_it_matrix();
 	cout << "Assembling intermediate momentum rhs" << std::endl;
@@ -1954,6 +1955,54 @@ void Incompressible<dim>::update_it_matrix()
 
 	update_displacement(momentum_old_solution, 0.5, momentum_solution, 0.5);
 	cout << std::endl;
+	}
+
+	template<int dim>
+	void Incompressible<dim>::solve_ssprk2()
+	{
+		update_it_matrix();
+		cout << "Assembling intermediate momentum rhs" << std::endl;
+		assemble_momentum_int_rhs(pressure_old_solution);
+		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+		cout << "Solving for intermediate momentum" << std::endl;
+		solve_momentum_int(momentum_old_solution, momentum_int_solution);
+		cout << "Assembling pressure rhs" << std::endl;
+		assemble_pressure_rhs(momentum_int_solution, momentum_old_solution);
+		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
+		cout << "Solving for pressure" << std::endl;
+		solve_p(pressure_old_solution, pressure_int_solution);
+		cout << "Assembling momentum rhs" << std::endl;
+		assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
+		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+		cout << "Solving for updated momentum" << std::endl;
+		solve_momentum(momentum_old_solution, momentum_int_solution);
+		cout << "Updating displacement" << std::endl;
+		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
+		cout << std::endl;
+
+		update_it_matrix();
+		cout << "Assembling intermediate momentum rhs" << std::endl;
+		assemble_momentum_int_rhs(pressure_int_solution);
+		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+		cout << "Solving for intermediate momentum" << std::endl;
+		solve_momentum_int(momentum_int_solution, momentum_solution);
+		cout << "Assembling pressure rhs" << std::endl;
+		assemble_pressure_rhs(momentum_solution, momentum_old_solution);
+		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
+		cout << "Solving for pressure" << std::endl;
+		solve_p(pressure_int_solution, pressure_solution);
+		cout << "Assembling momentum rhs" << std::endl;
+		assemble_momentum_rhs(pressure_int_solution, pressure_solution);
+		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
+		cout << "Solving for updated momentum" << std::endl;
+		solve_momentum(momentum_int_solution, momentum_solution);
+		cout << "Updating displacement" << std::endl;
+
+		momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
+		pressure_solution = 0.5 * pressure_old_solution + 0.5 * pressure_solution;
+
+		update_displacement(momentum_old_solution, 0.5, momentum_solution, 0.5);
+		cout << std::endl;
 	}
 
 	//Assembles system, solves system, updates quad data.
@@ -2342,6 +2391,9 @@ void Incompressible<dim>::update_it_matrix()
 		else if (parameters.rk_order == 3)
 		{
 			solve_ssprk3();
+		}
+		else if (parameters.rk_order == 4) {
+			solve_modified_trap();
 		}
 		if ( present_time > save_counter * save_time- 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
