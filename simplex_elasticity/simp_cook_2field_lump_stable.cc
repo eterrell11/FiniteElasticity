@@ -1999,7 +1999,7 @@ void Incompressible<dim>::update_it_matrix()
 		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_int_solution, momentum_solution);
 		cout << "Updating displacement" << std::endl;
-		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 0.5);
+		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
 
 
 		momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
