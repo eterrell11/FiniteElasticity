@@ -551,6 +551,7 @@ namespace NonlinearElasticity
 
 		Vector<double> incremental_displacement;
 		Vector<double> total_displacement;
+		Vector<double> old_total_displacement;
 
 		double present_time;
 		double present_timestep;
@@ -1042,6 +1043,7 @@ namespace NonlinearElasticity
 
 		incremental_displacement.reinit(dof_handler_momentum.n_dofs());
         total_displacement.reinit(dof_handler_momentum.n_dofs());
+		old_total_displacement.reinit(dof_handler_momentum.n_dofs());
 	}
 
 	template <int dim>
@@ -1977,7 +1979,7 @@ void Incompressible<dim>::update_it_matrix()
 		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_old_solution, momentum_int_solution);
 		cout << "Updating displacement" << std::endl;
-		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
+		update_displacement(momentum_old_solution, 0.0, momentum_old_solution, 1.0);
 		cout << std::endl;
 
 		update_it_matrix();
@@ -1997,11 +1999,13 @@ void Incompressible<dim>::update_it_matrix()
 		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_int_solution, momentum_solution);
 		cout << "Updating displacement" << std::endl;
+		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 0.5);
+
 
 		momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
 		pressure_solution = 0.5 * pressure_old_solution + 0.5 * pressure_solution;
-
-		update_displacement(momentum_old_solution, 0.5, momentum_solution, 0.5);
+		total_displacement = 0.5 * (total_displacement + old_total_displacement);
+		old_total_displacement = total_displacement;
 		cout << std::endl;
 	}
 
@@ -2410,11 +2414,7 @@ void Incompressible<dim>::update_it_matrix()
 	template<int dim>
 	void Incompressible<dim>::update_displacement(const Vector<double>& sol_n_momentum, const double& coeff_n, const Vector<double>& sol_n_plus_1_momentum, const double& coeff_n_plus)
 	{
-		auto old_momentum = sol_n_momentum;
 
-
-
-		auto momentum = sol_n_plus_1_momentum;
 
 		//Vector<double> momentum_vector = momentum;
 
@@ -2425,7 +2425,7 @@ void Incompressible<dim>::update_it_matrix()
 		if (coeff_n != 0.0) {
 			total_displacement -= incremental_displacement;
 		}
-		incremental_displacement = present_timestep * (coeff_n * old_momentum + coeff_n_plus * momentum);
+		incremental_displacement = present_timestep * (coeff_n * sol_n_momentum + coeff_n_plus * sol_n_plus_1_momentum);
 		total_displacement += incremental_displacement;
 
 	}
