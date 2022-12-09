@@ -408,27 +408,6 @@ namespace NonlinearElasticity
 
 
 
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 2> get_rotation_matrix(const std::vector<Tensor<1, 2>>& grad_u)
-	{
-		const double curl = (grad_u[1][0] - grad_u[0][1]);
-		const double angle = std::atan(curl);
-		return Physics::Transformations::Rotations::rotation_matrix_2d(-angle);
-	}
-
-	//Tensors that describe rotation due to displacement increments. Used in updating the stress component
-	// after incremental deformation
-	Tensor<2, 3> get_rotation_matrix(const std::vector<Tensor<1, 3>>& grad_u)
-	{
-		const Point<3> curl(grad_u[2][1] - grad_u[1][2], grad_u[0][2] - grad_u[2][0], grad_u[1][0] - grad_u[0][1]);
-		const double tan_angle = std::sqrt(curl * curl);
-		const double angle = std::atan(tan_angle);
-		const Point<3> axis = curl / tan_angle;
-		return Physics::Transformations::Rotations::rotation_matrix_3d(axis,
-			-angle);
-	}
-
 
 
 	template <int dim>
@@ -449,13 +428,12 @@ namespace NonlinearElasticity
 		void         solve_ssprk2();
 		void         solve_ssprk3();
 		Vector<double> solve_mint_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
+		void		 calculate_error(Vector<double>& sol_n, double& present_time, double& error_output);
 		void         output_results(Vector<double>& sol_n) const;
 
 		void do_timestep();
 
 		void update_displacement(const Vector<double>& sol_n, const double& coeff_n, const Vector<double>& sol_n_plus, const double& coeff_n_plus);
-		/*void move_mesh();
-		void move_mesh_back();*/
 
 		void setup_quadrature_point_history();
 
@@ -485,6 +463,9 @@ namespace NonlinearElasticity
 		Vector<double> int_solution;   //For RK2 and higher order
 		Vector<double> int_solution_2; //For RK3 and higher order
 
+		Vector<double> L1_error;
+		Vector<double> true_solution;
+
 		Vector<double> incremental_displacement;
 		Vector<double> total_displacement;
 
@@ -496,7 +477,7 @@ namespace NonlinearElasticity
 		double save_counter;
 		unsigned int timestep_no;
 
-
+		double error_output;
 		double E;
 		double nu;
 
@@ -605,8 +586,9 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-        values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
-        values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+		values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+		values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * numbers::PI;
+
 	}
 	template <int dim>
 	void InitialMomentum<dim>::vector_value_list(
@@ -617,6 +599,47 @@ namespace NonlinearElasticity
 		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 		for (unsigned int p = 0; p < n_points; ++p)
 			InitialMomentum<dim>::vector_value(points[p], value_list[p]);
+	}
+
+	template <int dim>
+	class Solution : public Function<dim>
+	{
+	public:
+		Solution(double& present_time);
+		virtual void vector_value(const Point<dim>& p,
+			Vector<double>& values) const override;
+		virtual void
+			vector_value_list(const std::vector<Point<dim>>& points,
+				std::vector<Vector<double>>& value_list) const override;
+	private:
+		const double time;
+	};
+
+	template <int dim>
+	Solution<dim>::Solution(double& present_time)
+		: Function<dim>(dim),
+		time(present_time)
+	{}
+
+	template <int dim>
+	void
+		Solution<dim>::vector_value(const Point<dim>& p,
+			Vector<double>& values) const
+	{
+		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
+		values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * std::sin(numbers::PI * time);
+		values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * std::sin(numbers::PI * time);
+
+	}
+	template <int dim>
+	void Solution<dim>::vector_value_list(
+		const std::vector<Point<dim>>& points,
+		std::vector<Vector<double>>& value_list) const
+	{
+		const unsigned int n_points = points.size();
+		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+		for (unsigned int p = 0; p < n_points; ++p)
+			Solution<dim>::vector_value(points[p], value_list[p]);
 	}
 
 
@@ -811,10 +834,14 @@ namespace NonlinearElasticity
 
 		int_solution_2.reinit(dof_handler.n_dofs());
 
+		true_solution.reinit(dof_handler.n_dofs());
+
+		L1_error.reinit(dof_handler.n_dofs());
+
 		system_rhs.reinit(dof_handler.n_dofs());
 
 		cout << "Applying initial conditions" << std::endl;
-		VectorTools::interpolate(dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), old_solution);
+		VectorTools::interpolate(mapping_simplex, dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), old_solution);
 
 		incremental_displacement.reinit(dof_handler.n_dofs());
 		total_displacement.reinit(dof_handler.n_dofs());
@@ -937,13 +964,6 @@ namespace NonlinearElasticity
 		const FEValuesExtractors::Vector Momentum(0);
 
 		Tensor<2, dim> real_FF;
-		Tensor<2, dim> FF;
-		Tensor<1, dim> temp_momentum;
-		Tensor<1, dim> face_temp_momentum;
-		double         temp_pressure;
-		Tensor<2, dim> Cofactor;
-		double Jf;
-		Tensor<2, dim> pk1;
 		Tensor<2, dim> real_pk1;
 		double sol_counter;
 		double real_Jf;
@@ -952,8 +972,7 @@ namespace NonlinearElasticity
 			DoFTools::count_dofs_per_fe_component(dof_handler);
 		/*const unsigned int n_u = dofs_per_component[0] * dim;*/
 
-		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(
-			quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
+		std::vector<std::vector<Tensor<1, dim>>> displacement_grads(quadrature_formula.size(), std::vector<Tensor<1, dim>>(dim));
 
 		Tensor<1, dim> fe_val_Momentum_i;
 
@@ -968,16 +987,6 @@ namespace NonlinearElasticity
 			PointHistory<dim>* local_quadrature_points_history =
 				reinterpret_cast<PointHistory<dim> *>(cell->user_pointer());
 			real_FF = 0;
-			FF = 0;
-			Cofactor = 0;
-			Jf = 0;
-			pk1 = 0;
-			real_pk1 = 0;
-			temp_momentum = 0;
-			temp_pressure = 0;
-
-			real_Jf = 0;
-
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
@@ -992,17 +1001,12 @@ namespace NonlinearElasticity
 
 				fe_values.get_function_gradients(total_displacement, displacement_grads);
 				real_FF = get_real_FF(displacement_grads[q_point]);
-				real_Jf = get_Jf(real_FF);
-				Cofactor = get_Cofactor(real_FF, real_Jf);
-				real_pk1 = get_real_pk1(real_FF, mu, real_Jf, kappa, Cofactor);
 
-				local_quadrature_points_history[q_point].pk1_store = real_pk1;
-				local_quadrature_points_history[q_point].Cofactor_store = Cofactor;
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
 					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
-					cell_rhs(i) += (-scalar_product(fe_values[Momentum].gradient(i, q_point), real_pk1) +
+					cell_rhs(i) += (-scalar_product(fe_values[Momentum].gradient(i, q_point), real_FF) +
 						fe_val_Momentum_i * rhs_values[q_point]) * fe_values.JxW(q_point);
 				}
 			}
@@ -1139,7 +1143,23 @@ namespace NonlinearElasticity
 
 
 
-
+	template<int dim>
+	void Inelastic<dim>::calculate_error(Vector<double>& total_displacement, double& present_time, double& error_output) 
+	{
+		L1_error = 0;
+		/*VectorTools::integrate_difference(mapping_simplex,
+			dof_handler,
+			sol_n,
+			Solution<dim>(present_time),
+			L1_error,
+			QGauss<dim>(fe.degree + 1),
+			VectorTools::L2_norm);*/
+			
+		VectorTools::interpolate(mapping_simplex, dof_handler, Solution<dim>(present_time), true_solution);
+		L1_error =(true_solution - total_displacement);
+		error_output = std::max(L1_error.linfty_norm(), error_output);
+		cout << "Max L1 error value : "<< error_output << std::endl;
+	}
 
 
 
@@ -1182,6 +1202,9 @@ namespace NonlinearElasticity
 
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
 		data_out.add_data_vector(total_displacement, "displacement", DataOut<dim>::type_dof_data, interpretation1);
+		data_out.add_data_vector(L1_error, "Error_Per_Cell", DataOut<dim>::type_dof_data, interpretation1);
+		data_out.add_data_vector(true_solution, "True_solution", DataOut<dim>::type_dof_data, interpretation1);
+
 
 		std::vector<types::subdomain_id> partition_int(triangulation.n_active_cells());
 		GridTools::get_subdomain_association(triangulation, partition_int);
@@ -1232,6 +1255,7 @@ namespace NonlinearElasticity
 		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
+			calculate_error(total_displacement, present_time, error_output);
 			output_results(solution);
 			save_counter++;
 		}
@@ -1258,50 +1282,6 @@ namespace NonlinearElasticity
 	}
 
 
-	// Moves mesh according to vertex_displacement based on incremental_displacement function and solution of system
-	//template< int dim>
-	//void Inelastic<dim>::move_mesh()
-	//{
-
-	//	cout << "    Moving mesh..." << std::endl;
-	//	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-	//	for (auto& cell : dof_handler.active_cell_iterators())
-	//		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-	//			if (vertex_touched[cell->vertex_index(v)] == false)
-	//			{
-	//				vertex_touched[cell->vertex_index(v)] = true;
-	//				Point<dim> tmp_loc = cell->vertex(v);
-	//				Point<dim> tmp;
-
-	//				for (unsigned int d = 0; d < dim; ++d) {
-	//					tmp[d] = tmp_loc[d] + total_displacement(cell->vertex_dof_index(v, d));
-	//				}
-	//				cell->vertex(v) = tmp;
-	//			}
-	//	cout << "Mesh was successfully moved " << std::endl;
-	//}
-
-	//template<int dim>
-	//void Inelastic<dim>::move_mesh_back()
-	//{
-
-	//	cout << "    Moving mesh..." << std::endl;
-	//	std::vector<bool> vertex_touched(triangulation.n_vertices(), false);
-	//	for (auto& cell : dof_handler.active_cell_iterators())
-	//		for (unsigned int v = 0; v < cell->n_vertices(); ++v)
-	//			if (vertex_touched[cell->vertex_index(v)] == false)
-	//			{
-	//				vertex_touched[cell->vertex_index(v)] = true;
-	//				Point<dim> tmp_loc = cell->vertex(v);
-	//				Point<dim> tmp;
-
-	//				for (unsigned int d = 0; d < dim; ++d) {
-	//					tmp[d] = tmp_loc[d] - total_displacement(cell->vertex_dof_index(v, d));
-	//				}
-	//				cell->vertex(v) = tmp;
-	//			}
-	//	cout << "Mesh was moved back" << std::endl;
-	//}
 
 
 	// This chunk of code allows for communication between current code state and quad point history
