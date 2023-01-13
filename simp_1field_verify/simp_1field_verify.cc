@@ -426,6 +426,7 @@ namespace NonlinearElasticity
 		void         assemble_rhs(Vector<double>& sol_n);
 		void         solve_FE();
 		void         solve_ssprk2();
+		void		 solve_mod_trap();
 		void         solve_ssprk3();
 		Vector<double> solve_mint_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
 		void		 calculate_error(Vector<double>& sol_n, double& present_time, double& error_output);
@@ -446,8 +447,8 @@ namespace NonlinearElasticity
 
 		AffineConstraints<double> homogeneous_constraints;
 
-		const QGaussSimplex<dim> quadrature_formula;
-		const QGaussSimplex<dim - 1> face_quadrature_formula;
+		const QGauss<dim> quadrature_formula;
+		const QGauss<dim - 1> face_quadrature_formula;
 
 		std::vector<PointHistory<dim>> quadrature_point_history;
 		SparsityPattern constrained_sparsity_pattern;
@@ -466,7 +467,7 @@ namespace NonlinearElasticity
 		Vector<double> L1_error;
 		Vector<double> true_solution;
 
-		Vector<double> incremental_displacement;
+		Vector<double> initial_displacement;
 		Vector<double> total_displacement;
 
 
@@ -647,8 +648,8 @@ namespace NonlinearElasticity
 	template<int dim> // Constructor for the main class
 	Inelastic<dim>::Inelastic(const std::string& input_file)
 		: parameters(input_file)
-		, mapping_simplex(FE_SimplexP<dim>(parameters.order))
-		, fe(FE_SimplexP<dim>(parameters.order), dim)
+		, mapping_simplex(FE_Q<dim>(parameters.order))
+		, fe(FE_Q<dim>(parameters.order), dim)
 		, dof_handler(triangulation)
 		, quadrature_formula(parameters.order + 2)
 		, face_quadrature_formula(parameters.order + 2)
@@ -678,20 +679,20 @@ namespace NonlinearElasticity
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
 		cout << "Number of components : " << fe.n_components() << " and degree : " << fe.tensor_degree() << std::endl;;
-
+		total_displacement = 0;
+		error_output = 0;
 		output_results(old_solution);
 		cout << "Saving results at time : " << present_time << std::endl;
 		assemble_system();
 
 		save_counter = 1;
-		while (present_time < end_time)
+		while (present_time < end_time-1e-12)
 			do_timestep();
 	}
 
 	template <int dim>
 	void Inelastic<dim>::create_coarse_grid(Triangulation<2>& triangulation)
 	{
-		Triangulation<dim> quad_triangulation;
 
 		std::vector<Point<2>> vertices = {
 			{-1.0,-1.0} , {-1.0,1.0}, {1.0, 1.0}, {1.0, -1.0} };
@@ -707,10 +708,10 @@ namespace NonlinearElasticity
 			}
 			cells[i].material_id = 0;
 		}
-		quad_triangulation.create_triangulation(vertices, cells, SubCellData());
+		triangulation.create_triangulation(vertices, cells, SubCellData());
 
 
-		for (const auto& cell : quad_triangulation.active_cell_iterators())
+		for (const auto& cell : triangulation.active_cell_iterators())
 			for (const auto& face : cell->face_iterators())
 				if (face->at_boundary())
 				{
@@ -722,8 +723,8 @@ namespace NonlinearElasticity
 						face->set_boundary_id(1);
 					}
 				}
-		cout << quad_triangulation.n_global_levels() << std::endl;
-		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
+		cout << triangulation.n_global_levels() << std::endl;
+		//GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 		triangulation.refine_global(parameters.n_ref);
 
 		setup_quadrature_point_history();
@@ -843,7 +844,7 @@ namespace NonlinearElasticity
 		cout << "Applying initial conditions" << std::endl;
 		VectorTools::interpolate(mapping_simplex, dof_handler, InitialMomentum<dim>(parameters.InitialVelocity), old_solution);
 
-		incremental_displacement.reinit(dof_handler.n_dofs());
+		initial_displacement.reinit(dof_handler.n_dofs());
 		total_displacement.reinit(dof_handler.n_dofs());
 	}
 
@@ -944,10 +945,6 @@ namespace NonlinearElasticity
 		const unsigned int n_face_q_points = face_quadrature_formula.size();
 
 
-		std::vector<Vector<double>> sol_vec(n_q_points, Vector<double>(dim));
-		std::vector<Vector<double>> face_sol_vec(n_face_q_points, Vector<double>(dim));
-
-
 		Vector<double>     cell_rhs(dofs_per_cell);
 
 
@@ -990,7 +987,6 @@ namespace NonlinearElasticity
 			cell_rhs = 0;
 			fe_values.reinit(cell);
 
-			fe_values.get_function_values(sol_n, sol_vec);
 			right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time);
 
 
@@ -1028,7 +1024,7 @@ namespace NonlinearElasticity
 	{
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, solution);
-		update_displacement(old_solution, 0.0, solution, 1.0);
+		total_displacement += present_timestep * old_solution;
 		cout << std::endl;
 	}
 
@@ -1036,15 +1032,38 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::solve_ssprk2()
 	{
+		initial_displacement = total_displacement;
+		assemble_rhs(old_solution);
+		const Vector<double> it_count = solve_mint_F(old_solution, int_solution); //Forward Euler
+		total_displacement += present_timestep * int_solution; //"Backward" Euler
+
+		assemble_rhs(int_solution);
+		const Vector<double> it_count2 = solve_mint_F(int_solution, solution); //Forward Euler
+		solution = 0.5 * old_solution + 0.5 * solution;  //Average
+
+		total_displacement = initial_displacement + present_timestep/2.0 *(old_solution+solution); //Forward Euler
+
+		 
+		//total_displacement += present_timestep * solution; //Forward Euler using averaged momentum
+		//total_displacement = 0.5 * total_displacement + 0.5 * initial_displacement; //Average displacement
+
+		cout << std::endl;
+	}
+
+	template<int dim>
+	void Inelastic<dim>::solve_mod_trap()
+	{
+		initial_displacement = total_displacement;
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
-		update_displacement(old_solution, 0.0, int_solution, 1.0);
+		total_displacement += present_timestep * int_solution; //"Backward" Euler
 
 		cout << std::endl;
 		assemble_rhs(int_solution);
 		const Vector<double> it_count2 = solve_mint_F(int_solution, solution);
-		solution = 0.5 * old_solution + 0.5 * solution;
-		update_displacement(old_solution, 0.5, solution, 0.5);
+		solution = 0.5 * old_solution + 0.5 * solution; //Average momentum
+		total_displacement += present_timestep * solution; //Forward Euler using averaged momentum
+		total_displacement = 0.5 * total_displacement + 0.5 * initial_displacement; //Average displacement
 
 		cout << std::endl;
 	}
@@ -1053,6 +1072,7 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::solve_ssprk3()
 	{
+		int_solution = 0;
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
 		update_displacement(old_solution, 0.0, int_solution, 1.0);
@@ -1252,6 +1272,9 @@ namespace NonlinearElasticity
 		{
 			solve_ssprk3();
 		}
+		else if (parameters.rk_order == 4) {
+			solve_mod_trap();
+		}
 		//move_mesh();
 		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
 			cout << "Saving results at time : " << present_time << std::endl;
@@ -1274,11 +1297,7 @@ namespace NonlinearElasticity
 		auto momentum = sol_n_plus;
 		auto old_momentum = sol_n;
 
-		if (coeff_n != 0.0) {
-			total_displacement -= incremental_displacement;
-		}
-		incremental_displacement = present_timestep * (coeff_n * old_momentum + coeff_n_plus * momentum);
-		total_displacement += incremental_displacement;
+		total_displacement += present_timestep * (coeff_n * old_momentum + coeff_n_plus * momentum);
 	}
 
 
