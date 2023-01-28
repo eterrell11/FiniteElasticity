@@ -120,7 +120,7 @@ namespace NonlinearElasticity
 		}
 		struct Time
 		{
-			double present_timestep;
+			double dt;
 			double end_time;
 			double save_time;
 			double start_time;
@@ -154,7 +154,7 @@ namespace NonlinearElasticity
 		{
 			prm.enter_subsection("Time");
 			{
-				present_timestep = prm.get_double("Timestep");
+				dt = prm.get_double("Timestep");
 				end_time = prm.get_double("End time");
 				save_time = prm.get_double("Save time");
 				start_time = prm.get_double("Start time");
@@ -429,7 +429,7 @@ namespace NonlinearElasticity
 		void		 solve_mod_trap();
 		void         solve_ssprk3();
 		Vector<double> solve_mint_F(Vector<double>& sol_n, Vector<double>& sol_n_plus_1);
-		void		 calculate_error(Vector<double>& sol_n, double& present_time, double& error_output);
+		void		 calculate_error(Vector<double>& sol_n, double& present_time, double& displacement_error_output, double& derivative_error_output);
 		void         output_results(Vector<double>& sol_n) const;
 
 		void do_timestep();
@@ -464,21 +464,24 @@ namespace NonlinearElasticity
 		Vector<double> int_solution;   //For RK2 and higher order
 		Vector<double> int_solution_2; //For RK3 and higher order
 
-		Vector<double> L1_error;
+		Vector<double> displacement_error;
+		Vector<double> derivative_error;
 		Vector<double> true_solution;
+		Vector<double> derivative_solution;
 
 		Vector<double> initial_displacement;
 		Vector<double> total_displacement;
 
 
 		double present_time;
-		double present_timestep;
+		double dt;
 		double end_time;
 		double save_time;
 		double save_counter;
 		unsigned int timestep_no;
 
-		double error_output;
+		double displacement_error_output;
+		double derivative_error_output;
 		double E;
 		double nu;
 
@@ -643,7 +646,46 @@ namespace NonlinearElasticity
 			Solution<dim>::vector_value(points[p], value_list[p]);
 	}
 
+	template <int dim>
+	class Derivative : public Function<dim>
+	{
+	public:
+		Derivative(double& present_time);
+		virtual void vector_value(const Point<dim>& p,
+			Vector<double>& values) const override;
+		virtual void
+			vector_value_list(const std::vector<Point<dim>>& points,
+				std::vector<Vector<double>>& value_list) const override;
+	private:
+		const double time;
+	};
 
+	template <int dim>
+	Derivative<dim>::Derivative(double& present_time)
+		: Function<dim>(dim),
+		time(present_time)
+	{}
+
+	template <int dim>
+	void
+		Derivative<dim>::vector_value(const Point<dim>& p,
+			Vector<double>& values) const
+	{
+		Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
+		values[0] = numbers::PI * (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * std::cos(numbers::PI * time);
+		values[1] = numbers::PI * (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * std::cos(numbers::PI * time);
+
+	}
+	template <int dim>
+	void Derivative<dim>::vector_value_list(
+		const std::vector<Point<dim>>& points,
+		std::vector<Vector<double>>& value_list) const
+	{
+		const unsigned int n_points = points.size();
+		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+		for (unsigned int p = 0; p < n_points; ++p)
+			Derivative<dim>::vector_value(points[p], value_list[p]);
+	}
 
 	template<int dim> // Constructor for the main class
 	Inelastic<dim>::Inelastic(const std::string& input_file)
@@ -673,14 +715,15 @@ namespace NonlinearElasticity
 		E = parameters.E;
 		nu = parameters.nu;
 		present_time = parameters.start_time;
-		present_timestep = parameters.present_timestep;
+		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
 		cout << "Number of components : " << fe.n_components() << " and degree : " << fe.tensor_degree() << std::endl;;
 		total_displacement = 0;
-		error_output = 0;
+		displacement_error_output = 0;
+		derivative_error_output = 0;
 		output_results(old_solution);
 		cout << "Saving results at time : " << present_time << std::endl;
 		assemble_system();
@@ -837,7 +880,10 @@ namespace NonlinearElasticity
 
 		true_solution.reinit(dof_handler.n_dofs());
 
-		L1_error.reinit(dof_handler.n_dofs());
+		derivative_solution.reinit(dof_handler.n_dofs());
+
+		displacement_error.reinit(dof_handler.n_dofs());
+		displacement_error.reinit(dof_handler.n_dofs());
 
 		system_rhs.reinit(dof_handler.n_dofs());
 
@@ -1022,9 +1068,11 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::solve_FE()
 	{
+		present_time -= dt;
 		assemble_rhs(old_solution);
+		present_time += dt;
 		const Vector<double> it_count = solve_mint_F(old_solution, solution);
-		total_displacement += present_timestep * old_solution;
+		total_displacement += dt * old_solution;
 		cout << std::endl;
 	}
 
@@ -1032,20 +1080,22 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::solve_ssprk2()
 	{
+		present_time -= dt;
 		initial_displacement = total_displacement;
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution); //Forward Euler
-		total_displacement += present_timestep * int_solution; //"Backward" Euler
+		total_displacement += dt * old_solution; //Forward Euler
 
+		present_time += dt;
 		assemble_rhs(int_solution);
 		const Vector<double> it_count2 = solve_mint_F(int_solution, solution); //Forward Euler
-		solution = 0.5 * old_solution + 0.5 * solution;  //Average
+		solution = 0.5 * (solution + old_solution);  //Average
 
-		total_displacement = initial_displacement + present_timestep/2.0 *(old_solution+solution); //Forward Euler
+		//total_displacement = initial_displacement + dt/2.0 *(old_solution+solution); //Forward Euler
 
 		 
-		//total_displacement += present_timestep * solution; //Forward Euler using averaged momentum
-		//total_displacement = 0.5 * total_displacement + 0.5 * initial_displacement; //Average displacement
+		total_displacement += dt * int_solution; //Forward Euler using averaged momentum
+		total_displacement = 0.5 * total_displacement + 0.5 * initial_displacement; //Average displacement
 
 		cout << std::endl;
 	}
@@ -1054,16 +1104,17 @@ namespace NonlinearElasticity
 	void Inelastic<dim>::solve_mod_trap()
 	{
 		initial_displacement = total_displacement;
+		present_time -= dt;
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
-		total_displacement += present_timestep * int_solution; //"Backward" Euler
+		total_displacement += dt * int_solution; //"Backward" Euler
 
 		cout << std::endl;
+		present_time += dt;
 		assemble_rhs(int_solution);
 		const Vector<double> it_count2 = solve_mint_F(int_solution, solution);
 		solution = 0.5 * old_solution + 0.5 * solution; //Average momentum
-		total_displacement += present_timestep * solution; //Forward Euler using averaged momentum
-		total_displacement = 0.5 * total_displacement + 0.5 * initial_displacement; //Average displacement
+		total_displacement = initial_displacement +0.5*dt*(solution+old_solution); //Average displacement
 
 		cout << std::endl;
 	}
@@ -1072,22 +1123,31 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Inelastic<dim>::solve_ssprk3()
 	{
+		initial_displacement = total_displacement;
 		int_solution = 0;
+		int_solution_2 = 0;
+		present_time -= dt;
 		assemble_rhs(old_solution);
 		const Vector<double> it_count = solve_mint_F(old_solution, int_solution);
-		update_displacement(old_solution, 0.0, int_solution, 1.0);
+		total_displacement += dt * old_solution;
 
 		cout << std::endl;
+		present_time += dt;
 		assemble_rhs(int_solution);
 		const Vector<double> it_count2 = solve_mint_F(int_solution, int_solution_2);
 		int_solution_2 = 0.75 * old_solution + 0.25 * int_solution_2;
-		update_displacement(old_solution, 0.75, int_solution_2, 0.25);
-		cout << std::endl;
+		total_displacement += dt * int_solution;
+		total_displacement = 0.75 * initial_displacement + 0.25 * total_displacement;
 
+		cout << std::endl;
+		present_time -= 0.5 * dt;
 		assemble_rhs(int_solution_2);
+		present_time += 0.5 * dt;
 		const Vector<double> it_count3 = solve_mint_F(int_solution_2, solution);
 		solution = 1.0 / 3.0 * old_solution + 2.0 / 3.0 * solution;
-		update_displacement(old_solution, 1.0 / 3.0, solution, 2.0 / 3.0);
+		total_displacement += dt * int_solution_2;
+		total_displacement = 1.0 / 3.0 * initial_displacement + 2.0 / 3.0 * total_displacement;
+		cout << std::endl;
 	}
 
 	//solves system using direct solver
@@ -1103,7 +1163,7 @@ namespace NonlinearElasticity
 		Vector<double> un_rhs = system_rhs;
 		Vector<double> old_sol = sol_n;
 
-		un_rhs *= present_timestep;
+		un_rhs *= dt;
 		un_M.vmult_add(un_rhs, old_sol);
 
 		AffineConstraints<double> all_constraints;
@@ -1164,21 +1224,18 @@ namespace NonlinearElasticity
 
 
 	template<int dim>
-	void Inelastic<dim>::calculate_error(Vector<double>& total_displacement, double& present_time, double& error_output) 
+	void Inelastic<dim>::calculate_error(Vector<double>& total_displacement, double& present_time, double& displacement_error_output, double& derivative_error_output) 
 	{
-		L1_error = 0;
-		/*VectorTools::integrate_difference(mapping_simplex,
-			dof_handler,
-			sol_n,
-			Solution<dim>(present_time),
-			L1_error,
-			QGauss<dim>(fe.degree + 1),
-			VectorTools::L2_norm);*/
-			
+		displacement_error = 0;
+		derivative_error = 0;
 		VectorTools::interpolate(mapping_simplex, dof_handler, Solution<dim>(present_time), true_solution);
-		L1_error =(true_solution - total_displacement);
-		error_output = std::max(L1_error.linfty_norm(), error_output);
-		cout << "Max L1 error value : "<< error_output << std::endl;
+		VectorTools::interpolate(mapping_simplex, dof_handler, Derivative<dim>(present_time), derivative_solution);
+		displacement_error = (true_solution - total_displacement);
+		derivative_error = (derivative_solution - solution);
+		displacement_error_output = std::max(displacement_error.l2_norm(), displacement_error_output);
+		cout << "Max displacement error value : " << displacement_error_output << std::endl;
+		derivative_error_output = std::max(derivative_error.l2_norm(),derivative_error_output);
+		cout << "Max derivative error value : " << derivative_error_output << std::endl;
 	}
 
 
@@ -1222,7 +1279,7 @@ namespace NonlinearElasticity
 
 		data_out.add_data_vector(norm_of_pk1, "norm_of_pk1");
 		data_out.add_data_vector(total_displacement, "displacement", DataOut<dim>::type_dof_data, interpretation1);
-		data_out.add_data_vector(L1_error, "Error_Per_Cell", DataOut<dim>::type_dof_data, interpretation1);
+		data_out.add_data_vector(displacement_error, "Error_Per_Cell", DataOut<dim>::type_dof_data, interpretation1);
 		data_out.add_data_vector(true_solution, "True_solution", DataOut<dim>::type_dof_data, interpretation1);
 
 
@@ -1249,14 +1306,14 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Inelastic<dim>::do_timestep()
 	{
-		present_time += present_timestep;
+		present_time += dt;
 		++timestep_no;
 		cout << "_____________________________________________________________" << std::endl;
 		cout << "Timestep " << timestep_no << " at time " << present_time
 			<< std::endl;
 		if (present_time > end_time)
 		{
-			present_timestep -= (present_time - end_time);
+			dt -= (present_time - end_time);
 			present_time = end_time;
 		}
 
@@ -1275,14 +1332,12 @@ namespace NonlinearElasticity
 		else if (parameters.rk_order == 4) {
 			solve_mod_trap();
 		}
-		//move_mesh();
-		if (abs(present_time - save_counter * save_time) < 0.1 * present_timestep) {
+		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
 			cout << "Saving results at time : " << present_time << std::endl;
-			calculate_error(total_displacement, present_time, error_output);
+			calculate_error(total_displacement, present_time, displacement_error_output, derivative_error_output);
 			output_results(solution);
 			save_counter++;
 		}
-		//move_mesh_back();
 		std::swap(old_solution, solution);
 
 		cout << std::endl << std::endl;
@@ -1297,7 +1352,7 @@ namespace NonlinearElasticity
 		auto momentum = sol_n_plus;
 		auto old_momentum = sol_n;
 
-		total_displacement += present_timestep * (coeff_n * old_momentum + coeff_n_plus * momentum);
+		total_displacement += dt * (coeff_n * old_momentum + coeff_n_plus * momentum);
 	}
 
 
