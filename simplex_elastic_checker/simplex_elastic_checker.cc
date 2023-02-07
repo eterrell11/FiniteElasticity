@@ -318,7 +318,40 @@ namespace NonlinearElasticity
 
 
 
+	template <int dim, int spacedim = dim> 
+	Quadrature<dim> compute_nodal_quadrature(const FiniteElement<dim, spacedim>& fe)
+	{
+		Assert(fe.n_blocks() == 1, ExcNotImplemented());
+		Assert(fe.n_components() == 1, ExcNotImplemented());
+		//Needs to be called for each distinct finite element scenario
+		ReferenceCell type = fe.reference_cell(); //Defines reference cell for given finite element space
 
+		Quadrature<dim> q_gauss = type.get_gauss_type_quadrature<dim>(fe.tensor_degree() + 1); //Use gaussian quadrature
+		Triangulation<dim, spacedim> tria;
+		GridGenerator::reference_cell(tria, type); //make grid for reference cell
+		const Mapping<dim, spacedim>& mapping = type.template get_default_linear_mapping<dim, spacedim>(); 
+		auto cell = tria.begin_active();
+		FEValues<dim, spacedim> fe_values(
+			mapping,
+			fe,
+			q_gauss,
+			update_values |
+			update_JxW_values);
+		fe_values.reinit(cell);
+		std::vector<Point<dim>> nodal_quad_points = fe.get_unit_support_points(); //Find nodal locations to use as quadrature points
+		std::vector<double> nodal_quad_weights(nodal_quad_points.size()); //Preallocate vector of nodal quadrature weights
+		Assert(nodal_quad_points.size() > 0, ExcNotImplemented());
+		for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+		{
+			double integral = 0.0;
+			for (unsigned int q = 0; q < q_gauss.size(); ++q)
+			{
+				integral += fe_values.shape_value(i, q) * fe_values.JxW(q); 
+			}
+			nodal_quad_weights[i] = integral/dim;//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
+		}
+		return { nodal_quad_points, nodal_quad_weights };
+	}
 
 
 
@@ -690,7 +723,7 @@ namespace NonlinearElasticity
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> point_1;
-			values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * M_PI * M_PI * std::sin(M_PI * present_time);
+			values[0] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * M_PI * M_PI *std::sin(M_PI * present_time);
 			values[1] = (std::sin(numbers::PI * p[0]) * std::sin(numbers::PI * p[1])) * M_PI * M_PI * std::sin(M_PI * present_time);
 		}
 		virtual void
@@ -1109,17 +1142,17 @@ namespace NonlinearElasticity
 
 		unconstrained_mass_matrix_momentum = 0;
 
+		const Quadrature<dim> nodal_quad = compute_nodal_quadrature(fe_momentum);
+
 		FEValues<dim> fe_values(mapping_simplex,
 			fe_momentum,
-			quadrature_formula_momentum,
+			nodal_quad,
 			update_values |
-			update_gradients |
-			update_quadrature_points |
 			update_JxW_values);
 
 
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
-		const unsigned int n_q_points = quadrature_formula_momentum.size();
+		const unsigned int n_q_points = nodal_quad.size();
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 
@@ -1129,29 +1162,24 @@ namespace NonlinearElasticity
 
 		Tensor<1, dim> fe_val_Momentum_i;
 
+		std::vector<types::global_dof_index> dofs(fe_momentum.dofs_per_cell);
 
 		for (const auto& cell : dof_handler_momentum.active_cell_iterators())
 		{
-
-
 			cell_mass_matrix = 0;
 			fe_values.reinit(cell);
 
 
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (unsigned int q_point = 0; q_point <nodal_quad.size(); ++q_point)
 			{
-				for (const unsigned int i : fe_values.dof_indices())
+				for (unsigned int i = 0; i<dofs_per_cell; ++i)
 				{
-					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
-					for (const unsigned int j : fe_values.dof_indices())
-					{
-						cell_mass_matrix(i, i) += rho_0 *
-							fe_val_Momentum_i * //Momentum terms
-							fe_values[Momentum].value(j, q_point) *
-							fe_values.JxW(q_point);
-					}
-
+					const double v = fe_values.shape_value(i, q_point);
+					Assert(std::abs(v - double(i == q)) < 1e-14,
+						ExcInternalError());
+					cell_mass_matrix(i, i) += rho_0 *fe_values.shape_value(i,q_point) *
+						fe_values.JxW(q_point);
 				}
 			}
 
@@ -1163,9 +1191,7 @@ namespace NonlinearElasticity
 				local_dof_indices,
 				constrained_mass_matrix_momentum);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-				for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-					unconstrained_mass_matrix_momentum.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
-				}
+					unconstrained_mass_matrix_momentum.add(local_dof_indices[i], local_dof_indices[i], cell_mass_matrix(i, i));
 			}
 		}
 	}
@@ -1510,7 +1536,6 @@ namespace NonlinearElasticity
 						fe_values_momentum[Momentum].value(i, q_point) * rhs_values[q_point]) * fe_values_momentum.JxW(q_point);
 				}
 			}
-
 			cell->get_dof_indices(local_dof_indices);
 			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 				momentum_rhs(local_dof_indices[i]) += cell_rhs(i);
@@ -2105,6 +2130,7 @@ namespace NonlinearElasticity
 //		Vector<double> u_DQ = (sol_n_plus_1.block(0) - sol_n.block(0));
 //		u_DQ /= dt;
 		//residual.block(0) = u_rhs - u_DQ;
+		cout << "momentum solver took : "  << solver_control.last_step()  << " step[s]" << std::endl;
 
 
 	}
@@ -2236,9 +2262,10 @@ namespace NonlinearElasticity
 		u_preconditioner.initialize(M0, 1.2);
 
 		solver.solve(M0, momentum, u_rhs, u_preconditioner);
+		//for( unsigned int i=0; i< momentum.size(); ++i)
+		//	momentum[i] = u_rhs[i] / M0[i][i];
 		u_constraints.distribute(sol_n_plus_1_momentum);
 
-		//		return solver_control.last_step();
 	}
 
 
