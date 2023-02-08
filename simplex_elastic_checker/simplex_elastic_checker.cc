@@ -348,7 +348,7 @@ namespace NonlinearElasticity
 			{
 				integral += fe_values.shape_value(i, q) * fe_values.JxW(q); 
 			}
-			nodal_quad_weights[i] = integral/dim;//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
+			nodal_quad_weights[i] = integral/fe.n_components();//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
 		}
 		return { nodal_quad_points, nodal_quad_weights };
 	}
@@ -1965,8 +1965,8 @@ namespace NonlinearElasticity
 		present_time += dt;
 		assemble_momentum_int_rhs(pressure_int_solution);
 		solve_momentum_int(momentum_int_solution, momentum_solution);
-		total_displacement += dt * momentum_int_solution;
 
+		total_displacement += dt * momentum_int_solution;
 		total_displacement = 0.5 * (total_displacement + old_total_displacement);
 		momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
 		cout << std::endl;
