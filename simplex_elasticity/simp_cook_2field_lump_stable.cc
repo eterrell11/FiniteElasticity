@@ -318,7 +318,40 @@ namespace NonlinearElasticity
 
 
 
+	template <int dim, int spacedim = dim>
+	Quadrature<dim> compute_nodal_quadrature(const FiniteElement<dim, spacedim>& fe)
+	{
+		Assert(fe.n_blocks() == 1, ExcNotImplemented());
+		Assert(fe.n_components() == 1, ExcNotImplemented());
+		//Needs to be called for each distinct finite element scenario
+		ReferenceCell type = fe.reference_cell(); //Defines reference cell for given finite element space
 
+		Quadrature<dim> q_gauss = type.get_gauss_type_quadrature<dim>(fe.tensor_degree() + 1); //Use gaussian quadrature
+		Triangulation<dim, spacedim> tria;
+		GridGenerator::reference_cell(tria, type); //make grid for reference cell
+		const Mapping<dim, spacedim>& mapping = type.template get_default_linear_mapping<dim, spacedim>();
+		auto cell = tria.begin_active();
+		FEValues<dim, spacedim> fe_values(
+			mapping,
+			fe,
+			q_gauss,
+			update_values |
+			update_JxW_values);
+		fe_values.reinit(cell);
+		std::vector<Point<dim>> nodal_quad_points = fe.get_unit_support_points(); //Find nodal locations to use as quadrature points
+		std::vector<double> nodal_quad_weights(nodal_quad_points.size()); //Preallocate vector of nodal quadrature weights
+		Assert(nodal_quad_points.size() > 0, ExcNotImplemented());
+		for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+		{
+			double integral = 0.0;
+			for (unsigned int q = 0; q < q_gauss.size(); ++q)
+			{
+				integral += fe_values.shape_value(i, q) * fe_values.JxW(q);
+			}
+			nodal_quad_weights[i] = integral / fe.n_components();//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
+		}
+		return { nodal_quad_points, nodal_quad_weights };
+	}
 
 
 
@@ -1056,17 +1089,17 @@ namespace NonlinearElasticity
 
         unconstrained_mass_matrix_momentum = 0;
 
+		const Quadrature<dim> nodal_quad = compute_nodal_quadrature(fe_momentum);
+
 		FEValues<dim> fe_values(mapping_simplex,
 			fe_momentum,
-			quadrature_formula_momentum,
+			nodal_quad,
 			update_values |
-			update_gradients |
-			update_quadrature_points |
 			update_JxW_values);
 
 
 		const unsigned int dofs_per_cell = fe_momentum.dofs_per_cell;
-		const unsigned int n_q_points = quadrature_formula_momentum.size();
+		const unsigned int n_q_points = nodal_quad.size();
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 
@@ -1086,19 +1119,13 @@ namespace NonlinearElasticity
 
 
 
-			for (const unsigned int q_point : fe_values.quadrature_point_indices())
+			for (unsigned int q_point = 0; q_point < nodal_quad.size(); ++q_point)
 			{
-				for (const unsigned int i : fe_values.dof_indices())
+				for ( unsigned int i = 0; i<dofs_per_cell; ++i)
 				{
-					fe_val_Momentum_i = fe_values[Momentum].value(i, q_point);
-					for (const unsigned int j : fe_values.dof_indices())
-					{
-						cell_mass_matrix(i, i) += rho_0 *
-							fe_val_Momentum_i * //Momentum terms
-							fe_values[Momentum].value(j, q_point) *
+					cell_mass_matrix(i, i) += rho_0 *
+						fe_values.shape_value(i, q_point) *
                         fe_values.JxW(q_point);
-					}
-
 				}
 			}
 
@@ -1963,42 +1990,22 @@ void Incompressible<dim>::update_it_matrix()
 	void Incompressible<dim>::solve_ssprk2()
 	{
 		update_it_matrix();
-		cout << "Assembling intermediate momentum rhs" << std::endl;
 		assemble_momentum_int_rhs(pressure_old_solution);
-		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for intermediate momentum" << std::endl;
 		solve_momentum_int(momentum_old_solution, momentum_int_solution);
-		cout << "Assembling pressure rhs" << std::endl;
 		assemble_pressure_rhs(momentum_int_solution, momentum_old_solution);
-		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
-		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_old_solution, pressure_int_solution);
-		cout << "Assembling momentum rhs" << std::endl;
 		assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
-		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_old_solution, momentum_int_solution);
-		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_old_solution, 1.0);
 		cout << std::endl;
 
 		update_it_matrix();
-		cout << "Assembling intermediate momentum rhs" << std::endl;
 		assemble_momentum_int_rhs(pressure_int_solution);
-		cout << "Norm of intermediate momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for intermediate momentum" << std::endl;
 		solve_momentum_int(momentum_int_solution, momentum_solution);
-		cout << "Assembling pressure rhs" << std::endl;
 		assemble_pressure_rhs(momentum_solution, momentum_old_solution);
-		cout << "Norm of pressure rhs : " << pressure_rhs.l2_norm() << std::endl;
-		cout << "Solving for pressure" << std::endl;
 		solve_p(pressure_int_solution, pressure_solution);
-		cout << "Assembling momentum rhs" << std::endl;
 		assemble_momentum_rhs(pressure_int_solution, pressure_solution);
-		cout << "Norm of updated momentum rhs : " << momentum_rhs.l2_norm() << std::endl;
-		cout << "Solving for updated momentum" << std::endl;
 		solve_momentum(momentum_int_solution, momentum_solution);
-		cout << "Updating displacement" << std::endl;
 		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
 
 
