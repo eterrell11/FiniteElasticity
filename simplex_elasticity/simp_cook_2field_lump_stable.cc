@@ -134,7 +134,7 @@ namespace NonlinearElasticity
 		}
 		struct Time
 		{
-			double present_timestep;
+			double dt;
 			double end_time;
 			double save_time;
 			double start_time;
@@ -168,7 +168,7 @@ namespace NonlinearElasticity
 		{
 			prm.enter_subsection("Time");
 			{
-				present_timestep = prm.get_double("Timestep");
+				dt = prm.get_double("Timestep");
 				end_time = prm.get_double("End time");
 				save_time = prm.get_double("Save time");
 				start_time = prm.get_double("Start time");
@@ -587,7 +587,7 @@ namespace NonlinearElasticity
 		Vector<double> old_total_displacement;
 
 		double present_time;
-		double present_timestep;
+		double dt;
         double rho_0;
 		double end_time;
 		double save_time;
@@ -845,7 +845,7 @@ namespace NonlinearElasticity
 		nu = parameters.nu;
         rho_0 = parameters.rho_0;
 		present_time = parameters.start_time;
-		present_timestep = parameters.present_timestep;
+		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 		mu = get_mu<dim>(E, nu);
@@ -1188,7 +1188,7 @@ void Incompressible<dim>::assemble_pressure_mass()
                 fe_val_Pressure_i = fe_values[Pressure].value(i, q_point);
                 for (const unsigned int j : fe_values.dof_indices())
                 {
-                    cell_mass_matrix(i, j) += 1.0 / (kappa * present_timestep) *
+                    cell_mass_matrix(i, j) += 1.0 / (kappa * dt) *
                         fe_val_Pressure_i * //Momentum terms
                         fe_values[Pressure].value(j, q_point) *
                     fe_values.JxW(q_point);
@@ -1318,7 +1318,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 			//c_shear = std::cbrt(Jf) * std::sqrt(mu / rho_0);
-			//tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(present_timestep, area / c_shear));
+			//tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(dt, area / c_shear));
 
 
 
@@ -1327,11 +1327,11 @@ void Incompressible<dim>::assemble_pressure_Lap()
                 fe_grad_Pressure_i = fe_values_pressure[Pressure].gradient(i, q_point);
                 for (const unsigned int j : fe_values_pressure.dof_indices())
                 {
-                    cell_Lap_matrix(i, j) += present_timestep / rho_0 *
+                    cell_Lap_matrix(i, j) += dt / rho_0 *
                         scalar_product(HH * fe_grad_Pressure_i,
                             HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
                         fe_values_pressure.JxW(q_point);
-					cell_stab_matrix(i , j ) += tau * present_timestep / rho_0 *
+					cell_stab_matrix(i , j ) += tau * dt / rho_0 *
 						scalar_product(HH * fe_grad_Pressure_i,
 							HH * fe_values_pressure[Pressure].gradient(j, q_point)) *
 						fe_values_pressure.JxW(q_point);
@@ -1631,7 +1631,7 @@ void Incompressible<dim>::assemble_pressure_Lap()
 					c_shear = std::cbrt(Jf) * std::sqrt(mu / rho_0);
 					if ((area / c_shear) < ratio) {
 						ratio = area / c_shear;
-						tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(present_timestep, area / c_shear));
+						tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(dt, area / c_shear));
 					}
 				}
 				cell_momentum++;
@@ -1679,13 +1679,13 @@ void Incompressible<dim>::assemble_pressure_Lap()
 
 
 				//c_shear = std::cbrt(Jf) * std::sqrt(mu / rho_0);
-				//tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(present_timestep, area / c_shear));
+				//tau = parameters.tau_pJ * std::max(area / (100 * c_shear), std::min(dt, area / c_shear));
 
 				//cout << "Tau : " << tau << std::endl;
 				for (unsigned int i = 0; i < dofs_per_cell; ++i)
 				{
 					cell_rhs(i) += -(1/rho_0) *
-						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau*(HH*pressure_grad +rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/present_timestep)) *
+						scalar_product(HH * fe_values_pressure[Pressure].gradient(i, q_point), temp_momentum + tau*(HH*pressure_grad +rho_0*rhs_values[q_point]-(temp_momentum-old_temp_momentum)/dt)) *
 						fe_values_pressure.JxW(q_point);
 					//cout << "cell_rhs values : " << cell_rhs(i) << std::endl;
 				}
@@ -1989,14 +1989,15 @@ void Incompressible<dim>::update_it_matrix()
 	template<int dim>
 	void Incompressible<dim>::solve_ssprk2()
 	{
+		old_total_displacement = total_displacement;
 		update_it_matrix();
 		assemble_momentum_int_rhs(pressure_old_solution);
 		solve_momentum_int(momentum_old_solution, momentum_int_solution);
 		assemble_pressure_rhs(momentum_int_solution, momentum_old_solution);
 		solve_p(pressure_old_solution, pressure_int_solution);
 		assemble_momentum_rhs(pressure_old_solution, pressure_int_solution);
-		solve_momentum(momentum_old_solution, momentum_int_solution);
-		update_displacement(momentum_old_solution, 0.0, momentum_old_solution, 1.0);
+		solve_momentum(momentum_int_solution, momentum_int_solution);
+		total_displacement += dt * momentum_old_solution;
 		cout << std::endl;
 
 		update_it_matrix();
@@ -2005,14 +2006,12 @@ void Incompressible<dim>::update_it_matrix()
 		assemble_pressure_rhs(momentum_solution, momentum_old_solution);
 		solve_p(pressure_int_solution, pressure_solution);
 		assemble_momentum_rhs(pressure_int_solution, pressure_solution);
-		solve_momentum(momentum_int_solution, momentum_solution);
-		update_displacement(momentum_old_solution, 0.0, momentum_int_solution, 1.0);
-
+		solve_momentum(momentum_solution, momentum_solution);
+		total_displacement += dt * momentum_int_solution;
 
 		momentum_solution = 0.5 * momentum_old_solution + 0.5 * momentum_solution;
 		pressure_solution = 0.5 * pressure_old_solution + 0.5 * pressure_solution;
 		total_displacement = 0.5 * (total_displacement + old_total_displacement);
-		old_total_displacement = total_displacement;
 		cout << std::endl;
 	}
 
@@ -2105,7 +2104,7 @@ void Incompressible<dim>::update_it_matrix()
 
 		Vector<double> old_sol = momentum_sol_n;
 
-		un_rhs *= present_timestep;
+		un_rhs *= dt;
 		un_M.vmult_add(un_rhs, old_sol);
 
 		AffineConstraints<double> all_constraints;
@@ -2155,7 +2154,7 @@ void Incompressible<dim>::update_it_matrix()
 
 		// For updating the residual
 //		Vector<double> u_DQ = (sol_n_plus_1.block(0) - sol_n.block(0));
-//		u_DQ /= present_timestep;
+//		u_DQ /= dt;
 		//residual.block(0) = u_rhs - u_DQ;
 
 
@@ -2174,7 +2173,7 @@ void Incompressible<dim>::update_it_matrix()
 
 		Vector<double> old_sol = pressure_sol_n;
 
-        //un_rhs *= present_timestep;
+        //un_rhs *= dt;
 		un_M.vmult_add(un_rhs, old_sol);
 
 
@@ -2225,7 +2224,7 @@ void Incompressible<dim>::update_it_matrix()
         //pressure_sol_n_plus_1.add(-pressure_sol_n_plus_1.mean_value());
 		//For the residuals
 //		Vector<double> p_DQ = (sol_n_plus_1.block(1) - sol_n.block(1));
-//		p_DQ /= present_timestep;
+//		p_DQ /= dt;
 		//residual.block(1) = p_rhs - p_DQ;
 
 //		return solver_control.last_step();
@@ -2245,7 +2244,7 @@ void Incompressible<dim>::update_it_matrix()
 		Vector<double> un_rhs = momentum_rhs;
 		auto& sol = sol_n_plus_1_momentum;
 
-		un_rhs *= present_timestep;
+		un_rhs *= dt;
 		un_M.vmult_add(un_rhs, sol);
 
 
@@ -2380,14 +2379,14 @@ void Incompressible<dim>::update_it_matrix()
 	template <int dim>
 	void Incompressible<dim>::do_timestep()
 	{
-		present_time += present_timestep;
+		present_time += dt;
 		++timestep_no;
 		cout << "_____________________________________________________________" << std::endl;
 		cout << "Timestep " << timestep_no << " at time " << present_time
 			<< std::endl;
 		if (present_time > end_time)
 		{
-			present_timestep -= (present_time - end_time);
+			dt -= (present_time - end_time);
 			present_time = end_time;
 		}
 
@@ -2406,7 +2405,7 @@ void Incompressible<dim>::update_it_matrix()
 		else if (parameters.rk_order == 4) {
 			solve_modified_trap();
 		}
-		if ( present_time > save_counter * save_time- 0.1 * present_timestep) {
+		if ( present_time > save_counter * save_time- 0.1 * dt) {
 			cout << "Saving results at time : " << present_time << std::endl;
 			output_results(momentum_solution, pressure_solution);
 			save_counter++;
@@ -2432,7 +2431,7 @@ void Incompressible<dim>::update_it_matrix()
 		if (coeff_n != 0.0) {
 			total_displacement -= incremental_displacement;
 		}
-		incremental_displacement = present_timestep * (coeff_n * sol_n_momentum + coeff_n_plus * sol_n_plus_1_momentum);
+		incremental_displacement = dt * (coeff_n * sol_n_momentum + coeff_n_plus * sol_n_plus_1_momentum);
 		total_displacement += incremental_displacement;
 
 	}
