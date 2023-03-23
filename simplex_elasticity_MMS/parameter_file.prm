@@ -1,0 +1,36 @@
+# Parameter file for three-field problem
+
+subsection Material properties
+  set Young's modulus = 100
+  set Poisson's ratio = 0.49
+  set Density = 1.0
+end
+subsection Time
+  set Timestep =  0.0001
+  set End time =  1
+  set Save time = 0.005
+  set Start time = 0.0
+end
+# Time integrator options: 
+# 1 for forward Euler
+# 2 for SSPRK2
+# 3 for SSPRK3
+# 4 for modified trapezoidal rule
+subsection Numerical parameters
+  set alpha = 0
+  set beta  = 0
+  set Time integrator order = 1
+  set n_ref = 4
+  set Momentum order = 2
+  set Pressure order = 1
+  set Tau_pJ = 0.0
+end
+subsection Simulation parameters
+  set Body force = 0.1
+  set Initial velocity = 0.1
+  set Traction Magnitude = 0.0
+end
+
+
+
+
