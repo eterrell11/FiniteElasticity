@@ -586,7 +586,6 @@ namespace NonlinearElasticity
 		Vector<double> pressure_int_solution;   //For RK2 and higher order
 		Vector<double> pressure_int_solution_2; //For RK3 and higher order
         
-        Vector<double> pressure_boundary;
 
 		//Vector<double> residual;
 
@@ -596,6 +595,7 @@ namespace NonlinearElasticity
 
 		Vector<double> displacement_error;
 		Vector<double> derivative_error;
+		Vector<double> pressure_error;
 
 		Vector<double> true_displacement_solution;
 		Vector<double> true_velocity_solution;
@@ -611,6 +611,7 @@ namespace NonlinearElasticity
 
 		double displacement_error_output;
 		double derivative_error_output;
+		double pressure_error_output;
 
 		double E;
 		double nu;
@@ -1001,6 +1002,53 @@ namespace NonlinearElasticity
 			Displacement<dim>::vector_value(points[p], value_list[p]);
 	}
 
+	template <int dim>
+	class Pressure : public Function<dim>
+	{
+	public:
+		Pressure(double& present_time, double& velocity, double& kappa);
+		virtual void value(const Point<dim>& p,
+			double& value) const;
+		virtual void
+			value_list(const std::vector<Point<dim>>& points,
+				std::vector<double>& value_list) const;
+	private:
+		const double time;
+		const double a;
+		const double kappa;
+	};
+
+	template <int dim>
+	Pressure<dim>::Pressure(double& present_time, double& velocity, double& kappa)
+		: Function<dim>(dim),
+		time(present_time),
+		a(velocity),
+		kappa(kappa)
+	{}
+
+	template <int dim>
+	void
+		Pressure<dim>::value(const Point<dim>& p,
+			double& value) const
+	{
+		Assert(value.size() == 1, ExcDimensionMismatch(values.size(), 1));
+		value = -0.25 * a * kappa * M_PI * std::sin(M_PI * time) *
+			(-4.0 * std::cos(M_PI * p[1]) * std::sin(M_PI * p[0]) + std::cos(M_PI / 2.0 * p[0]) *
+				(1.0 + a * M_PI * std::cos(M_PI * p[1]) * std::sin(M_PI * time) * std::sin(M_PI * p[0])));
+		//cout << value << std::endl;
+
+	}
+	template <int dim>
+	void Pressure<dim>::value_list(
+		const std::vector<Point<dim>>& points,
+		std::vector<double>& value_list) const
+	{
+		const unsigned int n_points = points.size();
+		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+		for (unsigned int p = 0; p < n_points; ++p)
+			Pressure<dim>::value(points[p], value_list[p]);
+	}
+
 	template<int dim> // Constructor for the main class
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
@@ -1259,11 +1307,7 @@ namespace NonlinearElasticity
         pressure_int_solution_2.reinit(dof_handler_pressure.n_dofs());
         pressure_rhs.reinit(dof_handler_pressure.n_dofs());
         
-        //pressure_boundary.reinit(dof_handler_pressure.n_dofs());
 
-		pressure_boundary.reinit(dof_handler_pressure.n_boundary_dofs());
-        cout << "number of pressure dofs on boundary: " << dof_handler_pressure.n_boundary_dofs() << std::endl;
-        cout << "number of pressure dofs total: " << dof_handler_pressure.n_dofs() <<std::endl;
 
 
 		cout << "Applying initial conditions" << std::endl;
@@ -1272,8 +1316,11 @@ namespace NonlinearElasticity
 
 		true_displacement_solution.reinit(dof_handler_velocity.n_dofs());
 		true_velocity_solution.reinit(dof_handler_velocity.n_dofs());
+		true_pressure_solution.reinit(dof_handler_pressure.n_dofs());
+
 		displacement_error.reinit(dof_handler_velocity.n_dofs());
 		derivative_error.reinit(dof_handler_velocity.n_dofs());
+		pressure_error.reinit(dof_handler_pressure.n_dofs());
 
 		incremental_displacement.reinit(dof_handler_velocity.n_dofs());
         total_displacement.reinit(dof_handler_velocity.n_dofs());
@@ -2488,14 +2535,19 @@ void Incompressible<dim>::update_it_matrix()
 		//present_time -= dt;
 		displacement_error = 0;
 		derivative_error = 0;
+		pressure_error = 0;
 		VectorTools::interpolate(dof_handler_velocity, Displacement<dim>(present_time, parameters.BodyForce), true_displacement_solution);
 		VectorTools::interpolate(dof_handler_velocity, Solution<dim>(present_time, parameters.BodyForce), true_velocity_solution);
+		VectorTools::interpolate(dof_handler_pressure, Pressure<dim>(present_time, parameters.BodyForce, kappa), true_pressure_solution);
 		displacement_error = (true_displacement_solution - total_displacement);
 		derivative_error = (true_velocity_solution - velocity_solution);
+		pressure_error = (true_pressure_solution - pressure_solution);
 		displacement_error_output = std::max(displacement_error.l2_norm(), displacement_error_output);
 		cout << "Max displacement error value : " << displacement_error_output << std::endl;
 		derivative_error_output = std::max(derivative_error.l2_norm(), derivative_error_output);
 		cout << "Max derivative error value : " << derivative_error_output << std::endl;
+		pressure_error_output = std::max(pressure_error.l2_norm(), pressure_error_output);
+		cout << "Max pressure error value : " << pressure_error_output << std::endl;
 		//present_time += dt;
 
 	}
@@ -2539,7 +2591,7 @@ void Incompressible<dim>::update_it_matrix()
 					break;
 				case 2:
 					Assert(joint_fe.system_to_base_index(i).second < local_pressure_dof_indices.size(), ExcInternalError());
-					joint_solution(local_joint_dof_indices[i]) = pressure_solution(local_pressure_dof_indices[joint_fe.system_to_base_index(i).second]);
+					joint_solution(local_joint_dof_indices[i]) = true_pressure_solution(local_pressure_dof_indices[joint_fe.system_to_base_index(i).second]);
 					break;
 				default:
 					Assert(false, ExcInternalError());
