@@ -579,7 +579,7 @@ namespace NonlinearElasticity
 
 
 	template<int dim>
-	class VelocityRightHandSide : public Function<dim>
+	class FExt : public Function<dim>
 	{
 	public:
 		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time,double& mu,  double& kappa)
@@ -587,8 +587,8 @@ namespace NonlinearElasticity
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
-			values[0] = a * (2 * mu - 1) * M_PI * M_PI * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]) * std::sin(M_PI * present_time);
-			values[1] = a * (1 - 2 * mu) * M_PI * M_PI * std::cos(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * present_time);
+			values[0] = a;
+			values[1] = 0;
 		}
 		virtual void
 			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
@@ -596,7 +596,7 @@ namespace NonlinearElasticity
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				VelocityRightHandSide<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time,mu, kappa);
+				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time,mu, kappa);
 		}
 	};
 
@@ -712,8 +712,8 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = velocity * M_PI * std::cos(M_PI * p[1]) * std::sin(M_PI * p[0]);
-		values[1] = - velocity * M_PI * std::cos(M_PI * p[0]) * std::sin(M_PI * p[1]);
+		values[0] = velocity;
+		values[1] = 0;
 	}
 	template <int dim>
 	void InitialVelocity<dim>::vector_value_list(
@@ -759,8 +759,8 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		//Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] =  a * std::cos(M_PI * p[1]) * std::sin(M_PI * p[0]) * std::sin(M_PI * time);
-		values[1] = -a * std::cos(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * time);
+		values[0] = a * time;
+		values[1] = 0;
 		values[2] = 0;
 	}
 	template <int dim>
@@ -804,8 +804,8 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim+1), ExcDimensionMismatch(values.size(), dim+1));
-		values[0] = a * std::cos(M_PI * p[1]) * std::sin(M_PI * p[0]) * (std::sin(M_PI * (time + dt)) - std::sin(M_PI * time));
-		values[1] = -a * std::cos(M_PI * p[0]) * std::sin(M_PI * p[1]) * (std::sin(M_PI * (time + dt)) - std::sin(M_PI * time));
+		values[0] = a * ((time) -(time-dt));
+		values[1] =0;
 	}
 	template <int dim>
 	void DirichletValues<dim>::vector_value_list(
@@ -1073,7 +1073,7 @@ namespace NonlinearElasticity
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(dof_handler,
 				0,
-				DirichletValues<dim>(present_time, parameters.BodyForce,dt),
+				DirichletValues<dim>(present_time, parameters.InitialVelocity,dt),
 				constraints,
 				fe.component_mask(Velocity));
 		}
@@ -1156,7 +1156,7 @@ namespace NonlinearElasticity
 			InitialVelocity<dim>(parameters.InitialVelocity, mu),
 			solution,
 			fe.component_mask(Velocity));
-
+		cout << solution.block(0).l2_norm() << std::endl;
 		velocity = solution.block(0);
 
 		VectorTools::interpolate(dof_handler, InitialSolution<dim>(parameters.InitialVelocity, mu), solution);
@@ -1211,7 +1211,7 @@ void Incompressible<dim>::assemble_K()
 
 	Vector<double>     cell_rhs(dofs_per_cell);
 
-	VelocityRightHandSide<dim> right_hand_side;
+	FExt<dim> right_hand_side;
 	std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
 
@@ -1239,9 +1239,9 @@ void Incompressible<dim>::assemble_K()
 		fe_values[Pressure].get_function_values(solution, sol_vec_pressure);
 
 
-		present_time -= dt;
+		//present_time -= dt;
 		right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-		present_time += dt;
+		//present_time += dt;
 
 
         for (const unsigned int q : fe_values.quadrature_point_indices())
@@ -1261,15 +1261,16 @@ void Incompressible<dim>::assemble_K()
                 for (const unsigned int j : fe_values.dof_indices())
                 {
 					cell_mass_matrix(i, j) += (alpha / (beta * dt * dt) * rho_0 * N_u_i * fe_values[Velocity].value(j, q) + //Kuu
-						scalar_product(fe_values[Velocity].gradient(i, q), HH * fe_values[Pressure].value(j, q)) + //Kpu
-						N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q)) - //Kup
+						scalar_product(fe_values[Velocity].gradient(i, q), transpose(HH) * fe_values[Pressure].value(j, q)) + //Kup
+						N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q)) - //Kpu
 						1.0 / kappa * N_p_i * fe_values[Pressure].value(j, q)) //Kpp
 						* fe_values.JxW(q);
 
                 }
 				cell_rhs(i) += (-scalar_product(fe_values[Velocity].gradient(i, q), pk1) +
-					rho_0 * fe_values[Velocity].value(i, q) * transpose(HH)*rhs_values[q] -
+					rho_0 * fe_values[Velocity].value(i, q) * (HH)*rhs_values[q] -
 					fe_values[Pressure].value(i, q) * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
+
             }
         }
 		for (const auto& face : cell->face_iterators())
@@ -1306,7 +1307,10 @@ void Incompressible<dim>::assemble_K()
 				un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 			}
 			un_R(local_dof_indices[i]) += cell_rhs(i);
+
 		}
+		cout << un_R.block(0) << std::endl;
+
     }
 }
 
@@ -1322,14 +1326,16 @@ void Incompressible<dim>::assemble_K()
 	{
 		{
 			constraints.clear();
-
+			//present_time -= dt;
 			const FEValuesExtractors::Vector Velocity(0);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(dof_handler,
 				0,
-				DirichletValues<dim>(present_time, parameters.BodyForce,dt),
+				DirichletValues<dim>(present_time, parameters.InitialVelocity,dt),
 				constraints,
 				fe.component_mask(Velocity));
+			//present_time += dt;
+
 		}
 		constraints.close();
 		assemble_K();
@@ -1346,33 +1352,48 @@ void Incompressible<dim>::assemble_K()
 	template <int dim>
 	void Incompressible<dim>::solve()
 	{
+		Vector<double> rhs;
+
+		{
 		const double alpha = parameters.alpha;
 		const double beta = alpha + 1.0 / 12.0;
+
 		Vector<double> un_motion(acceleration.size());
 		un_motion.add((1.0 - alpha / (2.0 * beta)), acceleration, -1.0 * alpha / (beta * dt), velocity);
 		double scale = -beta * dt * dt / alpha;
-		auto& un_Kuu =un_K.block(0, 0);
-		un_Kuu *= scale;
+
+		auto& un_Kuu = un_K.block(0, 0);
+
+		un_motion *= scale;
 		const auto op_un_Kuu = linear_operator(un_Kuu);
 
-		un_Kuu.vmult_add(un_R.block(0),un_motion);
+		un_Kuu.vmult_add(un_R.block(0), un_motion);
 
 		auto setup_constrained_rhs = constrained_right_hand_side(
 			constraints,
 			op_un_Kuu,
 			un_R.block(0));
-		Vector<double> rhs;
 		rhs.reinit(solution.block(0));
 		setup_constrained_rhs.apply(rhs);
+		}
+
+		const auto& un_Kuu = un_K.block(0, 0);
+		const auto& un_Kup = un_K.block(0, 1);
+		const auto& un_Kpu = un_K.block(1, 0);
+		const auto& un_Kpp = un_K.block(1, 1);
 
 
-
+		cout << "the problem is not here " << std::endl;
 
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
 		const auto& Kpu = K.block(1, 0);
 		const auto& Kpp = K.block(1, 1);
 	
+		const auto op_un_Kuu = linear_operator(un_Kuu);
+		const auto op_un_Kup = linear_operator(un_Kup);
+		const auto op_un_Kpu = linear_operator(un_Kpu);
+		const auto op_un_Kpp = linear_operator(un_Kpp);
 
 
 		const auto op_Kuu = linear_operator(Kuu);
@@ -1380,23 +1401,26 @@ void Incompressible<dim>::assemble_K()
 		const auto op_Kpu = linear_operator(Kpu);
 		const auto op_Kpp = linear_operator(Kpp);
 
-
-		const auto& Rp = R.block(1);
+		const auto& un_Rs = un_R.block(0);
+		const auto& un_Rp = un_R.block(1);
 		auto& delta_u = solution_increment.block(0);
 		auto& delta_p = solution_increment.block(1);
 
 		SolverControl reduction_control_Kuu(20000, 1.0e-12);
 		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kuu;
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_un_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
+		preconditioner_un_Kuu.initialize(un_Kuu);
 
 
 		SolverControl solver_control_S(30000, 1.0e-12);
 
 		const auto op_Kuu_inv = inverse_operator(op_Kuu, solver_Kuu, preconditioner_Kuu);
-		auto op_S = op_Kpp - op_Kpu * op_Kuu_inv * op_Kup;
+		const auto op_un_Kuu_inv = inverse_operator(op_un_Kuu, solver_Kuu, preconditioner_un_Kuu);
+		auto op_S = op_un_Kpp - op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
 		if (parameters.nu == 0.5) {
-			op_S = -1.0 * op_Kpu * op_Kuu_inv * op_Kup;
+			op_S = -1.0 * op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
 		}
 		
 
@@ -1404,7 +1428,7 @@ void Incompressible<dim>::assemble_K()
 		PreconditionIdentity preconditioner_S;
 
 		const auto op_S_inv = inverse_operator(op_S, solver_S, preconditioner_S);
-		delta_p = op_S_inv * (Rp - op_Kpu * op_Kuu_inv * rhs);
+		delta_p = op_S_inv * (un_Rp - op_un_Kpu * op_un_Kuu_inv * un_Rs);
 		constraints.distribute(solution_increment);
 
 
@@ -1424,11 +1448,11 @@ void Incompressible<dim>::assemble_K()
 		swap(acceleration, old_acceleration);
 
 		solution += solution_increment;
-		//cout << solution.block(0) << std::endl;
 		double mean = solution.block(1).mean_value();
 		solution.block(1).add(-mean);
 
 		acceleration = (solution_increment.block(0) - dt * old_velocity + dt * dt * (beta - 0.5) * old_acceleration);
+
 		acceleration *= (1.0 / (dt * dt * beta));
 		velocity = old_velocity + dt * ((1.0 - gamma) * old_acceleration + gamma * acceleration);
 
@@ -1446,7 +1470,7 @@ void Incompressible<dim>::assemble_K()
 		//present_time += dt;
 		error = 0;
 
-		VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.BodyForce, kappa), true_solution);
+		VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.InitialVelocity, kappa), true_solution);
 		//present_time -= dt;
 		error = (true_solution - solution);
 		//pressure_error /= pressure_solution.l2_norm();
@@ -1502,6 +1526,36 @@ void Incompressible<dim>::assemble_K()
 			error,
 			error_names,
 			interpretation2);
+
+		BlockVector<double> extra_vector = solution;
+		extra_vector.block(0) = velocity;
+
+		std::vector<std::string> extra_names(dim, "Velocity");
+		extra_names.emplace_back("Pressure_error2");
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>
+			interpretation3(dim,
+				DataComponentInterpretation::component_is_part_of_vector);
+		interpretation3.push_back(DataComponentInterpretation::component_is_scalar);
+
+		data_out.add_data_vector(dof_handler,
+			extra_vector,
+			extra_names,
+			interpretation3);
+
+		BlockVector<double> extra_vector2 = solution;
+		extra_vector2.block(0) = acceleration;
+
+		std::vector<std::string> extra_names2(dim, "Acceleration");
+		extra_names2.emplace_back("Pressure_error3");
+		std::vector<DataComponentInterpretation::DataComponentInterpretation>
+			interpretation4(dim,
+				DataComponentInterpretation::component_is_part_of_vector);
+		interpretation4.push_back(DataComponentInterpretation::component_is_scalar);
+
+		data_out.add_data_vector(dof_handler,
+			extra_vector2,
+			extra_names2,
+			interpretation4);
 
 		data_out.build_patches(1);
 		std::ofstream output("output-" + std::to_string(timestep_no) + ".vtu");
