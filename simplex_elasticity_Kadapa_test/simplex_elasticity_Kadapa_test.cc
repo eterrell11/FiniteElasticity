@@ -27,6 +27,7 @@
 #include <deal.II/fe/FE.h>
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_q_bubbles.h>
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -432,7 +433,7 @@ namespace NonlinearElasticity
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
 
-		stress = mu * FF + (pressure * HH);
+		//stress = mu * FF + (pressure * HH);
 		//stress = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 2.0 * HH / Jf) + (pressure *HH);
 
 
@@ -477,7 +478,7 @@ namespace NonlinearElasticity
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
 
-		stress = mu * FF + kappa * ((Jf - 1) * HH);
+		//stress = mu * FF + kappa * ((Jf - 1) * HH);
 		return stress;
 	}
 
@@ -510,11 +511,13 @@ namespace NonlinearElasticity
 		Parameters::AllParameters parameters;
 
 		Triangulation<dim> triangulation;
-		FESystem<dim> fe;
 		DoFHandler<dim>    dof_handler;
+		FESystem<dim> fe;
 
 
 		AffineConstraints<double> constraints;
+		AffineConstraints<double> displacement_constraints;
+		AffineConstraints<double> pressure_constraints;
         
 		const QGauss<dim> quadrature_formula;
 		const QGauss<dim - 1> face_quadrature_formula;
@@ -558,6 +561,7 @@ namespace NonlinearElasticity
 		double save_time;
 		double save_counter;
 		unsigned int timestep_no;
+		double pressure_mean;
 
 		double displacement_error_output;
 		double velocity_error_output;
@@ -582,12 +586,13 @@ namespace NonlinearElasticity
 	class FExt : public Function<dim>
 	{
 	public:
-		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time,double& mu,  double& kappa)
+		virtual void rhs_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& a, double& present_time,double& /*mu*/,  double& /*kappa*/)
 
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
-			values[0] = a;
+
+			values[0] = a * present_time;
 			values[1] = 0;
 		}
 		virtual void
@@ -625,17 +630,17 @@ namespace NonlinearElasticity
 	class TractionVector : public Function<dim>
 	{
 	public:
-		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude)
+		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[dim -1] = TractionMagnitude;
+			values[0] = TractionMagnitude * time;
 		}
-		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude)
+		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				TractionVector<dim>::traction_vector_value(points[p], value_list[p], TractionMagnitude);
+				TractionVector<dim>::traction_vector_value(points[p], value_list[p], TractionMagnitude, time);
 		}
 	};
 
@@ -665,13 +670,13 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	void
-		InitialSolution<dim>::vector_value(const Point<dim>& p,
+		InitialSolution<dim>::vector_value(const Point<dim>& /*p*/,
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim+1), ExcDimensionMismatch(values.size(), dim+1));
 		values[0] = 0;//- velocity/2.0 * M_PI * std::sin(M_PI / 2.0 * p[0]);
 		values[1] = 0;// velocity* M_PI* std::sin(M_PI * p[0])* std::sin(M_PI * p[1]);
-		values[2] = 0;
+		values[dim] = 0;
 	}
 	template <int dim>
 	void InitialSolution<dim>::vector_value_list(
@@ -708,11 +713,11 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	void
-		InitialVelocity<dim>::vector_value(const Point<dim>& p,
+		InitialVelocity<dim>::vector_value(const Point<dim>& /*p*/,
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = velocity;
+		values[0] = 0;
 		values[1] = 0;
 	}
 	template <int dim>
@@ -726,7 +731,49 @@ namespace NonlinearElasticity
 			InitialVelocity<dim>::vector_value(points[p], value_list[p]);
 	}
 
+	template <int dim>
+	class InitialAcceleration : public Function<dim>
+	{
+	public:
+		InitialAcceleration(double& InitialVelocity, double& mu, double& dt);
+		virtual void vector_value(const Point<dim>& p,
+			Vector<double>& values) const override;
+		virtual void
+			vector_value_list(const std::vector<Point<dim>>& points,
+				std::vector<Vector<double>>& value_list) const override;
+	private:
+		const double velocity;
+		const double mu;
+		const double dt;
+	};
 
+	template <int dim>
+	InitialAcceleration<dim>::InitialAcceleration(double& InitialVelocity, double& mu, double& dt)
+		: Function<dim>(dim + 1)
+		, velocity(InitialVelocity)
+		, mu(mu)
+		, dt(dt)
+	{}
+
+	template <int dim>
+	void
+		InitialAcceleration<dim>::vector_value(const Point<dim>& /*p*/,
+			Vector<double>& values) const
+	{
+		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
+		values[0] = 0;
+		values[1] = 0;
+	}
+	template <int dim>
+	void InitialAcceleration<dim>::vector_value_list(
+		const std::vector<Point<dim>>& points,
+		std::vector<Vector<double>>& value_list) const
+	{
+		const unsigned int n_points = points.size();
+		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+		for (unsigned int p = 0; p < n_points; ++p)
+			InitialAcceleration<dim>::vector_value(points[p], value_list[p]);
+	}
 
 
 	template <int dim>
@@ -755,11 +802,11 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	void
-		Solution<dim>::vector_value(const Point<dim>& p,
+		Solution<dim>::vector_value(const Point<dim>& /*p*/,
 			Vector<double>& values) const
 	{
 		//Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] = a * time;
+		values[0] = a * time * time * time / 6.0;
 		values[1] = 0;
 		values[2] = 0;
 	}
@@ -778,7 +825,7 @@ namespace NonlinearElasticity
 	class DirichletValues : public Function<dim>
 	{
 	public:
-		DirichletValues(double& present_time, double& velocity, double& dt);
+		DirichletValues(double& present_time, double& velocity, double& dt, double& mu);
 		virtual void vector_value(const Point<dim>& p,
 			Vector<double>& values) const override;
 		virtual void
@@ -788,14 +835,16 @@ namespace NonlinearElasticity
 		const double time;
 		const double dt;
 		const double a;
+		const double mu;
 	};
 
 	template <int dim>
-	DirichletValues<dim>::DirichletValues(double& present_time, double& velocity,double& dt)
+	DirichletValues<dim>::DirichletValues(double& present_time, double& velocity,double& dt, double& mu)
 		: Function<dim>(dim+1),
 		time(present_time),
 		dt(dt),
-		a(velocity)
+		a(velocity),
+		mu(mu)
 	{}
 
 	template <int dim>
@@ -804,8 +853,15 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim+1), ExcDimensionMismatch(values.size(), dim+1));
-		values[0] = a * ((time) -(time-dt));
-		values[1] =0;
+		values[0] = a / 6.0 * (((time) * (time) * (time)) - ((time - dt) * (time - dt) * (time - dt)));
+		values[1] = 0;
+
+		if (abs(p[0]-1.0)<0.001) {
+			values[dim] = -a * dt;// a* dt* std::cos(M_PI * p[0]);
+		}
+		else {
+			values[dim] = 0;
+		}
 	}
 	template <int dim>
 	void DirichletValues<dim>::vector_value_list(
@@ -817,7 +873,7 @@ namespace NonlinearElasticity
 		for (unsigned int p = 0; p < n_points; ++p)
 			DirichletValues<dim>::vector_value(points[p], value_list[p]);
 	}
-
+	
 	template <int dim>
 	class Pressure : public Function<dim>
 	{
@@ -935,17 +991,20 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Incompressible<dim>::run()
 	{
-		create_coarse_grid(triangulation);
-		setup_system();
 		E = parameters.E;
 		nu = parameters.nu;
-        rho_0 = parameters.rho_0;
+		mu = get_mu<dim>(E, nu);
+		kappa = get_kappa<dim>(E, nu);
+		rho_0 = parameters.rho_0;
 		present_time = parameters.start_time;
 		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
-		mu = get_mu<dim>(E, nu);
-		kappa = get_kappa<dim>(E, nu);
+
+		create_coarse_grid(triangulation);
+		setup_system();
+		
+		
 		output_results();
 		cout << "Saving results at time : " << present_time << std::endl;
 		save_counter = 1;
@@ -980,18 +1039,18 @@ namespace NonlinearElasticity
 		triangulation.create_triangulation(vertices, cells, SubCellData());
 
 
-		//for (const auto& cell : triangulation.active_cell_iterators())
-		//	for (const auto& face : cell->face_iterators())
-		//		if (face->at_boundary())
-		//		{
-		//			const Point<dim> face_center = face->center();
-		//			if (face_center[0] == 0) {
-		//				face->set_boundary_id(4);
-		//			}
-		//			/*if (abs(face_center[0] - 1.0) < 0.001) {
-		//				face->set_boundary_id(5);
-		//			}*/
-		//		}
+		for (const auto& cell : triangulation.active_cell_iterators())
+			for (const auto& face : cell->face_iterators())
+				if (face->at_boundary())
+				{
+					const Point<dim> face_center = face->center();
+					/*if (face_center[0] == 0) {
+						face->set_boundary_id(1);
+					}*/
+					/*if (abs(face_center[0]) < 0.001) {
+						face->set_boundary_id(1);
+					}*/
+				}
 		cout << triangulation.n_global_levels() << std::endl;
 		triangulation.refine_global(parameters.n_ref);
 
@@ -1066,18 +1125,20 @@ namespace NonlinearElasticity
 
 
 // HOMOGENEOUS CONSTRAINTS
+		std::cout << "Applying homogeneous constraints" << std::endl;
 		{
 			constraints.clear();
-
 			const FEValuesExtractors::Vector Velocity(0);
+			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(dof_handler,
 				0,
-				DirichletValues<dim>(present_time, parameters.InitialVelocity,dt),
+				Functions::ZeroFunction<dim>(dim+1),
 				constraints,
 				fe.component_mask(Velocity));
+			constraints.close();
+
 		}
-		constraints.close();
 
 
 		const std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
@@ -1159,8 +1220,13 @@ namespace NonlinearElasticity
 		cout << solution.block(0).l2_norm() << std::endl;
 		velocity = solution.block(0);
 
-		VectorTools::interpolate(dof_handler, InitialSolution<dim>(parameters.InitialVelocity, mu), solution);
-
+		VectorTools::interpolate(dof_handler,
+			InitialAcceleration<dim>(parameters.BodyForce, mu, dt),
+			solution,
+			fe.component_mask(Velocity));
+		acceleration = solution.block(0);
+		VectorTools::interpolate(dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
+		pressure_mean = solution.block(1).mean_value();
 	}
 
 
@@ -1226,8 +1292,10 @@ void Incompressible<dim>::assemble_K()
 
 	double temp_pressure;
 
-	std::vector<Tensor<2, dim>> displacement_grads(quadrature_formula.size(), Tensor<2, dim>());
+	std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+	std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 	std::vector<double> sol_vec_pressure(quadrature_formula.size());
+	std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 	for (const auto& cell : dof_handler.active_cell_iterators())
 	{
@@ -1238,10 +1306,9 @@ void Incompressible<dim>::assemble_K()
 		fe_values[Velocity].get_function_gradients(solution, displacement_grads);
 		fe_values[Pressure].get_function_values(solution, sol_vec_pressure);
 
-
-		//present_time -= dt;
+		present_time -= dt;  // Evaluate FExt at time t-1
 		right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-		//present_time += dt;
+		present_time += dt;
 
 
         for (const unsigned int q : fe_values.quadrature_point_indices())
@@ -1251,26 +1318,25 @@ void Incompressible<dim>::assemble_K()
 			Jf = get_Jf(FF);
 			HH = get_HH(FF, Jf);
 			pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
-
+			//temp_pressure -= pressure_mean;
 
             for (const unsigned int i : fe_values.dof_indices())
             {
 				Tensor<1, dim> N_u_i = fe_values[Velocity].value(i,q);
 				double N_p_i= fe_values[Pressure].value(i,q);
-				double div_N_u_i = fe_values[Velocity].divergence(i,q);
                 for (const unsigned int j : fe_values.dof_indices())
                 {
 					cell_mass_matrix(i, j) += (alpha / (beta * dt * dt) * rho_0 * N_u_i * fe_values[Velocity].value(j, q) + //Kuu
 						scalar_product(fe_values[Velocity].gradient(i, q), transpose(HH) * fe_values[Pressure].value(j, q)) + //Kup
-						N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q)) - //Kpu
-						1.0 / kappa * N_p_i * fe_values[Pressure].value(j, q)) //Kpp
+						N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q)) + //Kpu
+						- 1.0 / kappa * N_p_i * fe_values[Pressure].value(j, q)) //Kpp
 						* fe_values.JxW(q);
 
                 }
 				cell_rhs(i) += (-scalar_product(fe_values[Velocity].gradient(i, q), pk1) +
-					rho_0 * fe_values[Velocity].value(i, q) * (HH)*rhs_values[q] -
-					fe_values[Pressure].value(i, q) * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
-
+					rho_0 * fe_values[Velocity].value(i, q) * transpose(HH)*rhs_values[q] +
+					-fe_values[Pressure].value(i, q) * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
+				//std::cout << cell_rhs(i) <<  std::endl;
             }
         }
 		for (const auto& face : cell->face_iterators())
@@ -1278,21 +1344,38 @@ void Incompressible<dim>::assemble_K()
 			if (face->at_boundary())
 			{
 				fe_face_values.reinit(cell, face);
-				traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude);
+				fe_face_values[Velocity].get_function_gradients(solution, face_displacement_grads);
+				fe_values[Pressure].get_function_values(solution, face_sol_vec_pressure);
+
+
+
+				present_time -= dt;
+				traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+				present_time += dt;
 
 				for (const unsigned int q : fe_face_values.quadrature_point_indices())
 				{
+					temp_pressure = face_sol_vec_pressure[q];
+					FF = get_real_FF(face_displacement_grads[q]);
+					Jf = get_Jf(FF);
+					HH = get_HH(FF, Jf);
+					pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
 					for (const unsigned int i : fe_face_values.dof_indices())
 					{
-						if (face->boundary_id() == 1) {
+						if (face->boundary_id() == 2) {
+							cell_rhs(i) += fe_face_values[Velocity].value(i, q) * (pk1 * fe_face_values.normal_vector(q))* fe_face_values.JxW(q);
+
+						}
+						if (face->boundary_id() == 2) {
 							cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 						}
-
 					}
 				}
 			}
+
 		}
+		//cout << cell_rhs<< std::endl;
 
 
 
@@ -1307,11 +1390,10 @@ void Incompressible<dim>::assemble_K()
 				un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 			}
 			un_R(local_dof_indices[i]) += cell_rhs(i);
-
 		}
-		cout << un_R.block(0) << std::endl;
 
     }
+	
 }
 
 
@@ -1324,14 +1406,16 @@ void Incompressible<dim>::assemble_K()
 	template<int dim>
 	void Incompressible<dim>::solve_ForwardEuler()
 	{
+		std::cout << "Applying inhomogeneous constraints" << std::endl;
 		{
 			constraints.clear();
 			//present_time -= dt;
 			const FEValuesExtractors::Vector Velocity(0);
+			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(dof_handler,
 				0,
-				DirichletValues<dim>(present_time, parameters.InitialVelocity,dt),
+				DirichletValues<dim>(present_time, parameters.TractionMagnitude,dt, mu),
 				constraints,
 				fe.component_mask(Velocity));
 			//present_time += dt;
@@ -1352,38 +1436,16 @@ void Incompressible<dim>::assemble_K()
 	template <int dim>
 	void Incompressible<dim>::solve()
 	{
-		Vector<double> rhs;
-
-		{
-		const double alpha = parameters.alpha;
-		const double beta = alpha + 1.0 / 12.0;
-
-		Vector<double> un_motion(acceleration.size());
-		un_motion.add((1.0 - alpha / (2.0 * beta)), acceleration, -1.0 * alpha / (beta * dt), velocity);
-		double scale = -beta * dt * dt / alpha;
-
-		auto& un_Kuu = un_K.block(0, 0);
-
-		un_motion *= scale;
-		const auto op_un_Kuu = linear_operator(un_Kuu);
-
-		un_Kuu.vmult_add(un_R.block(0), un_motion);
-
-		auto setup_constrained_rhs = constrained_right_hand_side(
-			constraints,
-			op_un_Kuu,
-			un_R.block(0));
-		rhs.reinit(solution.block(0));
-		setup_constrained_rhs.apply(rhs);
-		}
+		
 
 		const auto& un_Kuu = un_K.block(0, 0);
 		const auto& un_Kup = un_K.block(0, 1);
 		const auto& un_Kpu = un_K.block(1, 0);
 		const auto& un_Kpp = un_K.block(1, 1);
+		std::cout << std::endl;
+		std::cout << "Kuu l1 norm : " << un_Kuu.l1_norm() << std::endl;
+		std::cout << "Kpp l1 norm : " << un_Kpp.l1_norm() << std::endl;
 
-
-		cout << "the problem is not here " << std::endl;
 
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
@@ -1401,10 +1463,18 @@ void Incompressible<dim>::assemble_K()
 		const auto op_Kpu = linear_operator(Kpu);
 		const auto op_Kpp = linear_operator(Kpp);
 
-		const auto& un_Rs = un_R.block(0);
+		auto& un_Ru = un_R.block(0);
 		const auto& un_Rp = un_R.block(1);
+		auto& Ru = R.block(0);
+		const auto& Rp = R.block(1);
+
 		auto& delta_u = solution_increment.block(0);
 		auto& delta_p = solution_increment.block(1);
+
+
+		std::cout << "Ru l1 norm : " << un_R.block(0).l2_norm() << std::endl;
+		std::cout << "Rp l1 norm : " << un_R.block(1).l2_norm() << std::endl;
+		std::cout << std::endl;
 
 		SolverControl reduction_control_Kuu(20000, 1.0e-12);
 		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
@@ -1418,22 +1488,35 @@ void Incompressible<dim>::assemble_K()
 
 		const auto op_Kuu_inv = inverse_operator(op_Kuu, solver_Kuu, preconditioner_Kuu);
 		const auto op_un_Kuu_inv = inverse_operator(op_un_Kuu, solver_Kuu, preconditioner_un_Kuu);
-		auto op_S = op_un_Kpp - op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
+		auto op_S = op_Kpp - op_Kpu * op_Kuu_inv * op_Kup;
+		auto op_un_S = op_un_Kpp - op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
 		if (parameters.nu == 0.5) {
-			op_S = -1.0 * op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
+			op_S = -1.0 * op_Kpu * op_Kuu_inv * op_Kup;
+			op_un_S = -1.0 * op_un_Kpu * op_un_Kuu_inv * op_un_Kup;
 		}
-		
 
 		SolverMinRes<Vector<double>> solver_S(solver_control_S);
+		
 		PreconditionIdentity preconditioner_S;
 
+		const double alpha = parameters.alpha;
+		const double beta = alpha + 1.0 / 12.0;
+
+		Vector<double> un_motion(acceleration.size());
+		un_motion.add((1.0 - alpha / (2.0 * beta)), acceleration, -1.0 * alpha / (beta * dt), velocity);
+		double scale = -beta * dt * dt / alpha;
+		un_motion *= scale;
+		un_Kuu.vmult_add(Ru, un_motion);
+		
+		//Solve for the pressure increment via shur complement
 		const auto op_S_inv = inverse_operator(op_S, solver_S, preconditioner_S);
-		delta_p = op_S_inv * (un_Rp - op_un_Kpu * op_un_Kuu_inv * un_Rs);
+		const auto op_un_S_inv = inverse_operator(op_un_S, solver_S, preconditioner_S);
+		delta_p = op_S_inv * (Rp - op_Kpu * op_Kuu_inv * Ru);
 		constraints.distribute(solution_increment);
 
-
-
-		delta_u = op_Kuu_inv * ( rhs - op_Kup * delta_p);
+		//Solve for velocity
+		Ru -= op_Kup * delta_p;
+		delta_u = op_Kuu_inv * ( Ru);
 		constraints.distribute(solution_increment);
 
 	}
@@ -1447,16 +1530,18 @@ void Incompressible<dim>::assemble_K()
 		swap(velocity, old_velocity);
 		swap(acceleration, old_acceleration);
 
+		//std::cout << solution.block(1) << std::endl;
 		solution += solution_increment;
-		double mean = solution.block(1).mean_value();
-		solution.block(1).add(-mean);
-
+		pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
+		//solution.block(1).add(-mean);
 		acceleration = (solution_increment.block(0) - dt * old_velocity + dt * dt * (beta - 0.5) * old_acceleration);
-
 		acceleration *= (1.0 / (dt * dt * beta));
-		velocity = old_velocity + dt * ((1.0 - gamma) * old_acceleration + gamma * acceleration);
+		std::cout << "old acceleration: " << old_acceleration[0] << std::endl;
+		std::cout << "new acceleration: " << acceleration[0] << std::endl;
 
-		
+		velocity = old_velocity + dt * ((1.0 - gamma) * old_acceleration + gamma * acceleration);
+		std::cout << "old velocity: " << old_velocity[0] << std::endl;
+		std::cout << "new velocity: " << velocity[0] << std::endl;
 	}
 
 	
@@ -1470,7 +1555,7 @@ void Incompressible<dim>::assemble_K()
 		//present_time += dt;
 		error = 0;
 
-		VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.InitialVelocity, kappa), true_solution);
+		VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
 		//present_time -= dt;
 		error = (true_solution - solution);
 		//pressure_error /= pressure_solution.l2_norm();
