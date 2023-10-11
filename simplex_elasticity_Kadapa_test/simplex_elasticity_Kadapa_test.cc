@@ -514,13 +514,15 @@ namespace NonlinearElasticity
 		DoFHandler<dim>    dof_handler;
 		FESystem<dim> fe;
 
+		MappingFE<dim> mapping_simplex;
+
 
 		AffineConstraints<double> constraints;
 		AffineConstraints<double> displacement_constraints;
 		AffineConstraints<double> pressure_constraints;
         
-		const QGauss<dim> quadrature_formula;
-		const QGauss<dim - 1> face_quadrature_formula;
+		const QGaussSimplex<dim> quadrature_formula;
+		const QGaussSimplex<dim - 1> face_quadrature_formula;
 
 
 
@@ -950,12 +952,7 @@ namespace NonlinearElasticity
 			Tensor<1, dim>& values) const
 	{
 		Assert(values.n_independent_components == (dim), ExcDimensionMismatch(values.n_independent_components, dim));
-		values[0] = 0.125 * a * kappa * M_PI * M_PI * M_PI* std::cos(M_PI * time) * 
-			(-4.0 * std::cos(M_PI * p[0]) * std::cos(M_PI * p[1]) * 
-				(-2.0 + a * M_PI * std::cos(M_PI / 2.0 * p[0]) * std::sin(M_PI *time)) + 
-				std::sin(M_PI / 2.0 * p[0]) * (1.0 + 2.0 *a * M_PI  * std::cos(M_PI *p[1]) * std::sin(M_PI * p[0]) * std::sin(M_PI * time)));
-		values[1] = 0.5 * a * kappa * M_PI * M_PI * M_PI * (std::sin(M_PI * p[0]) * std::sin(M_PI * p[1])) * std::cos(M_PI * time) * 
-			(-2.0 + a * M_PI * std::cos(M_PI / 2.0 * p[0]) * std::cos(M_PI * time));
+		values[0] = 0;
 
 	}
 	template <int dim>
@@ -972,8 +969,9 @@ namespace NonlinearElasticity
 	template<int dim> // Constructor for the main class
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
+		, mapping_simplex(FE_SimplexP<dim>(parameters.velocity_order))
 		, dof_handler(triangulation)
-		, fe(FE_Q<dim>(parameters.velocity_order), dim, FE_Q<dim>(parameters.pressure_order), 1)
+		, fe(FE_SimplexP<dim>(parameters.velocity_order), dim, FE_SimplexP<dim>(parameters.pressure_order), 1)
 		, quadrature_formula(3)
 		, face_quadrature_formula(3)
 		, timestep_no(0)
@@ -1021,6 +1019,7 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::create_coarse_grid(Triangulation<2>& triangulation)
 	{
+		Triangulation<dim> quad_triangulation;
 
 		std::vector<Point<2>> vertices = {
 			{0.0,-0.0} , {0.0,1.0}, {1.0,1.0 }, {1.0, 0.0} };
@@ -1036,22 +1035,22 @@ namespace NonlinearElasticity
 			}
 			cells[i].material_id = 0;
 		}
-		triangulation.create_triangulation(vertices, cells, SubCellData());
+		quad_triangulation.create_triangulation(vertices, cells, SubCellData());
 
 
-		for (const auto& cell : triangulation.active_cell_iterators())
+		for (const auto& cell : quad_triangulation.active_cell_iterators())
 			for (const auto& face : cell->face_iterators())
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					/*if (face_center[0] == 0) {
+					if (face_center[0] == 0) {
 						face->set_boundary_id(1);
-					}*/
+					}
 					/*if (abs(face_center[0]) < 0.001) {
 						face->set_boundary_id(1);
 					}*/
 				}
-		cout << triangulation.n_global_levels() << std::endl;
+		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 		triangulation.refine_global(parameters.n_ref);
 
 	}
@@ -1131,8 +1130,9 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(dof_handler,
-				0,
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				2,
 				Functions::ZeroFunction<dim>(dim+1),
 				constraints,
 				fe.component_mask(Velocity));
@@ -1240,14 +1240,16 @@ void Incompressible<dim>::assemble_K()
 	R = 0;
 	K = 0;
 
-    FEValues<dim> fe_values(fe,
+    FEValues<dim> fe_values(mapping_simplex,
+		fe,
         quadrature_formula,
         update_values |
         update_gradients |
         update_quadrature_points |
         update_JxW_values);
 
-	FEFaceValues<dim> fe_face_values(fe,
+	FEFaceValues<dim> fe_face_values(mapping_simplex,
+		fe,
 		face_quadrature_formula,
 		update_values |
 		update_gradients |
@@ -1366,7 +1368,7 @@ void Incompressible<dim>::assemble_K()
 							cell_rhs(i) += fe_face_values[Velocity].value(i, q) * (pk1 * fe_face_values.normal_vector(q))* fe_face_values.JxW(q);
 
 						}
-						if (face->boundary_id() == 2) {
+						if (face->boundary_id() == 1) {
 							cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 						}
@@ -1413,8 +1415,9 @@ void Incompressible<dim>::assemble_K()
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(dof_handler,
-				0,
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				2,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude,dt, mu),
 				constraints,
 				fe.component_mask(Velocity));
@@ -1566,12 +1569,12 @@ void Incompressible<dim>::assemble_K()
 
 		if (abs(error.block(0).l2_norm() - 1.0) >= 1e-2) {
 			//displacement_error_output = std::max(displacement_error.linfty_norm(), displacement_error_output);
-			displacement_error_output = error.block(0).linfty_norm();
+			displacement_error_output = error.block(0).l2_norm();
 		}
 		cout << "Max displacement error value : " << displacement_error_output << std::endl;
 		if (abs(error.block(1).l2_norm() - 1.0) >= 1e-2) {
 			//pressure_error_output = std::max(pressure_error.linfty_norm(), pressure_error_output);
-			pressure_error_output = error.block(1).linfty_norm();
+			pressure_error_output = error.block(1).l2_norm();
 		}
 		cout << "Max pressure error value : " << pressure_error_output << std::endl;
 		//present_time += dt;
