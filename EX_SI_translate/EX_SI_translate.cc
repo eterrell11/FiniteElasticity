@@ -1794,7 +1794,6 @@ namespace NonlinearElasticity
 		const auto& un_Kup = un_K.block(0, 1);
 		const auto& un_Kpu = un_K.block(1, 0);
 		const auto& un_Kpp = un_K.block(1, 1);
-		std::cout << std::endl;
 
 
 		const auto& Kuu = K.block(0, 0);
@@ -1820,7 +1819,6 @@ namespace NonlinearElasticity
 
 		auto& delta_u = solution_increment.block(0);
 		auto& delta_p = solution_increment.block(1);
-		std::cout << std::endl;
 
 		SolverControl reduction_control_Kuu(20000, 1.0e-12);
 		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
@@ -1936,12 +1934,8 @@ namespace NonlinearElasticity
 		//solution.block(1).add(-mean);
 		acceleration = (solution_increment.block(0) - dt * old_velocity + dt * dt * (beta - 0.5) * old_acceleration);
 		acceleration *= (1.0 / (dt * dt * beta));
-		std::cout << "old acceleration: " << old_acceleration[0] << std::endl;
-		std::cout << "new acceleration: " << acceleration[0] << std::endl;
 
 		velocity = old_velocity + dt * ((1.0 - gamma) * old_acceleration + gamma * acceleration);
-		std::cout << "old velocity: " << old_velocity[0] << std::endl;
-		std::cout << "new velocity: " << velocity[0] << std::endl;
 	}
 
 
@@ -1995,9 +1989,9 @@ namespace NonlinearElasticity
 			p_cell_wise_error,
 			VectorTools::L2_norm);
 
-		cout << "Max displacement error value : " << displacement_error_output << std::endl;
+		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
 
-		cout << "Max pressure error value : " << pressure_error_output << std::endl;
+		//cout << "Max pressure error value : " << pressure_error_output << std::endl;
 		//present_time += dt;
 
 	}
@@ -2104,8 +2098,6 @@ namespace NonlinearElasticity
 			output_results();
 			save_counter++;
 		}
-
-		cout << std::endl << std::endl;
 	}
 
 
