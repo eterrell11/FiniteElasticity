@@ -1140,20 +1140,10 @@ namespace NonlinearElasticity
 		Triangulation<dim> quad_triangulation;
 
 		std::vector<Point<3>> vertices = {
-			{0.0 , 0.0 , 0.0} , {0.0, 0.1, 0.0}, {0.0, 0.0 , 0.22} , {0.0, 0.1, 0.22}, {0.0, 0.0, 0.44}, {0.0, 0.1, 0.44},
-			{0.12, 0.0, 0.11}, {0.12, 0.1, 0.11}, {0.12, 0.0, 0.295}, {0.12, 0.1, 0.295}, {0.12, 0.0, 0.48}, {0.12, 0.1, 0.48},
-			{0.24, 0.0, 0.22}, {0.24, 0.1, 0.22}, {0.24, 0.0, 0.37}, {0.24, 0.1, 0.37}, {0.24, 0.0, 0.52}, {0.24, 0.1, 0.52},
-			{0.36, 0.0, 0.33}, {0.36, 0.1, 0.33}, {0.36, 0.0, 0.445}, {0.36, 0.1, 0.445}, {0.36, 0.00, 0.56}, {0.36, 0.1, 0.56},
-			{0.48, 0.0, 0.44}, {0.48, 0.1, 0.44}, {0.48, 0.0, 0.52}, {0.48, 0.1, 0.52}, {0.48, 0.0, 0.6}, {0.48, 0.1, 0.6 } };
+			{0.0 , 0.0 , 0.0} , {0.0, 1.0, 0.0}, {0.0, 0.0 , 1.0} , {0.0, 1.0, 1.0}, {1.0, 0.0, 0.0}, {1.0, 1.0, 0.0}, {1.0, 0.0, 1.0}, {1.0, 1.0, 1.0},
+		};
 		const std::vector < std::array<int, GeometryInfo<3>::vertices_per_cell>>
-			cell_vertices = { {{0, 1, 2, 3, 6, 7, 8, 9}},
-				{{2, 3, 4, 5, 8, 9, 10, 11}},
-				{{6, 7, 8, 9, 12, 13, 14, 15}},
-				{{8, 9, 10, 11, 14, 15, 16, 17}},
-				{{12, 13, 14, 15, 18, 19, 20, 21}},
-				{{14, 15, 16, 17, 20, 21, 22, 23}},
-				{{18,19,20,21,24,25,26,27}},
-				{{20,21,22,23,26,27,28,29}} };
+			cell_vertices = { {{0, 1, 2, 3, 4, 5, 6, 7}}};
 		const unsigned int n_cells = cell_vertices.size();
 
 		std::vector<CellData<3>> cells(n_cells, CellData<3>());
@@ -1166,18 +1156,15 @@ namespace NonlinearElasticity
 		quad_triangulation.create_triangulation(vertices, cells, SubCellData());
 
 
-		/*for (const auto& cell : quad_triangulation.active_cell_iterators())
+		for (const auto& cell : quad_triangulation.active_cell_iterators())
 			for (const auto& face : cell->face_iterators())
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
 					if (face_center[0] == 0) {
-						face->set_boundary_id(0);
+						face->set_boundary_id(1);
 					}
-					if (abs(face_center[0] - 1.0) < 0.015) {
-						face->set_boundary_id(0);
-					}
-				}*/
+				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 
 		triangulation.refine_global(parameters.n_ref);
@@ -2116,7 +2103,7 @@ int main(int /*argc*/, char** /*argv*/)
 		using namespace dealii;
 		using namespace NonlinearElasticity;
 
-		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
