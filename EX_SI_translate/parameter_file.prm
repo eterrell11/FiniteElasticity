@@ -2,12 +2,12 @@
 
 subsection Material properties
   set Young's modulus = 100
-  set Poisson's ratio = 0.499
+  set Poisson's ratio = 0.5
   set Density = 1.0
 end
 subsection Time
-  set Timestep =  0.0001
-  set End time =  2.0
+  set Timestep =  0.005
+  set End time =  3.0
   set Save time = 0.01
   set Start time = 0.0
 end
@@ -18,7 +18,7 @@ subsection Numerical parameters
   set alpha = 1.0
   set beta  = 1.0
   set Time integrator = 1
-  set n_ref = 2
+  set n_ref = 1
   set Velocity order = 2
   set Pressure order = 1
   set LumpMass = true
