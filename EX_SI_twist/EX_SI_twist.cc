@@ -801,8 +801,8 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = velocity * std::sin(M_PI * p[dim-1] / 24.) * p[1];
-		values[1] = -velocity * std::sin(M_PI * p[dim-1] / 24.) * p[0];
+		values[0] = velocity * std::sin(M_PI * p[dim-1] / 12.) * p[1];
+		values[1] = -velocity * std::sin(M_PI * p[dim-1] /12.) * p[0];
 		if (dim == 3) {
 			values[2] = 0;
 		}
@@ -1783,7 +1783,7 @@ namespace NonlinearElasticity
 		assemble_system_not_Kuu();
 
 		solve_FE_system();
-		calculate_error();
+		//calculate_error();
 
 	}
 
@@ -1845,7 +1845,11 @@ namespace NonlinearElasticity
 
 		SolverMinRes<Vector<double>> solver_S(solver_control_S);
 
-		PreconditionIdentity preconditioner_S;
+		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
+		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
+		PreconditionIdentity preconditioner_aS;
+		const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
+		const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
 
 		const double alpha = parameters.alpha;
 		const double beta = alpha + 1.0 / 12.0;
