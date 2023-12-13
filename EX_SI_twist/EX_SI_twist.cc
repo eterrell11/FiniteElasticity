@@ -499,7 +499,7 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf) + (pressure * full_HH);
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf) + (pressure * full_HH);
 
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
@@ -957,7 +957,7 @@ namespace NonlinearElasticity
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 		values[0] = 0;
 		values[1] = 0;
-
+		values[2] = 0;
 		//if (abs(p[0] - 1.0) < 0.001) {
 		//	values[dim] = -a * dt;// a* dt* std::cos(M_PI * p[0]);
 		//}
@@ -1191,9 +1191,6 @@ namespace NonlinearElasticity
 					const Point<dim> face_center = face->center();
 					if (abs(face_center[2] - 0.0) < 0.00001) {
 						face->set_boundary_id(1);
-					}
-					if (abs(face_center[2] - 2. * height) < 0.00001) {
-						face->set_boundary_id(2);
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
@@ -1637,8 +1634,8 @@ namespace NonlinearElasticity
 	{
 
 
-		un_R.block(1) = 0;
-		R.block(1) = 0;
+		un_R = 0;
+		R = 0;
 
 		FEValues<dim> fe_values(mapping_simplex,
 			fe,
@@ -1648,23 +1645,10 @@ namespace NonlinearElasticity
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(mapping_simplex,
-			fe,
-			face_quadrature_formula,
-			update_values |
-			update_gradients |
-			update_normal_vectors |
-			update_quadrature_points |
-			update_JxW_values);
 
 
 		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
-		const unsigned int n_face_q_points = face_quadrature_formula.size();
-
-
-
-		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
@@ -1683,10 +1667,6 @@ namespace NonlinearElasticity
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
 
 
-		TractionVector<dim> traction_vector;
-		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
-
-
 		Tensor<2, dim> FF;
 		Tensor<2, dim> HH;
 		double Jf;
@@ -1695,9 +1675,7 @@ namespace NonlinearElasticity
 		double temp_pressure;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(quadrature_formula.size());
-		std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -1720,7 +1698,6 @@ namespace NonlinearElasticity
 				{
 					auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 					Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-					double N_p_i = fe_values[Pressure].value(i, q);
 
 					cell_rhs(i) += (-scalar_product(Grad_u_i, pk1) +
 						N_u_i * rhs_values[q]) * fe_values.JxW(q);
@@ -1901,9 +1878,14 @@ namespace NonlinearElasticity
 
 		}
 		constraints.close();
-		assemble_R();
-
-		solve_FE_system();
+		{
+			TimerOutput::Scope timer_section(timer, "Assembling RHS stuff");
+			assemble_R();
+		}
+		{
+			TimerOutput::Scope timer_section(timer, "Solve Linear System");
+			solve_FE_system();
+		}
 		//calculate_error();
 
 	}
@@ -2009,12 +1991,12 @@ namespace NonlinearElasticity
 		const auto& Ru = R.block(0);
 		const auto& Rp = R.block(1);
 
-		SolverControl reduction_control_Kuu(20000, 1.0e-12);
+		SolverControl reduction_control_Kuu(20000, 1.0e-8);
 		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
-		SolverControl reduction_control_Kpp(20000, 1.0e-12);
+		SolverControl reduction_control_Kpp(20000, 1.0e-8);
 		SolverCG<Vector<double>> solver_Kpp(reduction_control_Kpp);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kpp;
 		preconditioner_Kpp.initialize(Kpp);
@@ -2032,6 +2014,8 @@ namespace NonlinearElasticity
 		
 		acceleration = op_Kuu_inv * Ru;
 		solution.block(0) = solution.block(0) + dt * velocity + dt * dt * ((0.5 - beta) * old_acceleration + beta * acceleration);
+		constraints.distribute(solution);
+
 		velocity = velocity + dt * ((1. - gamma) * old_acceleration + gamma * acceleration);
 		assemble_Rp();
 		solution.block(1) =  op_Kpp_inv * Rp;
