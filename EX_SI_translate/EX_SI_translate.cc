@@ -24,7 +24,7 @@
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/error_estimator.h>
-#include <deal.II/fe/FE.h>
+#include <deal.II/fe/fe.h>
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_q_bubbles.h>
@@ -320,112 +320,124 @@ namespace NonlinearElasticity
 
 
 
-	template <int dim, int spacedim = dim>
-	Quadrature<dim> compute_nodal_quadrature(const FiniteElement<dim, spacedim>& fe)
+	//template <int dim, int spacedim = dim>
+	//Quadrature<dim> compute_nodal_quadrature(const FiniteElement<dim, spacedim>& fe)
+	//{
+	//	//Assert(fe.n_blocks() == 1, ExcNotImplemented());
+	//	//Assert(fe.n_components() == 1, ExcNotImplemented());
+	//	//Needs to be called for each distinct finite element scenario
+	//	ReferenceCell type = fe.reference_cell(); //Defines reference cell for given finite element space
+
+	//	const FEValuesExtractors::Scalar Velocity0(0);
+	//	const FEValuesExtractors::Scalar Velocity1(1);
+	//	const FEValuesExtractors::Scalar Pressure(dim);
+
+	//	// All quad points for the whole system
+	//	Quadrature<dim> q_gauss = type.get_gauss_type_quadrature<dim>(fe.tensor_degree() + 1);
+	//	const std::vector<Point<dim>> q_points = q_gauss.get_points();
+
+	//	// All quad points corresponding to velocity
+	//	Quadrature<dim> v_q_gauss = type.get_gauss_type_quadrature<dim>(fe.get_sub_fe(fe.component_mask(Velocity0)).tensor_degree()+1); 
+	//	const std::vector<Point<dim>> v_q_points = v_q_gauss.get_points();
+ //       // All quad points corresponding to pressure
+	//	Quadrature<dim> p_q_gauss = type.get_gauss_type_quadrature<dim>(fe.get_sub_fe(fe.component_mask(Pressure)).tensor_degree() + 1);
+	//	const std::vector<Point<dim>> p_q_points = p_q_gauss.get_points();
+	//
+	//	Triangulation<dim, spacedim> tria;
+	//	GridGenerator::reference_cell(tria, type); //make grid for reference cell
+	//	//const Mapping<dim, spacedim>& mapping = type.template get_default_linear_mapping<dim, spacedim>();
+	//	auto cell = tria.begin_active();
+	//	const MappingFE<dim> *mapping_simplex_ptr(FE_SimplexP_Bubbles<dim>(1));
+
+	//	FE_SimplexP_Bubbles<dim> fe_velocity1(2);
+
+	//	cout << fe.tensor_degree() + 1 << std::endl;
+
+	//	cout << q_gauss.size() << std::endl;
+	//	cout << v_q_gauss.size() << std::endl;
+	//	cout << p_q_gauss.size() << std::endl;
+	//	cout << std::endl;
+	//	
+	//	
+
+
+	//	FEValues<dim, spacedim> fe_values(
+	//		*mapping_simplex_ptr,
+	//		fe,
+	//		q_gauss,
+	//		update_values |
+	//		update_quadrature_points |
+	//		update_JxW_values);
+
+	//	FEValues<dim, spacedim> fe_v_values(
+	//		*mapping_simplex_ptr,
+	//		fe.get_sub_fe(fe.component_mask(Pressure)),
+	//		p_q_gauss,
+	//		update_values |
+	//		update_quadrature_points |
+	//		update_JxW_values);
+	//	
+	//	FEValues<dim, spacedim> fe_p_values(
+	//		*mapping_simplex_ptr,
+	//		fe.get_sub_fe(fe.component_mask(Velocity1)),
+	//		p_q_gauss,
+	//		update_values |
+	//		update_quadrature_points |
+	//		update_JxW_values);
+
+
+	//	fe_values.reinit(cell);
+	//	fe_p_values.reinit(cell);
+	//	fe_v_values.reinit(cell);
+	//	std::vector<Point<dim>> nodal_quad_points = fe.get_unit_support_points(); //Find nodal locations to use as quadrature points
+	//	std::vector<double> nodal_quad_weights(nodal_quad_points.size()); //Preallocate vector of nodal quadrature weights
+
+	//	Assert(nodal_quad_points.size() > 0, ExcNotImplemented());
+
+	//	//Switched q and i loops
+	//	for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+	//	{
+	//		double integral = 0;
+	//		//bool q_flag = 0;
+	//		//for (unsigned int j=0; j < p_q_gauss.size(); ++j) {
+	//		//	//cout << q_points[q] << std::endl;
+	//		//	//cout << p_q_points[j] << std::endl;
+	//		//	//cout << std::endl;
+	//		//	if (q_points[q] == p_q_points[j]) {
+	//		//		q_flag = true;
+	//		//	}
+	//		//}
+	//		//cout << std::find(v_q_points[0], v_q_points[v_q_gauss.size()], q_gauss.quadrature_points(q)) << std::endl;;
+	//		for (unsigned int q = 0; q < v_q_gauss.size(); ++q)
+	//		{
+	//			integral += (fe_values[Velocity0].value(i, q) + fe_values[Velocity1].value(i, q)) * fe_v_values.JxW(q);
+
+	//		}
+	//		for (unsigned int q = 0; q < p_q_gauss.size(); ++q)
+	//		{
+	//			integral += fe_values[Pressure].value(i, q) * fe_p_values.JxW(q);
+
+	//		}
+	//		nodal_quad_weights[i] = integral;//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
+	//		//cout << integral << std::endl;
+	//	}
+
+	//	
+	//	return { nodal_quad_points, nodal_quad_weights };
+	//}
+
+	/*template <int dim>
+	std::unique_ptr<auto>
+	get_base_fe(int& integrator,unsigned int& order)
 	{
-		//Assert(fe.n_blocks() == 1, ExcNotImplemented());
-		//Assert(fe.n_components() == 1, ExcNotImplemented());
-		//Needs to be called for each distinct finite element scenario
-		ReferenceCell type = fe.reference_cell(); //Defines reference cell for given finite element space
+		std::unique_ptr<FiniteElement<dim>> base_fe;
 
-		const FEValuesExtractors::Scalar Velocity0(0);
-		const FEValuesExtractors::Scalar Velocity1(1);
-		const FEValuesExtractors::Scalar Pressure(dim);
-
-		// All quad points for the whole system
-		Quadrature<dim> q_gauss = type.get_gauss_type_quadrature<dim>(fe.tensor_degree() + 1);
-		const std::vector<Point<dim>> q_points = q_gauss.get_points();
-
-		// All quad points corresponding to velocity
-		Quadrature<dim> v_q_gauss = type.get_gauss_type_quadrature<dim>(fe.get_sub_fe(fe.component_mask(Velocity0)).tensor_degree()+1); 
-		const std::vector<Point<dim>> v_q_points = v_q_gauss.get_points();
-        // All quad points corresponding to pressure
-		Quadrature<dim> p_q_gauss = type.get_gauss_type_quadrature<dim>(fe.get_sub_fe(fe.component_mask(Pressure)).tensor_degree() + 1);
-		const std::vector<Point<dim>> p_q_points = p_q_gauss.get_points();
-	
-		Triangulation<dim, spacedim> tria;
-		GridGenerator::reference_cell(tria, type); //make grid for reference cell
-		//const Mapping<dim, spacedim>& mapping = type.template get_default_linear_mapping<dim, spacedim>();
-		auto cell = tria.begin_active();
-		const MappingFE<dim> mapping_simplex(FE_SimplexP_Bubbles<dim>(1));
-
-		FE_SimplexP_Bubbles<dim> fe_velocity1(2);
-
-		cout << fe.tensor_degree() + 1 << std::endl;
-
-		cout << q_gauss.size() << std::endl;
-		cout << v_q_gauss.size() << std::endl;
-		cout << p_q_gauss.size() << std::endl;
-		cout << std::endl;
-		
-		
-
-
-		FEValues<dim, spacedim> fe_values(
-			mapping_simplex,
-			fe,
-			q_gauss,
-			update_values |
-			update_quadrature_points |
-			update_JxW_values);
-
-		FEValues<dim, spacedim> fe_v_values(
-			mapping_simplex,
-			fe.get_sub_fe(fe.component_mask(Pressure)),
-			p_q_gauss,
-			update_values |
-			update_quadrature_points |
-			update_JxW_values);
-		
-		FEValues<dim, spacedim> fe_p_values(
-			mapping_simplex,
-			fe.get_sub_fe(fe.component_mask(Velocity1)),
-			p_q_gauss,
-			update_values |
-			update_quadrature_points |
-			update_JxW_values);
-
-
-		fe_values.reinit(cell);
-		fe_p_values.reinit(cell);
-		fe_v_values.reinit(cell);
-		std::vector<Point<dim>> nodal_quad_points = fe.get_unit_support_points(); //Find nodal locations to use as quadrature points
-		std::vector<double> nodal_quad_weights(nodal_quad_points.size()); //Preallocate vector of nodal quadrature weights
-
-		Assert(nodal_quad_points.size() > 0, ExcNotImplemented());
-
-		//Switched q and i loops
-		for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
-		{
-			double integral = 0;
-			//bool q_flag = 0;
-			//for (unsigned int j=0; j < p_q_gauss.size(); ++j) {
-			//	//cout << q_points[q] << std::endl;
-			//	//cout << p_q_points[j] << std::endl;
-			//	//cout << std::endl;
-			//	if (q_points[q] == p_q_points[j]) {
-			//		q_flag = true;
-			//	}
-			//}
-			//cout << std::find(v_q_points[0], v_q_points[v_q_gauss.size()], q_gauss.quadrature_points(q)) << std::endl;;
-			for (unsigned int q = 0; q < v_q_gauss.size(); ++q)
-			{
-				integral += (fe_values[Velocity0].value(i, q) + fe_values[Velocity1].value(i, q)) * fe_v_values.JxW(q);
-
-			}
-			for (unsigned int q = 0; q < p_q_gauss.size(); ++q)
-			{
-				integral += fe_values[Pressure].value(i, q) * fe_p_values.JxW(q);
-
-			}
-			nodal_quad_weights[i] = integral;//Quadrature weights are determined by the integral computed via exact Gaussian quadrature on the reference element
-			//cout << integral << std::endl;
-		}
-
-		
-		return { nodal_quad_points, nodal_quad_weights };
-	}
-
+		if (integrator==1)
+			base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(order);
+		else
+			base_fe = std::make_unique<FE_SimplexP<dim>>(order);
+		return base_fe;
+	}*/
 
 
 	//Class for defining Kappa
@@ -556,108 +568,7 @@ namespace NonlinearElasticity
 
 
 
-	template <int dim>
-	class Incompressible
-	{
-	public:
-		Incompressible(const std::string& input_file);
-		~Incompressible();
-		void run();
-
-	private:
-		void         create_coarse_grid(Triangulation<2>& triangulation);
-		void         create_coarse_grid(Triangulation<3>& triangulation);
-		void         setup_system();
-		void         assemble_system_Kuu();
-		void         assemble_system_not_Kuu();
-		void		 assemble_Rp();
-		void		 assemble_R();
-		void         solve_semi_implicit();
-		void		 solve_explicit();
-		void		 solve_SI_system();
-		void		 solve_FE_system();
-		void		 update_motion();
-		void         output_results() const;
-		void		 calculate_error();
-		void		 do_timestep();
-
-
-
-
-		Parameters::AllParameters parameters;
-
-		Triangulation<dim> triangulation;
-		DoFHandler<dim>    dof_handler;
-		FESystem<dim> fe;
-
-		MappingFE<dim> mapping_simplex;
-
-
-		AffineConstraints<double> constraints;
-		AffineConstraints<double> displacement_constraints;
-		AffineConstraints<double> pressure_constraints;
-
-		const QGaussSimplex<dim> quadrature_formula;
-		const QGaussSimplex<dim - 1> face_quadrature_formula;
-
-
-
-		BlockSparsityPattern sparsity_pattern;
-		BlockSparsityPattern un_sparsity_pattern;
-		BlockSparseMatrix<double> K;
-		BlockSparseMatrix<double> un_K;
-
-
-		BlockVector<double> R;
-		BlockVector<double> un_R;
-
-
-		BlockVector<double> solution;
-		BlockVector<double> solution_increment;
-
-
-
-		//Vector<double> residual;
-
-		Vector<double> displacement;
-		Vector<double> old_displacement;
-		Vector<double> velocity;
-		Vector<double> old_velocity;
-		Vector<double> acceleration;
-		Vector<double> old_acceleration;
-		Vector<double> pressure;
-		Vector<double> old_pressure;
-
-
-		BlockVector<double> true_solution;
-		BlockVector<double> error;
-
-		double present_time;
-		double dt;
-		double rho_0;
-		double end_time;
-		double save_time;
-		double save_counter;
-		unsigned int timestep_no;
-		double pressure_mean;
-
-
-		Vector<double> u_cell_wise_error;
-		Vector<double> p_cell_wise_error;
-
-		double displacement_error_output;
-		double velocity_error_output;
-		double pressure_error_output;
-
-		double E;
-		double nu;
-
-
-		double kappa;
-		double mu;
-
-		double tau;
-	};
+	
 
 
 
@@ -1045,17 +956,137 @@ namespace NonlinearElasticity
 		for (unsigned int p = 0; p < n_points; ++p)
 			PressureNeumann<dim>::vector_value(points[p], value_list[p]);
 	}
+	template <int dim>
+	class Incompressible
+	{
+	public:
+		Incompressible(const std::string& input_file);
+		~Incompressible();
+		void run();
+
+	private:
+		void         create_coarse_grid(Triangulation<2>& triangulation);
+		void         create_coarse_grid(Triangulation<3>& triangulation);
+		void         setup_system();
+		void         assemble_system_Kuu();
+		void         assemble_system_not_Kuu();
+		void		 assemble_Rp();
+		void		 assemble_R();
+		void         solve_semi_implicit();
+		void		 solve_explicit();
+		void		 solve_SI_system();
+		void		 solve_FE_system();
+		void		 update_motion();
+		void         output_results() const;
+		void		 calculate_error();
+		void		 do_timestep();
+
+
+
+
+		Parameters::AllParameters parameters;
+
+		Triangulation<dim> triangulation;
+		DoFHandler<dim>    dof_handler;
+		unsigned int v_order;
+		int integrator;
+
+		std::unique_ptr<FiniteElement<dim>> base_fe;
+		std::unique_ptr<FESystem<dim>> fe_ptr;
+		std::unique_ptr<MappingFE<dim>> mapping_simplex_ptr;
+
+
+
+
+		AffineConstraints<double> constraints;
+		AffineConstraints<double> displacement_constraints;
+		AffineConstraints<double> pressure_constraints;
+
+		const QGaussSimplex<dim> quadrature_formula;
+		const QGaussSimplex<dim - 1> face_quadrature_formula;
+
+
+
+		BlockSparsityPattern sparsity_pattern;
+		BlockSparsityPattern un_sparsity_pattern;
+		BlockSparseMatrix<double> K;
+		BlockSparseMatrix<double> un_K;
+
+
+		BlockVector<double> R;
+		BlockVector<double> un_R;
+
+
+		BlockVector<double> solution;
+		BlockVector<double> solution_increment;
+
+
+
+		//Vector<double> residual;
+
+		Vector<double> displacement;
+		Vector<double> old_displacement;
+		Vector<double> velocity;
+		Vector<double> old_velocity;
+		Vector<double> acceleration;
+		Vector<double> old_acceleration;
+		Vector<double> pressure;
+		Vector<double> old_pressure;
+
+
+		BlockVector<double> true_solution;
+		BlockVector<double> error;
+
+		double present_time;
+		double dt;
+		double rho_0;
+		double end_time;
+		double save_time;
+		double save_counter;
+		unsigned int timestep_no;
+		double pressure_mean;
+
+
+		Vector<double> u_cell_wise_error;
+		Vector<double> p_cell_wise_error;
+
+		double displacement_error_output;
+		double velocity_error_output;
+		double pressure_error_output;
+
+		double E;
+		double nu;
+
+
+		double kappa;
+		double mu;
+
+		double tau;
+	};
 
 	template<int dim> // Constructor for the main class
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
-		, mapping_simplex(FE_SimplexP_Bubbles<dim>(parameters.velocity_order))
+		, v_order(parameters.velocity_order)
+		, integrator(parameters.integrator)
 		, dof_handler(triangulation)
-		, fe(FE_SimplexP_Bubbles<dim>(parameters.velocity_order), dim, FE_SimplexP<dim>(parameters.pressure_order), 1)
-		, quadrature_formula(3)
+		, quadrature_formula(3 + int(parameters.integrator))
 		, face_quadrature_formula(3)
 		, timestep_no(0)
-	{}
+	{
+		if (parameters.LumpMass == true)
+		{
+			base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(parameters.velocity_order);
+			fe_ptr = std::make_unique<FESystem<dim>>(*base_fe, dim, FE_SimplexP<dim>(parameters.velocity_order-1.), 1);
+			mapping_simplex_ptr = std::make_unique<MappingFE<dim>>(*base_fe);
+		}
+		else
+		{
+			base_fe = std::make_unique<FE_SimplexP<dim>>(parameters.velocity_order);
+			fe_ptr = std::make_unique<FESystem<dim>>(*base_fe, dim, FE_SimplexP<dim>(parameters.velocity_order - 1.), 1);
+			mapping_simplex_ptr = std::make_unique<MappingFE<dim>>(*base_fe);
+		}
+	}
 
 
 	//This is a destructor.
@@ -1069,6 +1100,10 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Incompressible<dim>::run()
 	{
+		//std::unique_ptr<FiniteElement<dim>> base_fe;
+		
+		/**/
+
 		E = parameters.E;
 		nu = parameters.nu;
 		mu = get_mu<dim>(E, nu);
@@ -1180,9 +1215,11 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::setup_system()
 	{
-		K.clear();
 
-		dof_handler.distribute_dofs(fe);
+		
+
+		K.clear();
+		dof_handler.distribute_dofs(*fe_ptr);
 
 		std::vector<unsigned int> block_component(dim + 1, 0);
 		block_component[dim] = 1;
@@ -1196,12 +1233,12 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
 				dof_handler,
 				2,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocity));
 			constraints.close();
 
 		}
@@ -1283,20 +1320,20 @@ namespace NonlinearElasticity
 
 		const FEValuesExtractors::Vector Velocity(0);
 
-		VectorTools::interpolate(mapping_simplex,
+		VectorTools::interpolate(*mapping_simplex_ptr,
 			dof_handler,
 			InitialVelocity<dim>(parameters.InitialVelocity, mu),
 			solution,
-			fe.component_mask(Velocity));
+			(*fe_ptr).component_mask(Velocity));
 		velocity = solution.block(0);
 
-		VectorTools::interpolate(mapping_simplex,
+		VectorTools::interpolate(*mapping_simplex_ptr,
 			dof_handler,
 			InitialAcceleration<dim>(parameters.BodyForce, mu, dt),
 			solution,
-			fe.component_mask(Velocity));
+			(*fe_ptr).component_mask(Velocity));
 		acceleration = solution.block(0);
-		VectorTools::interpolate(mapping_simplex, dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
+		VectorTools::interpolate(*mapping_simplex_ptr, dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
 		pressure_mean = solution.block(1).mean_value();
 	}
 
@@ -1309,14 +1346,14 @@ namespace NonlinearElasticity
 		R = 0;
 		un_R = 0;
 		/*const Quadrature<dim> nodal_quad = compute_nodal_quadrature(fe);
-		FEValues<dim> fe_lump_values(mapping_simplex,
+		FEValues<dim> fe_lump_values(*mapping_simplex_ptr,
 			fe,
 			nodal_quad,
 			update_values | 
 			update_JxW_values);*/
 
-		FEValues<dim> fe_values(mapping_simplex,
-			fe,
+		FEValues<dim> fe_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			quadrature_formula,
 			update_values |
 			update_quadrature_points |
@@ -1327,7 +1364,7 @@ namespace NonlinearElasticity
 			cout << q_points[i] << std::endl;*/
 
 
-		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 
 
 
@@ -1344,6 +1381,12 @@ namespace NonlinearElasticity
 
 		double rho_0 = parameters.rho_0;
 		bool lump_mass = parameters.LumpMass;
+
+		double scale;
+		if (parameters.integrator == 1)
+			scale = alpha / (beta * dt * dt);
+		else
+			scale = 1.;
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
 			{
@@ -1369,8 +1412,10 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+				for (unsigned int i = 0; i < dofs_per_cell; ++i)
+				{
+					for (unsigned int j = 0; j < dofs_per_cell; ++j)
+					{
 						un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 					}
 				}
@@ -1390,7 +1435,7 @@ namespace NonlinearElasticity
 						Tensor<1,dim> N_p_i = fe_values[Velocity].value(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, i) += alpha / (beta * dt * dt) * rho_0 * N_p_i * fe_values[Velocity].value(j, q) * fe_values.JxW(q);
+							cell_mass_matrix(i, i) += scale * rho_0 * N_p_i * fe_values[Velocity].value(j, q) * fe_values.JxW(q);
 
 						}
 					}
@@ -1399,7 +1444,8 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+				for (unsigned int i = 0; i < dofs_per_cell; ++i)
+				{
 						un_K.add(local_dof_indices[i], local_dof_indices[i], cell_mass_matrix(i, i));
 				}
 			}
@@ -1417,7 +1463,7 @@ namespace NonlinearElasticity
 						double N_p_i = fe_values[Pressure].value(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (alpha / (beta * dt * dt) * rho_0 * N_u_i * fe_values[Velocity].value(j, q) + 
+							cell_mass_matrix(i, j) += (scale * rho_0 * N_u_i * fe_values[Velocity].value(j, q) + 
 								- 1. / kappa * N_p_i * fe_values[Pressure].value(j, q)) * fe_values.JxW(q);
 						}
 					}
@@ -1426,15 +1472,17 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+				for (unsigned int i = 0; i < dofs_per_cell; ++i)
+				{
+					for (unsigned int j = 0; j < dofs_per_cell; ++j)
+					{
 						un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
 					}
 				}
 			}
 		}
-		cout << K.block(0, 0).l1_norm() << std::endl;
-		cout << K.block(1, 1).l1_norm() << std::endl;
+		cout << K.block(0, 0).frobenius_norm() << std::endl;
+		cout << K.block(1, 1).frobenius_norm() << std::endl;
 	}
 	
 
@@ -1442,7 +1490,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::assemble_system_not_Kuu()
 	{
 
-
+		
 		un_K.block(0, 1) = 0;
 		un_K.block(1, 0) = 0;
 		un_R = 0;
@@ -1452,16 +1500,16 @@ namespace NonlinearElasticity
 
 
 
-		FEValues<dim> fe_values(mapping_simplex,
-			fe,
+		FEValues<dim> fe_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			quadrature_formula,
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(mapping_simplex,
-			fe,
+		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			face_quadrature_formula,
 			update_values |
 			update_gradients |
@@ -1470,7 +1518,7 @@ namespace NonlinearElasticity
 			update_JxW_values);
 
 
-		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
 		const unsigned int n_face_q_points = face_quadrature_formula.size();
 
@@ -1615,16 +1663,16 @@ namespace NonlinearElasticity
 
 
 
-		FEValues<dim> fe_values(mapping_simplex,
-			fe,
+		FEValues<dim> fe_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			quadrature_formula,
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(mapping_simplex,
-			fe,
+		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			face_quadrature_formula,
 			update_values |
 			update_gradients |
@@ -1633,7 +1681,7 @@ namespace NonlinearElasticity
 			update_JxW_values);
 
 
-		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
 		const unsigned int n_face_q_points = face_quadrature_formula.size();
 
@@ -1768,16 +1816,16 @@ namespace NonlinearElasticity
 		un_R.block(1) = 0;
 		R.block(1) = 0;
 
-		FEValues<dim> fe_values(mapping_simplex,
-			fe,
+		FEValues<dim> fe_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			quadrature_formula,
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(mapping_simplex,
-			fe,
+		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+			*fe_ptr,
 			face_quadrature_formula,
 			update_values |
 			update_gradients |
@@ -1786,7 +1834,7 @@ namespace NonlinearElasticity
 			update_JxW_values);
 
 
-		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
 		const unsigned int n_face_q_points = face_quadrature_formula.size();
 
@@ -1879,12 +1927,12 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
 				dof_handler,
 				2,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
 				constraints,
-				fe.component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocity));
 			//present_time += dt;
 
 		}
@@ -1906,12 +1954,12 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
 				dof_handler,
 				2,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
 				constraints,
-				fe.component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocity));
 			//present_time += dt;
 
 		}
@@ -2034,7 +2082,6 @@ namespace NonlinearElasticity
 		const double gamma = alpha + 0.5;
 		
 		solver_Kuu.solve(Kuu, acceleration, Ru, preconditioner_Kuu);
-		acceleration *= alpha / ( beta * dt * dt );
 		solution.block(0) = solution.block(0) + dt * old_velocity +  dt * dt * ((0.5-beta) * old_acceleration+beta * acceleration);
 		velocity = old_velocity + dt * ((1 - gamma) * old_acceleration + gamma * acceleration);
 		assemble_Rp();
@@ -2093,7 +2140,7 @@ namespace NonlinearElasticity
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
 
-		VectorTools::integrate_difference(mapping_simplex,
+		VectorTools::integrate_difference(*mapping_simplex_ptr,
 			dof_handler,
 			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
@@ -2108,7 +2155,7 @@ namespace NonlinearElasticity
 
 
 
-		VectorTools::integrate_difference(mapping_simplex,
+		VectorTools::integrate_difference(*mapping_simplex_ptr,
 			dof_handler,
 			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
