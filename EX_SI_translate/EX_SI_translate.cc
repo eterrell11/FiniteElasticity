@@ -965,8 +965,8 @@ namespace NonlinearElasticity
 		void run();
 
 	private:
-		void         create_coarse_grid(Triangulation<2>& triangulation);
-		void         create_coarse_grid(Triangulation<3>& triangulation);
+		void         create_simplex_grid(Triangulation<2>& triangulation);
+		void         create_simplex_grid(Triangulation<3>& triangulation);
 		void         setup_system();
 		void         assemble_system_Kuu();
 		void         assemble_system_not_Kuu();
@@ -1114,7 +1114,7 @@ namespace NonlinearElasticity
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 
-		create_coarse_grid(triangulation);
+		create_simplex_grid(triangulation);
 		setup_system();
 
 
@@ -1132,7 +1132,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Incompressible<dim>::create_coarse_grid(Triangulation<2>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(Triangulation<2>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -1171,7 +1171,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Incompressible<dim>::create_coarse_grid(Triangulation<3>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(Triangulation<3>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
