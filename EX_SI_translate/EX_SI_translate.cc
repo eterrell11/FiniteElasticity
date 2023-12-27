@@ -84,6 +84,8 @@
 #include <deal.II/fe/mapping_fe.h>
 #include <deal.II/fe/fe_simplex_p_bubbles.h>
 
+//For timer
+#include <deal.II/base/timer.h>
 
 
 //For synchronous iterator support
@@ -988,7 +990,7 @@ namespace NonlinearElasticity
 		void		 do_timestep();
 
 
-
+		TimerOutput timer;
 
 		Parameters::AllParameters parameters;
 
@@ -1081,6 +1083,7 @@ namespace NonlinearElasticity
 		, integrator(parameters.integrator)
 		, dof_handler(triangulation)
 		, timestep_no(0)
+		, timer(std::cout, TimerOutput::summary, TimerOutput::cpu_and_wall_times)
 	{
 		if (parameters.Simplex == false) {
 			quad_rule_ptr = std::make_unique<QGauss<dim>>(3);
@@ -1124,31 +1127,35 @@ namespace NonlinearElasticity
 		//std::unique_ptr<FiniteElement<dim>> v_base_fe;
 		
 		/**/
+		{
+			TimerOutput::Scope timer_section(timer, "Setup system");
 
-		E = parameters.E;
-		nu = parameters.nu;
-		mu = get_mu<dim>(E, nu);
-		kappa = get_kappa<dim>(E, nu);
-		rho_0 = parameters.rho_0;
-		present_time = parameters.start_time;
-		dt = parameters.dt;
-		end_time = parameters.end_time;
-		save_time = parameters.save_time;
-		if (parameters.Simplex==true) {
-			create_simplex_grid(triangulation);
+			E = parameters.E;
+			nu = parameters.nu;
+			mu = get_mu<dim>(E, nu);
+			kappa = get_kappa<dim>(E, nu);
+			rho_0 = parameters.rho_0;
+			present_time = parameters.start_time;
+			dt = parameters.dt;
+			end_time = parameters.end_time;
+			save_time = parameters.save_time;
+			if (parameters.Simplex == true) {
+				create_simplex_grid(triangulation);
+			}
+			else {
+				create_grid();
+			}
+			setup_system();
 		}
-		else {
-			create_grid();
-		}
-		setup_system();
-
 
 		output_results();
 		cout << "Saving results at time : " << present_time << std::endl;
 		save_counter = 1;
 
-
-		assemble_system_Kuu();
+		{
+			TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
+			assemble_system_Kuu();
+		}
 		cout << "Lumped mass matrix assembled" << std::endl;
 
 		while (present_time < end_time - 1e-12) {
@@ -1594,9 +1601,7 @@ namespace NonlinearElasticity
 		double temp_pressure;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure((*quad_rule_ptr).size());
-		std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -1616,23 +1621,25 @@ namespace NonlinearElasticity
 			{
 				temp_pressure = sol_vec_pressure[q];
 				FF = get_real_FF(displacement_grads[q]);
-				Jf = get_Jf(FF);
-				HH = get_HH(FF, Jf);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
+				Jf = determinant(FF);
+				HH = Jf * invert(transpose(FF));
+				pk1 = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 3. * HH / Jf) + (temp_pressure * HH);
+
 				//temp_pressure -= pressure_mean;
 				for (const unsigned int i : fe_values.dof_indices())
 				{
+					auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 					Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
 					double N_p_i = fe_values[Pressure].value(i, q);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						cell_mass_matrix(i, j) += (scalar_product(fe_values[Velocity].gradient(i, q), (HH) * fe_values[Pressure].value(j, q)) + //Kup
-							N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q)) )* fe_values.JxW(q);
+						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH)*fe_values[Pressure].value(j, q)) + //Kup
+							N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 
 					}
-					cell_rhs(i) += (-scalar_product(fe_values[Velocity].gradient(i, q), pk1) +
-						fe_values[Velocity].value(i, q) * rhs_values[q] +
-						-fe_values[Pressure].value(i, q) * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
+					cell_rhs(i) += (-scalar_product(Grad_u_i, pk1) +
+						N_u_i * rhs_values[q] +
+						-N_p_i * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
 
 					//std::cout << cell_rhs(i) <<  std::endl;
 				}
@@ -1642,8 +1649,6 @@ namespace NonlinearElasticity
 				if (face->at_boundary())
 				{
 					fe_face_values.reinit(cell, face);
-					fe_face_values[Velocity].get_function_gradients(solution, face_displacement_grads);
-					fe_values[Pressure].get_function_values(solution, face_sol_vec_pressure);
 
 
 
@@ -1653,17 +1658,8 @@ namespace NonlinearElasticity
 
 					for (const unsigned int q : fe_face_values.quadrature_point_indices())
 					{
-						temp_pressure = face_sol_vec_pressure[q];
-						FF = get_real_FF(face_displacement_grads[q]);
-						Jf = get_Jf(FF);
-						HH = get_HH(FF, Jf);
-						pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
 						for (const unsigned int i : fe_face_values.dof_indices())
 						{
-							if (face->boundary_id() == 2) {
-								cell_rhs(i) += fe_face_values[Velocity].value(i, q) * (pk1 * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);
-
-							}
 							if (face->boundary_id() == 1) {
 								cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
@@ -1976,9 +1972,14 @@ namespace NonlinearElasticity
 
 		}
 		constraints.close();
-		assemble_system_not_Kuu();
-
-		solve_SI_system();
+		{
+			TimerOutput::Scope timer_section(timer, "Assembling RHS");
+			assemble_system_not_Kuu();
+		}
+		{
+			TimerOutput::Scope timer_section(timer, "Solving system");
+			solve_SI_system();
+		}
 		update_motion();
 		calculate_error();
 
@@ -2003,10 +2004,15 @@ namespace NonlinearElasticity
 
 		}
 		constraints.close();
-
-		assemble_R();
-		solve_FE_system();
-		calculate_error();
+		{
+			TimerOutput::Scope timer_section(timer, "Assembling RHS");
+			assemble_R();
+		}
+		{
+			TimerOutput::Scope timer_section(timer, "Solving system");
+			solve_FE_system();
+		}
+		//calculate_error();
 
 	}
 
