@@ -187,6 +187,7 @@ namespace NonlinearElasticity
 			unsigned int pressure_order;
 			double tau_FFp;
 			bool LumpMass;
+			bool Simplex;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -226,7 +227,10 @@ namespace NonlinearElasticity
 					"false",
 					Patterns::Bool(),
 					"LumpMass");
-
+				prm.declare_entry("Simplex",
+					"false",
+					Patterns::Bool(),
+					"Simplex");
 			}
 			prm.leave_subsection();
 		}
@@ -242,6 +246,7 @@ namespace NonlinearElasticity
 				pressure_order = prm.get_integer("Pressure order");
 				tau_FFp = prm.get_double("Tau_FFp");
 				LumpMass = prm.get_bool("LumpMass");
+				Simplex = prm.get_bool("Simplex");
 			}
 			prm.leave_subsection();
 		}
@@ -347,7 +352,7 @@ namespace NonlinearElasticity
 	//	GridGenerator::reference_cell(tria, type); //make grid for reference cell
 	//	//const Mapping<dim, spacedim>& mapping = type.template get_default_linear_mapping<dim, spacedim>();
 	//	auto cell = tria.begin_active();
-	//	const MappingFE<dim> *mapping_simplex_ptr(FE_SimplexP_Bubbles<dim>(1));
+	//	const MappingFE<dim> *mapping_ptr(FE_SimplexP_Bubbles<dim>(1));
 
 	//	FE_SimplexP_Bubbles<dim> fe_velocity1(2);
 
@@ -362,7 +367,7 @@ namespace NonlinearElasticity
 
 
 	//	FEValues<dim, spacedim> fe_values(
-	//		*mapping_simplex_ptr,
+	//		*mapping_ptr,
 	//		fe,
 	//		q_gauss,
 	//		update_values |
@@ -370,7 +375,7 @@ namespace NonlinearElasticity
 	//		update_JxW_values);
 
 	//	FEValues<dim, spacedim> fe_v_values(
-	//		*mapping_simplex_ptr,
+	//		*mapping_ptr,
 	//		fe.get_sub_fe(fe.component_mask(Pressure)),
 	//		p_q_gauss,
 	//		update_values |
@@ -378,7 +383,7 @@ namespace NonlinearElasticity
 	//		update_JxW_values);
 	//	
 	//	FEValues<dim, spacedim> fe_p_values(
-	//		*mapping_simplex_ptr,
+	//		*mapping_ptr,
 	//		fe.get_sub_fe(fe.component_mask(Velocity1)),
 	//		p_q_gauss,
 	//		update_values |
@@ -428,15 +433,15 @@ namespace NonlinearElasticity
 
 	/*template <int dim>
 	std::unique_ptr<auto>
-	get_base_fe(int& integrator,unsigned int& order)
+	get_v_base_fe(int& integrator,unsigned int& order)
 	{
-		std::unique_ptr<FiniteElement<dim>> base_fe;
+		std::unique_ptr<FiniteElement<dim>> v_base_fe;
 
 		if (integrator==1)
-			base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(order);
+			v_base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(order);
 		else
-			base_fe = std::make_unique<FE_SimplexP<dim>>(order);
-		return base_fe;
+			v_base_fe = std::make_unique<FE_SimplexP<dim>>(order);
+		return v_base_fe;
 	}*/
 
 
@@ -967,6 +972,7 @@ namespace NonlinearElasticity
 	private:
 		void         create_simplex_grid(Triangulation<2>& triangulation);
 		void         create_simplex_grid(Triangulation<3>& triangulation);
+		void         create_grid();
 		void         setup_system();
 		void         assemble_system_Kuu();
 		void         assemble_system_not_Kuu();
@@ -991,9 +997,10 @@ namespace NonlinearElasticity
 		unsigned int v_order;
 		int integrator;
 
-		std::unique_ptr<FiniteElement<dim>> base_fe;
+		std::unique_ptr<FiniteElement<dim>> v_base_fe;
+		std::unique_ptr<FiniteElement<dim>> p_base_fe;
 		std::unique_ptr<FESystem<dim>> fe_ptr;
-		std::unique_ptr<MappingFE<dim>> mapping_simplex_ptr;
+		std::unique_ptr<MappingFE<dim>> mapping_ptr;
 
 
 
@@ -1002,8 +1009,11 @@ namespace NonlinearElasticity
 		AffineConstraints<double> displacement_constraints;
 		AffineConstraints<double> pressure_constraints;
 
+
+		std::unique_ptr<Quadrature<dim>> quad_rule_ptr;
+		std::unique_ptr<Quadrature<dim-1>> face_quad_rule_ptr;/*
 		const QGaussSimplex<dim> quadrature_formula;
-		const QGaussSimplex<dim - 1> face_quadrature_formula;
+		const QGaussSimplex<dim - 1> face_quadrature_formula;*/
 
 
 
@@ -1070,22 +1080,33 @@ namespace NonlinearElasticity
 		, v_order(parameters.velocity_order)
 		, integrator(parameters.integrator)
 		, dof_handler(triangulation)
-		, quadrature_formula(3 + int(parameters.integrator))
-		, face_quadrature_formula(3)
 		, timestep_no(0)
 	{
-		if (parameters.LumpMass == true)
-		{
-			base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(parameters.velocity_order);
-			fe_ptr = std::make_unique<FESystem<dim>>(*base_fe, dim, FE_SimplexP<dim>(parameters.velocity_order-1.), 1);
-			mapping_simplex_ptr = std::make_unique<MappingFE<dim>>(*base_fe);
+		if (parameters.Simplex == false) {
+			quad_rule_ptr = std::make_unique<QGauss<dim>>(3);
+			face_quad_rule_ptr = std::make_unique<QGauss<dim-1>>(3);
+			v_base_fe = std::make_unique<FE_Q<dim>>(parameters.velocity_order);
+			p_base_fe = std::make_unique<FE_Q<dim>>(parameters.pressure_order);
+
 		}
-		else
-		{
-			base_fe = std::make_unique<FE_SimplexP<dim>>(parameters.velocity_order);
-			fe_ptr = std::make_unique<FESystem<dim>>(*base_fe, dim, FE_SimplexP<dim>(parameters.velocity_order - 1.), 1);
-			mapping_simplex_ptr = std::make_unique<MappingFE<dim>>(*base_fe);
+		else {
+			quad_rule_ptr = std::make_unique<QGaussSimplex<dim>>(3 + int(parameters.integrator));
+			face_quad_rule_ptr = std::make_unique<QGaussSimplex<dim-1>>(3);
+			if (parameters.LumpMass == true) // Makes simplex space have bubbles so mass lumping can occur
+			{
+				v_base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(parameters.velocity_order);
+				p_base_fe = std::make_unique<FE_SimplexP<dim>>(parameters.pressure_order);
+			}
+			else
+			{
+				v_base_fe = std::make_unique<FE_SimplexP<dim>>(parameters.velocity_order);
+				p_base_fe = std::make_unique<FE_SimplexP<dim>>(parameters.pressure_order);
+			}
 		}
+		
+
+		fe_ptr = std::make_unique<FESystem<dim>>(*v_base_fe, dim,*p_base_fe, 1);
+		mapping_ptr = std::make_unique<MappingFE<dim>>(*v_base_fe);
 	}
 
 
@@ -1100,7 +1121,7 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Incompressible<dim>::run()
 	{
-		//std::unique_ptr<FiniteElement<dim>> base_fe;
+		//std::unique_ptr<FiniteElement<dim>> v_base_fe;
 		
 		/**/
 
@@ -1113,8 +1134,12 @@ namespace NonlinearElasticity
 		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
-
-		create_simplex_grid(triangulation);
+		if (parameters.Simplex==true) {
+			create_simplex_grid(triangulation);
+		}
+		else {
+			create_grid();
+		}
 		setup_system();
 
 
@@ -1205,7 +1230,21 @@ namespace NonlinearElasticity
 
 		triangulation.refine_global(parameters.n_ref);
 	}
-
+	template <int dim>
+	void Incompressible<dim>::create_grid()
+	{
+		GridGenerator::hyper_cube(triangulation, 0, 1);
+		triangulation.refine_global(parameters.n_ref);
+		for (const auto& cell : triangulation.active_cell_iterators())
+			for (const auto& face : cell->face_iterators())
+				if (face->at_boundary())
+				{
+					const Point<dim> face_center = face->center();
+					if (face_center[0] == 0) {
+						face->set_boundary_id(1);
+					}
+				}
+	}
 
 
 
@@ -1233,7 +1272,7 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
+			VectorTools::interpolate_boundary_values(*mapping_ptr,
 				dof_handler,
 				2,
 				Functions::ZeroFunction<dim>(dim + 1),
@@ -1320,20 +1359,20 @@ namespace NonlinearElasticity
 
 		const FEValuesExtractors::Vector Velocity(0);
 
-		VectorTools::interpolate(*mapping_simplex_ptr,
+		VectorTools::interpolate(*mapping_ptr,
 			dof_handler,
 			InitialVelocity<dim>(parameters.InitialVelocity, mu),
 			solution,
 			(*fe_ptr).component_mask(Velocity));
 		velocity = solution.block(0);
 
-		VectorTools::interpolate(*mapping_simplex_ptr,
+		VectorTools::interpolate(*mapping_ptr,
 			dof_handler,
 			InitialAcceleration<dim>(parameters.BodyForce, mu, dt),
 			solution,
 			(*fe_ptr).component_mask(Velocity));
 		acceleration = solution.block(0);
-		VectorTools::interpolate(*mapping_simplex_ptr, dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
+		VectorTools::interpolate(*mapping_ptr, dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
 		pressure_mean = solution.block(1).mean_value();
 	}
 
@@ -1346,19 +1385,19 @@ namespace NonlinearElasticity
 		R = 0;
 		un_R = 0;
 		/*const Quadrature<dim> nodal_quad = compute_nodal_quadrature(fe);
-		FEValues<dim> fe_lump_values(*mapping_simplex_ptr,
+		FEValues<dim> fe_lump_values(*mapping_ptr,
 			fe,
 			nodal_quad,
 			update_values | 
 			update_JxW_values);*/
 
-		FEValues<dim> fe_values(*mapping_simplex_ptr,
+		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
-			quadrature_formula,
+			*quad_rule_ptr,
 			update_values |
 			update_quadrature_points |
 			update_JxW_values);
-		const std::vector<Point<dim>> q_points = quadrature_formula.get_points();
+		const std::vector<Point<dim>> q_points = (*quad_rule_ptr).get_points();
 
 		/*for (unsigned int i = 0 ; i < quadrature_formula.size() ; ++i)
 			cout << q_points[i] << std::endl;*/
@@ -1500,17 +1539,17 @@ namespace NonlinearElasticity
 
 
 
-		FEValues<dim> fe_values(*mapping_simplex_ptr,
+		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
-			quadrature_formula,
+			(*quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
 			*fe_ptr,
-			face_quadrature_formula,
+			(*face_quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_normal_vectors |
@@ -1519,8 +1558,8 @@ namespace NonlinearElasticity
 
 
 		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
-		const unsigned int n_q_points = quadrature_formula.size();
-		const unsigned int n_face_q_points = face_quadrature_formula.size();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
 
 
 
@@ -1556,7 +1595,7 @@ namespace NonlinearElasticity
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
-		std::vector<double> sol_vec_pressure(quadrature_formula.size());
+		std::vector<double> sol_vec_pressure((*quad_rule_ptr).size());
 		std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1663,17 +1702,17 @@ namespace NonlinearElasticity
 
 
 
-		FEValues<dim> fe_values(*mapping_simplex_ptr,
+		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
-			quadrature_formula,
+			(*quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
 			*fe_ptr,
-			face_quadrature_formula,
+			(*face_quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_normal_vectors |
@@ -1682,8 +1721,8 @@ namespace NonlinearElasticity
 
 
 		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
-		const unsigned int n_q_points = quadrature_formula.size();
-		const unsigned int n_face_q_points = face_quadrature_formula.size();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
 
 
 
@@ -1719,7 +1758,7 @@ namespace NonlinearElasticity
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
-		std::vector<double> sol_vec_pressure(quadrature_formula.size());
+		std::vector<double> sol_vec_pressure((*quad_rule_ptr).size());
 		std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1816,17 +1855,17 @@ namespace NonlinearElasticity
 		un_R.block(1) = 0;
 		R.block(1) = 0;
 
-		FEValues<dim> fe_values(*mapping_simplex_ptr,
+		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
-			quadrature_formula,
+			(*quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(*mapping_simplex_ptr,
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
 			*fe_ptr,
-			face_quadrature_formula,
+			(*face_quad_rule_ptr),
 			update_values |
 			update_gradients |
 			update_normal_vectors |
@@ -1835,8 +1874,8 @@ namespace NonlinearElasticity
 
 
 		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
-		const unsigned int n_q_points = quadrature_formula.size();
-		const unsigned int n_face_q_points = face_quadrature_formula.size();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
 
 
 
@@ -1870,7 +1909,7 @@ namespace NonlinearElasticity
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
-		std::vector<double> sol_vec_pressure(quadrature_formula.size());
+		std::vector<double> sol_vec_pressure((*quad_rule_ptr).size());
 		std::vector<double> face_sol_vec_pressure(n_face_q_points);
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1927,7 +1966,7 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
+			VectorTools::interpolate_boundary_values(*mapping_ptr,
 				dof_handler,
 				2,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
@@ -1954,7 +1993,7 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*mapping_simplex_ptr,
+			VectorTools::interpolate_boundary_values(*mapping_ptr,
 				dof_handler,
 				2,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
@@ -2140,12 +2179,12 @@ namespace NonlinearElasticity
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
 
-		VectorTools::integrate_difference(*mapping_simplex_ptr,
+		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			u_cell_wise_error,
-			quadrature_formula,
+			(*quad_rule_ptr),
 			VectorTools::L2_norm,
 			&velocity_mask);
 
@@ -2155,12 +2194,12 @@ namespace NonlinearElasticity
 
 
 
-		VectorTools::integrate_difference(*mapping_simplex_ptr,
+		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
-			quadrature_formula,
+			(*quad_rule_ptr),
 			VectorTools::L2_norm,
 			&pressure_mask);
 
