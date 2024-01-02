@@ -1634,14 +1634,12 @@ namespace NonlinearElasticity
 					for (const unsigned int j : fe_values.dof_indices())
 					{
 						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH)*fe_values[Pressure].value(j, q)) + //Kup
-							N_p_i * Jf * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 
 					}
 					cell_rhs(i) += (-scalar_product(Grad_u_i, pk1) +
 						N_u_i * rhs_values[q] +
 						-N_p_i * (Jf - 1.0 - temp_pressure / kappa)) * fe_values.JxW(q);
-
-					//std::cout << cell_rhs(i) <<  std::endl;
 				}
 			}
 			for (const auto& face : cell->face_iterators())
@@ -1649,8 +1647,6 @@ namespace NonlinearElasticity
 				if (face->at_boundary())
 				{
 					fe_face_values.reinit(cell, face);
-
-
 
 					present_time -= dt;
 					traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
@@ -1794,8 +1790,6 @@ namespace NonlinearElasticity
 				if (face->at_boundary())
 				{
 					fe_face_values.reinit(cell, face);
-					fe_face_values[Velocity].get_function_gradients(solution, face_displacement_grads);
-					fe_values[Pressure].get_function_values(solution, face_sol_vec_pressure);
 
 
 
@@ -1805,17 +1799,8 @@ namespace NonlinearElasticity
 
 					for (const unsigned int q : fe_face_values.quadrature_point_indices())
 					{
-						temp_pressure = face_sol_vec_pressure[q];
-						FF = get_real_FF(face_displacement_grads[q]);
-						Jf = get_Jf(FF);
-						HH = get_HH(FF, Jf);
-						pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
 						for (const unsigned int i : fe_face_values.dof_indices())
 						{
-							if (face->boundary_id() == 2) {
-								cell_rhs(i) += fe_face_values[Velocity].value(i, q) * (pk1 * fe_face_values.normal_vector(q)) * fe_face_values.JxW(q);
-
-							}
 							if (face->boundary_id() == 1) {
 								cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
@@ -1923,7 +1908,6 @@ namespace NonlinearElasticity
 				FF = get_real_FF(displacement_grads[q]);
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
-				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
 				//temp_pressure -= pressure_mean;
 				for (const unsigned int i : fe_values.dof_indices())
 				{
@@ -1973,7 +1957,7 @@ namespace NonlinearElasticity
 		}
 		constraints.close();
 		{
-			TimerOutput::Scope timer_section(timer, "Assembling RHS");
+			TimerOutput::Scope timer_section(timer, "Assembling RHS and blocks");
 			assemble_system_not_Kuu();
 		}
 		{
