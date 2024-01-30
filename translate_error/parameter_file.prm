@@ -1,0 +1,37 @@
+# Parameter file for three-field problem
+
+subsection Material properties
+  set Young's modulus = 1000
+  set Poisson's ratio = 0.49
+  set Density = 1.0
+end
+subsection Time
+  set Timestep =  0.0005
+  set End time =  1.
+  set Save time = 0.01
+  set Start time = 0.0
+end
+# Time integrator options: 
+# 0 for fully explicit
+# 1 for semi-implicit
+subsection Numerical parameters
+  set rho_inf = 1.0
+  set alpha = 1.0
+  set Time integrator = 1
+  set n_ref = 2
+  set Velocity order = 2
+  set Pressure order = 1
+  set max_it = 1000 
+  set LumpMass = true
+  set Simplex = false
+  set e_tol = 1e-8
+  set max_ref = 4
+end
+subsection Simulation parameters
+  set Body force = 200
+  set Initial velocity = 0.00
+  set Traction Magnitude =0.0
+end
+
+
+
