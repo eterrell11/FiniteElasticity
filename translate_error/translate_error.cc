@@ -2559,10 +2559,13 @@ namespace NonlinearElasticity
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Vector Velocity(0);
 		pressure_mean = solution.block(1).mean_value();
-		solution.block(1).add(-pressure_mean);
 
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
+
+		BlockVector pressure_solution = 0.5 * (solution + old_solution);
+		pressure_solution.block(1).add(-pressure_mean);
+
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
@@ -2606,7 +2609,7 @@ namespace NonlinearElasticity
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2619,7 +2622,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2632,7 +2635,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2643,7 +2646,7 @@ namespace NonlinearElasticity
 			p_cell_wise_error,
 			VectorTools::Linfty_norm);
 		present_time += dt;
-		solution.block(1).add(pressure_mean);
+		pressure_solution.block(1).add(pressure_mean);
 
 		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
 
