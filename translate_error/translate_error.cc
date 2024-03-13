@@ -1816,7 +1816,7 @@ namespace NonlinearElasticity
 					double N_p_i = fe_values[Pressure].value(i, q);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, 0.5 * (HH)*fe_values[Pressure].value(j, q)) + //Kup
+						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH)*fe_values[Pressure].value(j, q)) + //Kup
 							N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 
 					}
@@ -2138,6 +2138,7 @@ namespace NonlinearElasticity
 		{
 			solve_SI_system();
 		}
+		old_solution = solution;
 		update_motion();
 		calculate_error();
 
@@ -2559,10 +2560,15 @@ namespace NonlinearElasticity
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Vector Velocity(0);
 		pressure_mean = solution.block(1).mean_value();
-		solution.block(1).add(-pressure_mean);
+		//solution.block(1).add(-pressure_mean);
 
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
+
+		BlockVector<double> pressure_solution_temp;
+		pressure_solution_temp = solution;
+		double a = 2.;
+		pressure_solution_temp.block(1) = a * solution.block(1) + (1.-a) * old_solution.block(1);
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
@@ -2606,7 +2612,7 @@ namespace NonlinearElasticity
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution_temp,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2619,7 +2625,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution_temp,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2632,7 +2638,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			solution,
+			pressure_solution_temp,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2643,7 +2649,7 @@ namespace NonlinearElasticity
 			p_cell_wise_error,
 			VectorTools::Linfty_norm);
 		present_time += dt;
-		solution.block(1).add(pressure_mean);
+		//solution.block(1).add(pressure_mean);
 
 		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
 
