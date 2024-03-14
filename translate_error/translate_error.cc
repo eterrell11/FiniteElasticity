@@ -2300,7 +2300,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::solve_SI_system()
 	{
 
-
+		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
 
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
@@ -2313,7 +2313,7 @@ namespace NonlinearElasticity
 		const auto op_Kpu = linear_operator(Kpu);
 		const auto op_Kpp = linear_operator(Kpp);
 
-		auto& Ru = R.block(0);
+		auto& Ru = R.block(0); 
 		const auto& Rp = R.block(1);
 
 		auto& delta_u = solution_increment.block(0);
@@ -2339,9 +2339,17 @@ namespace NonlinearElasticity
 		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 		const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
-		const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
 
+		/*if (nu = 0.5) {
+			linear_operator_ptr = std::make_unique<LinearOperator<Vector<double>>>(preconditioner_S);
+		}
+		else {
+			const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
 
+			const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
+
+			linear_operator_ptr = std::make_unique<PreconditionIdentity>;
+		}*/
 
 		Vector<double> un_motion(acceleration.size());
 		un_motion.add((1.0 - alpha / (2.0 * beta)), acceleration, -1.0 * alpha / (beta * dt), velocity);
@@ -2350,7 +2358,7 @@ namespace NonlinearElasticity
 		Kuu.vmult_add(Ru, un_motion);
 
 		//Solve for the pressure increment via shur complement
-		const auto op_S_inv = inverse_operator(op_S, solver_S, preconditioner_S);
+		const auto op_S_inv = inverse_operator(op_S, solver_S, preconditioner_aS);
 		delta_p = op_S_inv * (Rp - op_Kpu * op_Kuu_inv * Ru);
 		constraints.distribute(solution_increment);
 
