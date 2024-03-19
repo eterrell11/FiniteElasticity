@@ -1093,6 +1093,7 @@ namespace NonlinearElasticity
 			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
 			dt *= 0.5;
 			error_table.add_value("dt ", dt);
+			error_table.set_scientific("dt ", true);
 			error_table.add_value("dEu_l2 ", l2_u_eps_vec[i] - l2_u_eps_vec[i - 1]);
 			error_table.set_scientific("dEu_l2 ", true);
 			error_table.add_value("dEu_l1 ", l1_u_eps_vec[i] - l1_u_eps_vec[i - 1]);
