@@ -864,6 +864,7 @@ namespace NonlinearElasticity
 		void         assemble_system_RK2();
 		void		 assemble_Rp();
 		void		 assemble_R();
+		void		 set_acceleration();
 		void         solve_SI();
 		void         solve_RK2();
 		void		 solve_IM();
@@ -1059,6 +1060,8 @@ namespace NonlinearElasticity
 
 			cout << "New time step size : " << dt << std::endl;
 			cout << std::endl;
+			//if (integrator == 2)
+				//set_acceleration();
 
 			while (present_time < end_time - 1e-12) {
 				do_timestep();
@@ -1174,7 +1177,7 @@ namespace NonlinearElasticity
 						face->set_boundary_id(1);
 					}
 					if (face_center[0] == 1) {
-						face->set_boundary_id(2);
+						face->set_boundary_id(3);
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
@@ -1213,7 +1216,7 @@ namespace NonlinearElasticity
 						face->set_boundary_id(1);
 					}
 					if (face_center[0] == 1) {
-						face->set_boundary_id(2);
+						face->set_boundary_id(3);
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
@@ -1234,7 +1237,7 @@ namespace NonlinearElasticity
 						face->set_boundary_id(1);
 					}
 					if (face_center[0] == 1) {
-						face->set_boundary_id(2);
+						face->set_boundary_id(3);
 					}
 				}
 	}
@@ -1366,6 +1369,8 @@ namespace NonlinearElasticity
 			solution,
 			(*fe_ptr).component_mask(Velocity));
 		velocity = solution.block(0);
+		old_velocity = solution.block(0);
+		old_u_dot = old_velocity;
 
 		VectorTools::interpolate(*mapping_ptr,
 			dof_handler,
@@ -1373,6 +1378,7 @@ namespace NonlinearElasticity
 			solution,
 			(*fe_ptr).component_mask(Velocity));
 		acceleration = solution.block(0);
+		old_acceleration = solution.block(0);
 		VectorTools::interpolate(*mapping_ptr, dof_handler, InitialSolution<dim>(parameters.BodyForce, mu), solution);
 		pressure_mean = solution.block(1).mean_value();
 	}
@@ -1483,6 +1489,7 @@ namespace NonlinearElasticity
 			for (const unsigned int q : fe_values.quadrature_point_indices())
 			{
 				temp_a = sol_vec_a[q];
+				//cout << temp_a << std::endl;
 				temp_pressure = sol_vec_pressure[q];
 				FF = get_real_FF(displacement_grads[q]);
 				FF_inv_T = invert(transpose(FF));
@@ -1816,7 +1823,7 @@ namespace NonlinearElasticity
 					double N_p_i = fe_values[Pressure].value(i, q);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
-						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH)*fe_values[Pressure].value(j, q)) + //Kup
+						cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, 0.5 * (HH)*fe_values[Pressure].value(j, q)) + //Kup
 							N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 
 					}
@@ -2111,7 +2118,27 @@ namespace NonlinearElasticity
 
 
 
+	template<int dim>
+	void Incompressible<dim>::set_acceleration()
+	{
+		assemble_system_mass();
+		present_time += dt;
+		assemble_R();
+		present_time -= dt;
 
+		const auto& Kuu = K.block(0, 0);
+
+		auto& Ru = R.block(0);
+
+		SolverControl reduction_control_Kuu(100000, 1.0e-10); //These are not ideal parameters
+		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kuu;
+		preconditioner_Kuu.initialize(Kuu);
+
+		solver_Kuu.solve(Kuu, old_acceleration, Ru, preconditioner_Kuu);
+		old_acceleration *= beta * dt * dt * gamma * gamma / alpha;
+		acceleration = old_acceleration;
+	}
 
 	template<int dim>
 	void Incompressible<dim>::solve_SI()
@@ -2138,7 +2165,6 @@ namespace NonlinearElasticity
 		{
 			solve_SI_system();
 		}
-		old_solution = solution;
 		update_motion();
 		calculate_error();
 
@@ -2258,6 +2284,7 @@ namespace NonlinearElasticity
 
 		}
 		u_dot = 1. / (gamma * dt) * (displacement - old_displacement) + (gamma - 1.) / gamma * old_u_dot;
+		calculate_error();
 
 		cout << "Newton solver converged in " << it << "/" << max_NS_it << " iterations with residual norms of " << R.block(0).l2_norm() << " and " << R.block(1).l2_norm() << std::endl;
 		update_motion();
@@ -2300,7 +2327,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::solve_SI_system()
 	{
 
-		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
+
 
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
@@ -2313,7 +2340,7 @@ namespace NonlinearElasticity
 		const auto op_Kpu = linear_operator(Kpu);
 		const auto op_Kpp = linear_operator(Kpp);
 
-		auto& Ru = R.block(0); 
+		auto& Ru = R.block(0);
 		const auto& Rp = R.block(1);
 
 		auto& delta_u = solution_increment.block(0);
@@ -2339,17 +2366,9 @@ namespace NonlinearElasticity
 		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 		const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
+		const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
 
-		/*if (nu = 0.5) {
-			linear_operator_ptr = std::make_unique<LinearOperator<Vector<double>>>(preconditioner_S);
-		}
-		else {
-			const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
 
-			const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
-
-			linear_operator_ptr = std::make_unique<PreconditionIdentity>;
-		}*/
 
 		Vector<double> un_motion(acceleration.size());
 		un_motion.add((1.0 - alpha / (2.0 * beta)), acceleration, -1.0 * alpha / (beta * dt), velocity);
@@ -2392,13 +2411,13 @@ namespace NonlinearElasticity
 		auto& delta_u = solution_increment.block(0);
 		auto& delta_p = solution_increment.block(1);
 
-		SolverControl reduction_control_Kuu(20000, 1.0e-12);
-		SolverCG<Vector<double>> solver_Kuu(reduction_control_Kuu);
+		SolverControl reduction_control_Kuu(20000, 1.0e-9);
+		SolverMinRes<Vector<double>> solver_Kuu(reduction_control_Kuu);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
 
-		SolverControl solver_control_S(30000, 1.0e-12);
+		SolverControl solver_control_S(30000, 1.0e-9);
 
 		const auto op_Kuu_inv = inverse_operator(op_Kuu, solver_Kuu, preconditioner_Kuu);
 		auto op_S = op_Kpp - op_Kpu * op_Kuu_inv * op_Kup;
@@ -2489,11 +2508,11 @@ namespace NonlinearElasticity
 		auto& delta_u = solution_increment.block(0);
 		auto& delta_p = solution_increment.block(1);
 
-		SolverControl reduction_control_Kuu(100000, 1.0e-10); //These are not ideal parameters
-		SolverMinRes<Vector<double>> solver_Kuu(reduction_control_Kuu);
+		SolverControl reduction_control_Kuu(10000, 1.0e-10); //These are not ideal parameters
+		SolverGMRES<Vector<double>> solver_Kuu(reduction_control_Kuu);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
-
+		
 
 		SolverControl solver_control_S(100000, 1.0e-10); //These are also not ideal parameters
 
@@ -2506,7 +2525,7 @@ namespace NonlinearElasticity
 		SolverMinRes<Vector<double>> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
-		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
+		SolverGMRES<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 		const auto op_aS = op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
 		const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
@@ -2522,6 +2541,7 @@ namespace NonlinearElasticity
 		Ru -= op_Kup * delta_p;
 		delta_u = op_Kuu_inv * (Ru);
 		constraints.distribute(solution_increment);
+		cout << "I got here" << std::endl;
 
 	}
 
@@ -2568,15 +2588,10 @@ namespace NonlinearElasticity
 		const FEValuesExtractors::Scalar Pressure(dim);
 		const FEValuesExtractors::Vector Velocity(0);
 		pressure_mean = solution.block(1).mean_value();
-		//solution.block(1).add(-pressure_mean);
+		solution.block(1).add(-pressure_mean);
 
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
-
-		BlockVector<double> pressure_solution_temp;
-		pressure_solution_temp = solution;
-		double a = 2.;
-		pressure_solution_temp.block(1) = a * solution.block(1) + (1.-a) * old_solution.block(1);
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
@@ -2620,7 +2635,7 @@ namespace NonlinearElasticity
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			pressure_solution_temp,
+			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2633,7 +2648,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			pressure_solution_temp,
+			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2646,7 +2661,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			pressure_solution_temp,
+			solution,
 			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2657,7 +2672,7 @@ namespace NonlinearElasticity
 			p_cell_wise_error,
 			VectorTools::Linfty_norm);
 		present_time += dt;
-		//solution.block(1).add(pressure_mean);
+		solution.block(1).add(pressure_mean);
 
 		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
 
