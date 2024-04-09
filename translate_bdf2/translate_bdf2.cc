@@ -1317,7 +1317,7 @@ namespace NonlinearElasticity
 
 
 
-		std::std::cout<< "Number of active cells: " << triangulation.n_active_cells() << std::endl
+		std::cout<< "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
 			<< std::endl
 			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
@@ -2037,7 +2037,7 @@ namespace NonlinearElasticity
 			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1]);
 			error_table.set_scientific("dEp_linf ", true);
 		}
-		error_table.write_text(cout);
+		error_table.write_text(std::cout);
 		std::ofstream output("error_table.csv");
 		std::ostringstream stream;
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
