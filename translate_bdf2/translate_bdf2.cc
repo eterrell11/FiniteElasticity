@@ -375,7 +375,7 @@ namespace NonlinearElasticity
 	double get_kappa(double& E, double& nu) {
 		double tmp;
 		tmp = E / (3. * (1. - 2. * nu));
-		cout << "kappa = " << tmp << std::endl;
+		std::cout<< "kappa = " << tmp << std::endl;
 		return tmp;
 	}
 
@@ -383,7 +383,7 @@ namespace NonlinearElasticity
 	template <int dim>
 	double get_mu(double& E, double& nu) {
 		double tmp = E / (2. * (1. + nu));
-		cout << "mu = " << tmp << std::endl;
+		std::cout<< "mu = " << tmp << std::endl;
 		return tmp;
 	}
 
@@ -411,7 +411,7 @@ namespace NonlinearElasticity
 	{
 		Tensor<2, dim> HHF;
 		HHF = Jf * (invert(transpose(FF)));
-		//cout << "cofactorF = " << HHF << std::endl;
+		//std::cout<< "cofactorF = " << HHF << std::endl;
 
 		return HHF;
 	}
@@ -1113,13 +1113,13 @@ namespace NonlinearElasticity
 				{
 					//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
 					assemble_system_mass();
-					cout << "Mass matrix assembled" << std::endl;
+					std::cout<< "Mass matrix assembled" << std::endl;
 
 				}
 			}
 
-			cout << "New time step size : " << dt << std::endl;
-			cout << std::endl;
+			std::cout<< "New time step size : " << dt << std::endl;
+			std::cout<< std::endl;
 
 
 			while (present_time < end_time - 1e-12) {
@@ -1133,11 +1133,11 @@ namespace NonlinearElasticity
 			l1_p_eps_vec[ref_step] = pressure_error_output[1];
 			linfty_p_eps_vec[ref_step] = pressure_error_output[2];
 
-			cout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
-			cout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
+			std::cout<< "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
+			std::cout<< "Number of steps taken after this iteration : " << timestep_no << std::endl;
 
-			cout << "New time step size : " << dt << std::endl;
-			cout << std::endl;
+			std::cout<< "New time step size : " << dt << std::endl;
+			std::cout<< std::endl;
 
 			present_time = parameters.start_time;
 			timestep_no = 0;
@@ -1317,7 +1317,7 @@ namespace NonlinearElasticity
 
 
 
-		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
+		std::std::cout<< "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
 			<< std::endl
 			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
@@ -1733,7 +1733,7 @@ namespace NonlinearElasticity
 				}
 
 			}
-			//cout << cell_rhs<< std::endl;
+			//std::cout<< cell_rhs<< std::endl;
 
 
 
@@ -1784,14 +1784,14 @@ namespace NonlinearElasticity
 			solve_SI_system();
 		}
 
-		//cout << "a norm is : " << acceleration.linfty_norm() << std::endl;
-		//cout << "v norm is : " << velocity.linfty_norm() << std::endl;
-		//cout << "d norm is : " << solution.block(0).linfty_norm() << std::endl;
-		//cout << "delta d norm is : " << solution_increment.block(0).linfty_norm() << std::endl;
-		//cout << "old_udot norm is: " << old_u_dot.linfty_norm() << std::endl;
-		//cout << "p norm is : " << solution.block(1).linfty_norm() << std::endl;
-		//cout << "Norm of Kt is : " << K.block(0, 0).l1_norm() << std::endl;
-		//cout << std::endl;
+		//std::cout<< "a norm is : " << acceleration.linfty_norm() << std::endl;
+		//std::cout<< "v norm is : " << velocity.linfty_norm() << std::endl;
+		//std::cout<< "d norm is : " << solution.block(0).linfty_norm() << std::endl;
+		//std::cout<< "delta d norm is : " << solution_increment.block(0).linfty_norm() << std::endl;
+		//std::cout<< "old_udot norm is: " << old_u_dot.linfty_norm() << std::endl;
+		//std::cout<< "p norm is : " << solution.block(1).linfty_norm() << std::endl;
+		//std::cout<< "Norm of Kt is : " << K.block(0, 0).l1_norm() << std::endl;
+		//std::cout<< std::endl;
 
 
 		update_motion();
@@ -1885,7 +1885,7 @@ namespace NonlinearElasticity
 		}
 		old_solution.block(0) = solution_save;
 		
-		//std::cout << solution.block(1) << std::endl;
+		//std::std::cout<< solution.block(1) << std::endl;
 			
 		pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
 		//solution.block(1).add(-mean);
@@ -2005,9 +2005,9 @@ namespace NonlinearElasticity
 		present_time += dt;
 		//solution.block(1).add(pressure_mean);
 
-		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
+		//std::cout<< "Max displacement error value : " << displacement_error_output << std::endl;
 
-		//cout << "Max pressure error value : " << pressure_error_output << std::endl;
+		//std::cout<< "Max pressure error value : " << pressure_error_output << std::endl;
 		//present_time += dt;
 
 	}
@@ -2019,7 +2019,7 @@ namespace NonlinearElasticity
 		TableHandler error_table;
 		dt = parameters.dt;
 		for (int i = 1; i < max_it; ++i) {
-			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
+			//std::cout<< "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
 			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
 			dt *= 0.5;
 			error_table.add_value("dt ", dt);
@@ -2126,8 +2126,8 @@ namespace NonlinearElasticity
 		++timestep_no;
 		present_time += dt;
 
-		//cout << "_____________________________________________________________" << std::endl;
-		//cout << "Timestep " << timestep_no << " at time " << present_time
+		//std::cout<< "_____________________________________________________________" << std::endl;
+		//std::cout<< "Timestep " << timestep_no << " at time " << present_time
 		//	<< std::endl;
 
 		if (parameters.integrator == 1)
@@ -2142,7 +2142,7 @@ namespace NonlinearElasticity
 			present_time = end_time;
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
-			//cout << "Saving results at time : " << present_time << std::endl;
+			//std::cout<< "Saving results at time : " << present_time << std::endl;
 			++savestep_no;
 			//calculate_error(total_displacement, present_time, displacement_error_output, velocity_error_output);
 			output_results();
