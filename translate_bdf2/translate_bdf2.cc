@@ -91,8 +91,7 @@
 #include <deal.II/base/timer.h>
 
 
-//For synchronous iterator support
-#include <deal.II/base/synchronous_iterator.h>
+
 
 
 namespace NonlinearElasticity
@@ -106,6 +105,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
+			double WVol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -125,6 +125,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Double(),
 					"Density");
+				prm.declare_entry("WVol_form",
+					"1",
+					Patterns::Integer(),
+					"WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -135,7 +139,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-
+				WVol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -340,42 +344,56 @@ namespace NonlinearElasticity
 		}
 	} // namespace Parameters
 
-	template <int dim>
-	class PressurePostprocessor : public DataPostprocessorScalar<dim>
+	namespace ConstitutiveModels
 	{
-	public:
-		PressurePostprocessor()
-			:
-			DataPostprocessorScalar<dim>("pressure_real",
-				update_gradients)
-		{}
-		virtual
-			void
-			evaluate_vector_field
-			(const DataPostprocessorInputs::Vector<dim>& input_data,
-				std::vector<Vector<double> >& computed_quantities) const override
+		template<int dim>
+		class WVol : public Function<dim>
 		{
-			AssertDimension(input_data.solution_gradients.size(),
-				computed_quantities.size());
-			Tensor<2, dim> I = unit_symmetric_tensor<dim>();
-			for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
-			{
-				AssertDimension(computed_quantities[p].size(),
-					(Tensor<2, dim>::n_independent_components));
-				for (unsigned int d = 0; d < dim; ++d)
-					for (unsigned int e = 0; e < dim; ++e)
-						computed_quantities[p][Tensor<2, dim>::component_to_unrolled_index(TableIndices<2>(d, e))]
-						= I[d][e] + input_data.solution_gradients[p][d][e];
+		public:
+			double	W_prime(const int& wvol_form, const double& Jf);
+			double  W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt);
+			Tensor<1, dim>  W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v);
+		};
+
+		template<int dim>
+		double	WVol<dim>::W_prime(const int& wvol_form, const double& Jf)
+		{
+			if (wvol_form == 0) {
+				return (Jf - 1.);
+			}
+			else if (wvol_form == 1) {
+				return std::log(Jf);
 			}
 		}
-	};
+		template<int dim>
+		double WVol<dim>::W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt)
+		{
+			if (wvol_form == 0) {
+				return dt * scalar_product(HH, grad_v);
+			}
+			else if (wvol_form == 1) {
+				return dt / Jf * scalar_product(HH, grad_v);
+			}
+		}
+		template<int dim>
+		Tensor<1, dim>  WVol<dim>::W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v)
+		{
+			if (wvol_form == 0) {
+				return transpose(HH) * v;
+			}
+			else if (wvol_form == 1) {
+				return transpose(HH) * v / Jf;
+			}
+		}
+
+	} //namespace ConstitutiveModels
 
 	//Function for defining Kappa
 	template <int dim>
 	double get_kappa(double& E, double& nu) {
 		double tmp;
 		tmp = E / (3. * (1. - 2. * nu));
-		std::cout<< "kappa = " << tmp << std::endl;
+		std::cout << "kappa = " << tmp << std::endl;
 		return tmp;
 	}
 
@@ -383,13 +401,12 @@ namespace NonlinearElasticity
 	template <int dim>
 	double get_mu(double& E, double& nu) {
 		double tmp = E / (2. * (1. + nu));
-		std::cout<< "mu = " << tmp << std::endl;
+		std::cout << "mu = " << tmp << std::endl;
 		return tmp;
 	}
 
 	template <int dim>
-	Tensor<2, dim>
-		get_real_FF(const Tensor<2, dim>& grad_p)
+	Tensor<2, dim> get_real_FF(const Tensor<2, dim>& grad_p)
 	{
 		Tensor<2, dim> FF;
 		Tensor<2, dim> I = unit_symmetric_tensor<dim>();
@@ -397,8 +414,8 @@ namespace NonlinearElasticity
 		return FF;
 	}
 
-	template< int dim>
-	double get_Jf(Tensor<2, dim>& FF)
+	template <int dim>
+	double get_Jf(const Tensor<2, dim>& FF)
 	{
 		double Jf;
 		Jf = determinant(FF);
@@ -406,19 +423,17 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	Tensor<2, dim>
-		get_HH(Tensor<2, dim>& FF, double& Jf)
+	Tensor<2, dim> get_HH(const Tensor<2, dim>& FF, const double& Jf)
 	{
 		Tensor<2, dim> HHF;
 		HHF = Jf * (invert(transpose(FF)));
-		//std::cout<< "cofactorF = " << HHF << std::endl;
 
 		return HHF;
 	}
 
 	template <int dim>
 	Tensor<2, dim> //calculates pk1 = pk1_dev+pk1_vol
-		get_pk1(Tensor<2, dim>& FF, const double& mu, double& Jf, double& pressure, Tensor<2, dim>& HH)
+		get_pk1(const Tensor<2, dim>& FF, const double& mu, const double& Jf, const double& pressure, const Tensor<2, dim>& HH)
 	{
 		Tensor<2, 3> full_FF;
 		for (int i = 0; i < dim; ++i) {
@@ -476,7 +491,7 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3 * full_HH / Jf);
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
 
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
@@ -520,6 +535,11 @@ namespace NonlinearElasticity
 		//stress = mu * FF + kappa * ((Jf - 1) * HH);
 		return stress;
 	}
+
+
+
+
+
 
 
 	template<int dim>
@@ -573,7 +593,7 @@ namespace NonlinearElasticity
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[0] = TractionMagnitude * time;
+			values[0] = TractionMagnitude;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
@@ -914,18 +934,22 @@ namespace NonlinearElasticity
 		void run();
 
 	private:
-		void         create_simplex_grid(Triangulation<2>& triangulation);
-		void         create_simplex_grid(Triangulation<3>& triangulation);
-		void         create_grid();
+		void		 create_simplex_grid(Triangulation<2>& triangulation);
+		void		 create_simplex_grid(Triangulation<3>& triangulation);
+		void		 create_grid();
+		void		 get_real_pressure(BlockVector<double>& sol, double& mu, double& kappa);
 		void		 set_simulation_parameters();
 		void		 set_integration_parameters();
 		void         setup_system();
 		void         assemble_system_mass();
 		void         assemble_system_SI();
 		void		 assemble_Rp();
-		void		 assemble_R();
+		void		 assemble_Rv();
+		void         solve_FE();
 		void         solve_SI();
 		void		 solve_SI_system();
+		void		 solve_FEv_system();
+		void		 solve_FEp_system();
 		void		 update_motion();
 		void         output_results() const;
 		void		 calculate_error();
@@ -938,6 +962,7 @@ namespace NonlinearElasticity
 		int integrator;
 
 		Triangulation<dim> triangulation;
+		double cell_measure;
 		DoFHandler<dim>    dof_handler;
 
 		std::unique_ptr<FiniteElement<dim>> v_base_fe;
@@ -961,15 +986,13 @@ namespace NonlinearElasticity
 		BlockSparsityPattern sparsity_pattern;
 		BlockSparsityPattern un_sparsity_pattern;
 		BlockSparseMatrix<double> K;
-		BlockSparseMatrix<double> un_K;
 
 
 		BlockVector<double> R;
-		BlockVector<double> un_R;
 
 
 		BlockVector<double> solution;
-		BlockVector<double> solution_increment;
+		BlockVector<double> solution_dot;
 		BlockVector<double> old_solution;
 
 
@@ -1113,13 +1136,13 @@ namespace NonlinearElasticity
 				{
 					//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
 					assemble_system_mass();
-					std::cout<< "Mass matrix assembled" << std::endl;
+					cout << "Mass matrix assembled" << std::endl;
 
 				}
 			}
 
-			std::cout<< "New time step size : " << dt << std::endl;
-			std::cout<< std::endl;
+			cout << "New time step size : " << dt << std::endl;
+			cout << std::endl;
 
 
 			while (present_time < end_time - 1e-12) {
@@ -1133,11 +1156,11 @@ namespace NonlinearElasticity
 			l1_p_eps_vec[ref_step] = pressure_error_output[1];
 			linfty_p_eps_vec[ref_step] = pressure_error_output[2];
 
-			std::cout<< "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
-			std::cout<< "Number of steps taken after this iteration : " << timestep_no << std::endl;
+			cout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
+			cout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
 
-			std::cout<< "New time step size : " << dt << std::endl;
-			std::cout<< std::endl;
+			cout << "New time step size : " << dt << std::endl;
+			cout << std::endl;
 
 			present_time = parameters.start_time;
 			timestep_no = 0;
@@ -1145,20 +1168,30 @@ namespace NonlinearElasticity
 		create_error_table();
 	}
 
+	template<int dim>
+	void Incompressible<dim>::get_real_pressure(BlockVector<double>& sol, double& mu, double& kappa)
+	{
+	}
 
 	template <int dim>
 	void Incompressible<dim>::set_simulation_parameters()
 	{
-		E = parameters.E;
+
+		E = parameters.E * 10.; //CONVERTS FROM Pa to g/cm^3
 		nu = parameters.nu;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		rho_0 = parameters.rho_0;
+		rho_0 = parameters.rho_0; //Already given in g/cm^3
 		present_time = parameters.start_time;
 		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
+		double c_p = sqrt((4. / 3. * mu + kappa) / rho_0);
+		std::cout << "pressure wave speed is : " << c_p << std::endl;
+		std::cout << "min timestep is " << cell_measure / c_p << std::endl;
 	}
+
+
 
 	template<int dim>
 	void Incompressible<dim>::set_integration_parameters()
@@ -1258,10 +1291,11 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::create_grid()
 	{
+		cell_measure = 1.;
 		GridGenerator::hyper_cube(triangulation, 0, 1);
 		triangulation.refine_global(parameters.n_ref);
-		for (const auto& cell : triangulation.active_cell_iterators())
-			for (const auto& face : cell->face_iterators())
+		for (const auto& cell : triangulation.active_cell_iterators()) {
+			for (const auto& face : cell->face_iterators()) {
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
@@ -1272,6 +1306,10 @@ namespace NonlinearElasticity
 						face->set_boundary_id(2);
 					}
 				}
+			}
+			cell_measure = std::min(cell_measure, cell->measure());
+		}
+		cout << "minimum cell size: " << cell_measure << std::endl;
 	}
 
 
@@ -1317,7 +1355,7 @@ namespace NonlinearElasticity
 
 
 
-		std::cout<< "Number of active cells: " << triangulation.n_active_cells() << std::endl
+		std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
 			<< "Total number of cells: " << triangulation.n_cells()
 			<< std::endl
 			<< "Number of degrees of freedom: " << dof_handler.n_dofs()
@@ -1355,15 +1393,13 @@ namespace NonlinearElasticity
 			DoFTools::make_sparsity_pattern(dof_handler, un_dsp);
 			un_sparsity_pattern.copy_from(un_dsp);
 		}
-		un_K.reinit(un_sparsity_pattern);
 
 
 		R.reinit(dofs_per_block);
-		un_R.reinit(dofs_per_block);
 
 
 		solution.reinit(dofs_per_block);
-		solution_increment.reinit(dofs_per_block);
+		solution_dot.reinit(dofs_per_block);
 		old_solution.reinit(dofs_per_block);
 
 		pressure.reinit(n_p);
@@ -1401,6 +1437,7 @@ namespace NonlinearElasticity
 			solution,
 			(*fe_ptr).component_mask(Velocity));
 		velocity = solution.block(0);
+		solution_dot.block(0) = velocity;
 		old_velocity = solution.block(0);
 		old_u_dot = old_velocity;
 
@@ -1422,9 +1459,7 @@ namespace NonlinearElasticity
 	{
 
 		K = 0;
-		un_K = 0;
 		R = 0;
-		un_R = 0;
 
 		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
@@ -1453,11 +1488,8 @@ namespace NonlinearElasticity
 		bool lump_mass = parameters.LumpMass;
 
 		double scale;
-		if (parameters.integrator == 1) {
-			/*if (present_time > dt)
-				scale = 1.5 * rho_0 / dt;
-			else*/
-				scale = rho_0 / dt;
+		if (parameters.integrator != 2) {
+			scale = rho_0 / dt;
 		}
 		else {
 			scale = 1.;
@@ -1487,13 +1519,7 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i)
-				{
-					for (unsigned int j = 0; j < dofs_per_cell; ++j)
-					{
-						un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
-					}
-				}
+
 			}
 			for (const auto& cell : dof_handler.active_cell_iterators())
 			{
@@ -1519,10 +1545,7 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i)
-				{
-					un_K.add(local_dof_indices[i], local_dof_indices[i], cell_mass_matrix(i, i));
-				}
+
 			}
 		}
 		else {
@@ -1547,13 +1570,6 @@ namespace NonlinearElasticity
 				constraints.distribute_local_to_global(cell_mass_matrix,
 					local_dof_indices,
 					K);
-				for (unsigned int i = 0; i < dofs_per_cell; ++i)
-				{
-					for (unsigned int j = 0; j < dofs_per_cell; ++j)
-					{
-						un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
-					}
-				}
 			}
 		}
 	}
@@ -1563,10 +1579,6 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::assemble_system_SI()
 	{
 
-
-		un_K.block(0, 1) = 0;
-		un_K.block(1, 0) = 0;
-		un_R = 0;
 		R = 0;
 		K.block(0, 1) = 0;
 		K.block(1, 0) = 0;
@@ -1631,24 +1643,27 @@ namespace NonlinearElasticity
 		double shifter;
 		if (present_time > dt) {
 			scale = 2. / 3.;
-			shifter = 1./3.;
+			shifter = 1. / 3.;
 		}
 		else {
 			scale = 1.;
 			shifter = 0.;
 		}
 		double temp_pressure;
-		Tensor<1,dim> un;
-		Tensor<1,dim> old_un;
+		Tensor<1, dim> un;
+		Tensor<1, dim> old_un;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
-		std::vector<Tensor<1,dim>> sol_vec_displacement(n_q_points, Tensor<1,dim>());
-		std::vector<Tensor<1,dim>> old_sol_vec_displacement(n_q_points, Tensor<1,dim>());
-		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
-		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1, dim>> sol_vec_displacement(n_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1, dim>> old_sol_vec_displacement(n_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1, dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1, dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+
+
+		ConstitutiveModels::WVol<dim> wvol;
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -1666,6 +1681,8 @@ namespace NonlinearElasticity
 			right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
 
 
+			const int wvol_form = parameters.WVol_form;
+
 			for (const unsigned int q : fe_values.quadrature_point_indices())
 			{
 				temp_pressure = sol_vec_pressure[q];
@@ -1679,11 +1696,13 @@ namespace NonlinearElasticity
 				FF = get_real_FF(displacement_grads[q]);
 				Jf = get_Jf(FF);
 				HH = get_HH(FF, Jf);
-				pk1_dev = get_pk1_dev(FF, mu, Jf, HH );
+				pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				HH_tilde = 2. * HH - old_HH;
 				pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 
+
+				double W_prime = wvol.W_prime(wvol_form, Jf);
 				//temp_pressure -= pressure_mean;
 				for (const unsigned int i : fe_values.dof_indices())
 				{
@@ -1691,15 +1710,19 @@ namespace NonlinearElasticity
 					Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
 					double N_p_i = fe_values[Pressure].value(i, q);
 					auto Grad_p_i = fe_values[Pressure].gradient(i, q);
+
 					for (const unsigned int j : fe_values.dof_indices())
 					{
+						double W_prime_lin = wvol.W_prime_lin(wvol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+
 						cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-							(1.-shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							(1. - shifter) * N_p_i * W_prime_lin) * fe_values.JxW(q);
 
 					}
+					Tensor<1, dim> W_prime_lin_u = wvol.W_prime_lin_u(wvol_form, Jf, HH, un - old_un);
 					cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 						scale * N_u_i * rhs_values[q] +
-						N_p_i * (Jf - 1.0) - shifter * Grad_p_i * transpose(HH) *(un - old_un)) * fe_values.JxW(q);
+						N_p_i * W_prime - shifter * Grad_p_i * W_prime_lin_u) * fe_values.JxW(q);
 				}
 			}
 			for (const auto& face : cell->face_iterators())
@@ -1723,9 +1746,10 @@ namespace NonlinearElasticity
 						HH = get_HH(FF, Jf);
 						for (const unsigned int i : fe_face_values.dof_indices())
 						{
-							cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
+							Tensor<1, dim> W_prime_lin_u = wvol.W_prime_lin_u(wvol_form, Jf, HH, un - old_un);
+							cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * W_prime_lin_u * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
 							if (face->boundary_id() == 1) {
-								cell_rhs(i) +=scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+								cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 							}
 						}
@@ -1733,7 +1757,7 @@ namespace NonlinearElasticity
 				}
 
 			}
-			//std::cout<< cell_rhs<< std::endl;
+			//cout << cell_rhs<< std::endl;
 
 
 
@@ -1743,18 +1767,243 @@ namespace NonlinearElasticity
 				local_dof_indices,
 				K,
 				R);
-			for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-				for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-					un_K.add(local_dof_indices[i], local_dof_indices[j], cell_mass_matrix(i, j));
-				}
-				un_R(local_dof_indices[i]) += cell_rhs(i);
-			}
+
 
 		}
 	}
 
-	
 
+	template <int dim>
+	void Incompressible<dim>::assemble_Rv()
+	{
+
+
+		R.block(0) = 0;
+
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
+			*fe_ptr,
+			(*face_quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_normal_vectors |
+			update_quadrature_points |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
+
+
+
+		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Vector Velocity(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+
+
+
+		Vector<double>     cell_rhs(dofs_per_cell);
+
+		FExt<dim> right_hand_side;
+		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
+
+
+		TractionVector<dim> traction_vector;
+		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
+
+
+		Tensor<2, dim> FF;
+		Tensor<2, dim> HH;
+		Tensor<2, dim> old_HH;
+		Tensor<2, dim> HH_tilde;
+		double Jf;
+		Tensor<2, dim> pk1;
+		Tensor<2, dim> pk1_dev;
+		Tensor<2, dim> old_pk1_dev;
+		Tensor<2, dim> pk1_dev_tilde;
+
+
+		double temp_pressure;
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
+		std::vector<double> sol_vec_pressure(n_q_points);
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			cell_rhs = 0;
+			cell_mass_matrix = 0;
+			fe_values.reinit(cell);
+
+			fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+			fe_values[Pressure].get_function_values(solution, sol_vec_pressure);
+
+
+			right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+
+
+			for (const unsigned int q : fe_values.quadrature_point_indices())
+			{
+				temp_pressure = sol_vec_pressure[q];
+
+				FF = get_real_FF(displacement_grads[q]);
+				Jf = get_Jf(FF);
+				HH = get_HH(FF, Jf);
+				pk1 = get_pk1(FF, mu, Jf, temp_pressure, HH);
+
+				//HH_tilde = 2. * HH - old_HH;
+				//pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+
+				//temp_pressure -= pressure_mean;
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					auto Grad_u_i = fe_values[Velocity].gradient(i, q);
+					Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
+
+					cell_rhs(i) += (-scalar_product(Grad_u_i, pk1) +
+						N_u_i * rhs_values[q]) * fe_values.JxW(q);
+				}
+			}
+			for (const auto& face : cell->face_iterators())
+			{
+				if (face->at_boundary())
+				{
+
+					fe_face_values.reinit(cell, face);
+
+					traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+
+					for (const unsigned int q : fe_face_values.quadrature_point_indices())
+					{
+						for (const unsigned int i : fe_face_values.dof_indices())
+						{
+							if (face->boundary_id() == 1) {
+								cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+
+							}
+						}
+					}
+				}
+
+			}
+			//cout << cell_rhs<< std::endl;
+
+
+
+			cell->get_dof_indices(local_dof_indices);
+			constraints.distribute_local_to_global(cell_mass_matrix,
+				cell_rhs,
+				local_dof_indices,
+				K,
+				R);
+
+		}
+	}
+
+
+	template <int dim>
+	void Incompressible<dim>::assemble_Rp()
+	{
+
+
+		R.block(1) = 0;
+
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
+
+
+
+		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Vector Velocity(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+
+
+
+		Vector<double>     cell_rhs(dofs_per_cell);
+
+
+		Tensor<2, dim> FF;
+		double Jf;
+
+
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+
+		ConstitutiveModels::WVol<dim> wvol;
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			cell_rhs = 0;
+			fe_values.reinit(cell);
+
+			fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+
+
+
+
+
+			for (const unsigned int q : fe_values.quadrature_point_indices())
+			{
+
+
+				FF = get_real_FF(displacement_grads[q]);
+				Jf = get_Jf(FF);
+				double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
+
+				//HH_tilde = 2. * HH - old_HH;
+				//pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+
+				//temp_pressure -= pressure_mean;
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					double N_p_i = fe_values[Pressure].value(i, q);
+					cell_rhs(i) += (N_p_i * w_prime) * fe_values.JxW(q);
+				}
+			}
+
+
+
+
+			cell->get_dof_indices(local_dof_indices);
+			constraints.distribute_local_to_global(cell_mass_matrix,
+				cell_rhs,
+				local_dof_indices,
+				K,
+				R);
+
+		}
+	}
 
 
 
@@ -1784,17 +2033,78 @@ namespace NonlinearElasticity
 			solve_SI_system();
 		}
 
-		//std::cout<< "a norm is : " << acceleration.linfty_norm() << std::endl;
-		//std::cout<< "v norm is : " << velocity.linfty_norm() << std::endl;
-		//std::cout<< "d norm is : " << solution.block(0).linfty_norm() << std::endl;
-		//std::cout<< "delta d norm is : " << solution_increment.block(0).linfty_norm() << std::endl;
-		//std::cout<< "old_udot norm is: " << old_u_dot.linfty_norm() << std::endl;
-		//std::cout<< "p norm is : " << solution.block(1).linfty_norm() << std::endl;
-		//std::cout<< "Norm of Kt is : " << K.block(0, 0).l1_norm() << std::endl;
-		//std::cout<< std::endl;
+		//cout << "a norm is : " << acceleration.linfty_norm() << std::endl;
+		//cout << "v norm is : " << velocity.linfty_norm() << std::endl;
+		//cout << "d norm is : " << solution.block(0).linfty_norm() << std::endl;
+		//cout << "delta d norm is : " << solution_dot.block(0).linfty_norm() << std::endl;
+		//cout << "old_udot norm is: " << old_u_dot.linfty_norm() << std::endl;
+		//cout << "p norm is : " << solution.block(1).linfty_norm() << std::endl;
+		//cout << "Norm of Kt is : " << K.block(0, 0).l1_norm() << std::endl;
+		//cout << std::endl;
 
 
 		update_motion();
+		calculate_error();
+
+	}
+
+	template<int dim>
+	void Incompressible<dim>::solve_FE()
+	{
+		{
+			constraints.clear();
+			//present_time -= dt;
+			const FEValuesExtractors::Vector Velocity(0);
+			const FEValuesExtractors::Scalar Pressure(dim);
+			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
+			VectorTools::interpolate_boundary_values(*mapping_ptr,
+				dof_handler,
+				2,
+				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
+				constraints,
+				(*fe_ptr).component_mask(Velocity));
+			//present_time += dt;
+
+		}
+		constraints.close();
+		auto solution_save = solution;
+		auto solution_dot_save = solution_dot;
+		{
+			assemble_Rv();
+		}
+		{
+			solve_FEv_system();
+		}
+		solution.block(0) += dt * velocity;
+		{
+			assemble_Rp();
+		}
+		{
+			solve_FEp_system();
+		}
+		present_time += dt;
+		velocity = solution_dot.block(0);
+		{
+			assemble_Rv();
+		}
+		{
+			solve_FEv_system();
+		}
+		solution.block(0) += dt * velocity;
+		{
+			assemble_Rp();
+		}
+		{
+			solve_FEp_system();
+		}
+		solution += solution_save;
+		solution *= 0.5;
+		solution_dot += solution_dot_save;
+		solution_dot *= 0.5;
+		present_time -= dt;
+		old_velocity = velocity;
+		velocity = solution_dot.block(0);
+		//update_motion();
 		calculate_error();
 
 	}
@@ -1822,7 +2132,7 @@ namespace NonlinearElasticity
 		auto& Ru = R.block(0);
 		const auto& Rp = R.block(1);
 
-		auto& v = solution_increment.block(0);
+		auto& v = solution_dot.block(0);
 		auto& p = solution.block(1);
 
 		SolverControl reduction_control_Kuu(1000, 1.0e-12);
@@ -1841,8 +2151,8 @@ namespace NonlinearElasticity
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
 		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
-		const auto op_aS = -1. * op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
-		const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
+		//const auto op_aS = -1. * op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
+		//const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
 
 
 		Vector<double> un_motion(velocity.size());
@@ -1851,7 +2161,7 @@ namespace NonlinearElasticity
 		}
 		else
 		{
-			un_motion.add(4./3., velocity, -1./3., old_velocity);
+			un_motion.add(4. / 3., velocity, -1. / 3., old_velocity);
 		}
 		Kuu.vmult_add(Ru, un_motion);
 
@@ -1863,20 +2173,75 @@ namespace NonlinearElasticity
 		//Solve for velocity
 		Ru -= op_Kup * p;
 		v = op_Kuu_inv * (Ru);
-		constraints.distribute(solution_increment);
+		constraints.distribute(solution_dot);
 
 	}
 
-	
+	template <int dim>
+	void Incompressible<dim>::solve_FEv_system()
+	{
+
+		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
+
+		const auto& Kuu = K.block(0, 0);
+
+		auto& Ru = R.block(0);
+
+		auto& v = solution_dot.block(0);
+
+		SolverControl reduction_control_Kvv(1000, 1.0e-12);
+		SolverCG<Vector<double>> solver_Kvv(reduction_control_Kvv);
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kvv;
+		preconditioner_Kvv.initialize(Kuu);
+
+
+		//const auto op_aS = -1. * op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
+		//const auto preconditioner_S = inverse_operator(op_aS, solver_aS, preconditioner_aS);
+
+
+		Vector<double> un_motion(velocity.size());
+		un_motion.add(1.0, velocity, 0.0, old_velocity);
+		Kuu.vmult_add(Ru, un_motion);
+
+		solver_Kvv.solve(Kuu, v, Ru, preconditioner_Kvv);
+		constraints.distribute(solution_dot);
+
+	}
+
+	template <int dim>
+	void Incompressible<dim>::solve_FEp_system()
+	{
+
+		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
+
+
+		const auto& Kpp = K.block(1, 1);
+
+		const auto& Rp = R.block(1);
+
+		auto& p = solution.block(1);
+
+		SolverControl reduction_control_Kpp(1000, 1.0e-12);
+		SolverCG<Vector<double>> solver_Kpp(reduction_control_Kpp);
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kpp;
+		preconditioner_Kpp.initialize(Kpp);
+
+
+
+		solver_Kpp.solve(Kpp, p, Rp, preconditioner_Kpp);
+		constraints.distribute(solution);
+
+	}
+
 	template<int dim>
 	void Incompressible<dim>::update_motion()
 	{
 		old_velocity = velocity;
-		velocity = solution_increment.block(0);
+		velocity = solution_dot.block(0);
 
 		auto solution_save = solution.block(0);
 
-		if (present_time > 1.1* dt) {
+		if (present_time > 1.1 * dt) {
 			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
 			//solution.block(0) = solution_save +0.5 *  dt *(old_velocity + velocity);
 		}
@@ -1884,12 +2249,12 @@ namespace NonlinearElasticity
 			solution.block(0) = solution_save + dt * velocity;
 		}
 		old_solution.block(0) = solution_save;
-		
-		//std::std::cout<< solution.block(1) << std::endl;
-			
+
+		//std::cout << solution.block(1) << std::endl;
+
 		pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
 		//solution.block(1).add(-mean);
-		
+
 	}
 
 
@@ -1922,7 +2287,7 @@ namespace NonlinearElasticity
 		else
 			a = 1.;
 
-		pressure_solution_temp.block(1) = a * solution.block(1) + (1.-a) * old_solution.block(1);
+		pressure_solution_temp.block(1) = a * solution.block(1) + (1. - a) * old_solution.block(1);
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
@@ -2005,9 +2370,9 @@ namespace NonlinearElasticity
 		present_time += dt;
 		//solution.block(1).add(pressure_mean);
 
-		//std::cout<< "Max displacement error value : " << displacement_error_output << std::endl;
+		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
 
-		//std::cout<< "Max pressure error value : " << pressure_error_output << std::endl;
+		//cout << "Max pressure error value : " << pressure_error_output << std::endl;
 		//present_time += dt;
 
 	}
@@ -2019,7 +2384,7 @@ namespace NonlinearElasticity
 		TableHandler error_table;
 		dt = parameters.dt;
 		for (int i = 1; i < max_it; ++i) {
-			//std::cout<< "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
+			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
 			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
 			dt *= 0.5;
 			error_table.add_value("dt ", dt);
@@ -2079,7 +2444,7 @@ namespace NonlinearElasticity
 			DataOut<dim>::type_cell_data);
 
 		BlockVector<double> extra_vector = solution;
-		extra_vector.block(0) = velocity;
+		extra_vector.block(0) = solution_dot.block(0);
 
 		std::vector<std::string> extra_names(dim, "Velocity");
 		extra_names.emplace_back("Pressure_error2");
@@ -2108,6 +2473,10 @@ namespace NonlinearElasticity
 			extra_names2,
 			interpretation4);
 
+		Vector<double> total_displacement = solution.block(0);/*
+		PressurePostprocessor<dim> pressure_postprocessor;
+		data_out.add_data_vector(solution, pressure_postprocessor);*/
+
 		data_out.build_patches(1);
 		std::ofstream output("output-" + std::to_string(savestep_no) + ".vtu");
 		data_out.write_vtu(output);
@@ -2126,10 +2495,14 @@ namespace NonlinearElasticity
 		++timestep_no;
 		present_time += dt;
 
-		//std::cout<< "_____________________________________________________________" << std::endl;
-		//std::cout<< "Timestep " << timestep_no << " at time " << present_time
+		//cout << "_____________________________________________________________" << std::endl;
+		//cout << "Timestep " << timestep_no << " at time " << present_time
 		//	<< std::endl;
 
+		if (parameters.integrator == 0)
+		{
+			solve_FE();
+		}
 		if (parameters.integrator == 1)
 		{
 			solve_SI();
@@ -2138,11 +2511,11 @@ namespace NonlinearElasticity
 
 		if (present_time > end_time)
 		{
-			dt -= (present_time - end_time);
+			//dt -= (present_time - end_time);
 			present_time = end_time;
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
-			//std::cout<< "Saving results at time : " << present_time << std::endl;
+			//cout << "Saving results at time : " << present_time << std::endl;
 			++savestep_no;
 			//calculate_error(total_displacement, present_time, displacement_error_output, velocity_error_output);
 			output_results();
@@ -2166,7 +2539,7 @@ int main(int /*argc*/, char** /*argv*/)
 		using namespace dealii;
 		using namespace NonlinearElasticity;
 
-		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
