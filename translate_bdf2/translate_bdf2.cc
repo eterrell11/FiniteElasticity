@@ -2147,7 +2147,7 @@ namespace NonlinearElasticity
 		auto op_S = op_Kpp - op_Kpu * op_Kuu_inv * op_Kup;
 
 		SolverMinRes<Vector<double>> solver_S(solver_control_S);
-
+		
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
 		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
@@ -2539,7 +2539,7 @@ int main(int /*argc*/, char** /*argv*/)
 		using namespace dealii;
 		using namespace NonlinearElasticity;
 
-		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
