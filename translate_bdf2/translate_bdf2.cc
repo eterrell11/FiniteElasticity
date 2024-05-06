@@ -1136,13 +1136,13 @@ namespace NonlinearElasticity
 				{
 					//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
 					assemble_system_mass();
-					cout << "Mass matrix assembled" << std::endl;
+					std::cout << "Mass matrix assembled" << std::endl;
 
 				}
 			}
 
-			cout << "New time step size : " << dt << std::endl;
-			cout << std::endl;
+			std::cout << "New time step size : " << dt << std::endl;
+			std::cout << std::endl;
 
 
 			while (present_time < end_time - 1e-12) {
@@ -1156,11 +1156,11 @@ namespace NonlinearElasticity
 			l1_p_eps_vec[ref_step] = pressure_error_output[1];
 			linfty_p_eps_vec[ref_step] = pressure_error_output[2];
 
-			cout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
-			cout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
+			std::cout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
+			std::cout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
 
-			cout << "New time step size : " << dt << std::endl;
-			cout << std::endl;
+			std::cout << "New time step size : " << dt << std::endl;
+			std::cout << std::endl;
 
 			present_time = parameters.start_time;
 			timestep_no = 0;
