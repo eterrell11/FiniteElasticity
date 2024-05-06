@@ -1309,7 +1309,7 @@ namespace NonlinearElasticity
 			}
 			cell_measure = std::min(cell_measure, cell->measure());
 		}
-		cout << "minimum cell size: " << cell_measure << std::endl;
+		std::cout << "minimum cell size: " << cell_measure << std::endl;
 	}
 
 
