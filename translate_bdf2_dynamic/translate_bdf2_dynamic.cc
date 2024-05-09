@@ -106,6 +106,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
+			double WVol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -125,6 +126,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Double(),
 					"Density");
+				prm.declare_entry("WVol_form",
+					"1",
+					Patterns::Integer(),
+					"WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -135,7 +140,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-
+				WVol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -195,6 +200,7 @@ namespace NonlinearElasticity
 			bool Simplex;
 			double e_tol;
 			unsigned int max_ref;
+			double tau;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -246,6 +252,10 @@ namespace NonlinearElasticity
 					"5",
 					Patterns::Integer(0),
 					"max_ref");
+				prm.declare_entry("Tau",
+					"0.0",
+					Patterns::Double(),
+					"Tau");
 			}
 			prm.leave_subsection();
 		}
@@ -264,6 +274,7 @@ namespace NonlinearElasticity
 				Simplex = prm.get_bool("Simplex");
 				e_tol = prm.get_double("e_tol");
 				max_ref = prm.get_integer("max_ref");
+				tau = prm.get_double("Tau");
 			}
 			prm.leave_subsection();
 		}
@@ -340,7 +351,49 @@ namespace NonlinearElasticity
 		}
 	} // namespace Parameters
 
+	namespace ConstitutiveModels
+	{
+		template<int dim>
+		class WVol : public Function<dim>
+		{
+		public:
+			double	W_prime_dt(const int& wvol_form, const Tensor<2, dim>& HH, const Tensor<2, dim>& FF_inv_T, const Tensor<2, dim>& grad_v);
+			//double  W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt);
+			//Tensor<1, dim>  W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v);
+		};
 
+		template<int dim>
+		double	WVol<dim>::W_prime_dt(const int& wvol_form, const Tensor<2,dim>& HH, const Tensor<2,dim>& FF_inv_T, const Tensor<2,dim>& grad_v)
+		{
+			if (wvol_form == 0) {
+				return scalar_product(HH, grad_v);
+			}
+			else if (wvol_form == 1) {
+				return scalar_product(FF_inv_T, grad_v);
+			}
+		}
+		/*template<int dim>
+		double WVol<dim>::W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt)
+		{
+			if (wvol_form == 0) {
+				return dt * scalar_product(HH, grad_v);
+			}
+			else if (wvol_form == 1) {
+				return dt / Jf * scalar_product(HH, grad_v);
+			}
+		}
+		template<int dim>
+		Tensor<1, dim>  WVol<dim>::W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v)
+		{
+			if (wvol_form == 0) {
+				return transpose(HH) * v;
+			}
+			else if (wvol_form == 1) {
+				return transpose(HH) * v / Jf;
+			}
+		}*/
+
+	} //namespace ConstitutiveModels
 
 	//Function for defining Kappa
 	template <int dim>
@@ -910,6 +963,7 @@ namespace NonlinearElasticity
 		int integrator;
 
 		Triangulation<dim> triangulation;
+		double cell_measure;
 		DoFHandler<dim>    dof_handler;
 
 		std::unique_ptr<FiniteElement<dim>> v_base_fe;
@@ -1121,15 +1175,20 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::set_simulation_parameters()
 	{
-		E = parameters.E;
+		E = parameters.E; //CONVERTS FROM Pa to g/cm^3
 		nu = parameters.nu;
 		mu = get_mu<dim>(E, nu);
 		kappa = get_kappa<dim>(E, nu);
-		rho_0 = parameters.rho_0;
+		double temp_E = E * 10.;
+		double temp_kappa = get_kappa<dim>(temp_E, nu);
+		rho_0 = parameters.rho_0; //Already given in g/cm^3
 		present_time = parameters.start_time;
 		dt = parameters.dt;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
+		double c_p = sqrt((4. / 3. * mu + temp_kappa) / rho_0);
+		std::cout << "pressure wave speed is : " << c_p << std::endl;
+		std::cout << "min timestep is " << cell_measure / c_p << std::endl;
 	}
 
 	template<int dim>
@@ -1590,10 +1649,13 @@ namespace NonlinearElasticity
 
 
 		Tensor<2, dim> FF;
+		Tensor<2, dim> old_FF;
+		Tensor<2, dim> FF_inv_T_tilde;
 		Tensor<2, dim> HH;
 		Tensor<2, dim> old_HH;
 		Tensor<2, dim> HH_tilde;
 		double Jf;
+		double Jf_old;
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
 		Tensor<2, dim> old_pk1_dev;
@@ -1617,6 +1679,10 @@ namespace NonlinearElasticity
 		std::vector<Tensor<1,dim>> sol_vec_velocity(n_q_points, Tensor<1,dim>());
 		std::vector<Tensor<1,dim>> face_sol_vec_velocity(n_face_q_points, Tensor<1, dim>());
 
+		const int wvol_form = parameters.WVol_form;
+		ConstitutiveModels::WVol<dim> wvol;
+
+
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			cell_rhs = 0;
@@ -1636,10 +1702,10 @@ namespace NonlinearElasticity
 			{
 				temp_pressure = sol_vec_pressure[q];
 				vn = sol_vec_velocity[q];
-				FF = get_real_FF(old_displacement_grads[q]);
-				Jf = get_Jf(FF);
-				old_HH = get_HH(FF, Jf);
-				old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
+				old_FF = get_real_FF(old_displacement_grads[q]);
+				Jf_old = get_Jf(old_FF);
+				old_HH = get_HH(old_FF, Jf_old);
+				old_pk1_dev = get_pk1_dev(old_FF, mu, Jf_old, old_HH);
 
 				FF = get_real_FF(displacement_grads[q]);
 				Jf = get_Jf(FF);
@@ -1647,6 +1713,7 @@ namespace NonlinearElasticity
 				pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				HH_tilde = 2. * HH - old_HH;
+				FF_inv_T_tilde = 2. * HH/Jf - old_HH/Jf_old;
 				pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 
 				//temp_pressure -= pressure_mean;
@@ -1658,8 +1725,9 @@ namespace NonlinearElasticity
 					auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 					for (const unsigned int j : fe_values.dof_indices())
 					{
+						double W_prime_dt = wvol.W_prime_dt(wvol_form, HH_tilde, FF_inv_T_tilde, fe_values[Velocity].gradient(j, q));
 						cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-							scale * dt * N_p_i * scalar_product(HH_tilde, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							scale * dt * N_p_i * W_prime_dt) * fe_values.JxW(q);
 
 					}
 					cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
