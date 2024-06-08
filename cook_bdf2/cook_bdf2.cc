@@ -1322,7 +1322,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1.;
 		std::vector<Point<2>> vertices = {
-			{0.0,0.0} , {0.0,4.4}, {4.8, 6.0}, {4.8, 4.4} };
+			{0.0,0.0} , {0.0,440}, {480, 600}, {480, 440} };
 
 		const std::vector < std::array<int, GeometryInfo<2>::vertices_per_cell>>
 			cell_vertices = { {{0,3,1,2}} };
@@ -1346,7 +1346,7 @@ namespace NonlinearElasticity
 					if (face_center[0] == 0) {
 						face->set_boundary_id(1);
 					}
-					if (abs(face_center[0] - 4.8) < 0.01) {
+					if (abs(face_center[0] - 480) < 0.01) {
 						face->set_boundary_id(2);
 					}
 				}
