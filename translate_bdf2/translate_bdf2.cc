@@ -388,6 +388,41 @@ namespace NonlinearElasticity
 
 	} //namespace ConstitutiveModels
 
+	/*template <int dim>
+	class EnergyPostprocessor : public DataPostprocessorScalar<dim>
+	{
+	public:
+		EnergyPostprocessor()
+			:
+			DataPostprocessorTensor<dim>("FF_real",
+				update_gradients)
+		{}
+		virtual
+			void
+			evaluate_vector_field
+			(const DataPostprocessorInputs::Vector<dim>& input_data,
+				std::vector<Vector<double> >& computed_quantities) const override
+		{
+			AssertDimension(input_data.solution_values.size(),
+				computed_quantities.size());
+			Tensor<2, dim> I = unit_symmetric_tensor<dim>();
+			Tensor<2, dim> FF;
+			double Jf;
+			for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
+			{
+				AssertDimension(computed_quantities[p].size(),
+					(Tensor<2, dim>::n_independent_components));
+				for (unsigned int d = 0; d < dim; ++d)
+					for (unsigned int e = 0; e < dim; ++e)
+						FF = I[d][e] + input_data.solution_gradients[p][d][e];
+
+				Jf = determinant(FF);
+
+				computed_quantities[p] = 
+			}
+		}
+	};*/
+
 	//Function for defining Kappa
 	template <int dim>
 	double get_kappa(double& E, double& nu) {
@@ -955,6 +990,8 @@ namespace NonlinearElasticity
 		void		 calculate_error();
 		void		 create_error_table();
 		void		 do_timestep();
+		void		 measure_energy();
+		void		 solve_energy();
 
 
 
@@ -1009,7 +1046,8 @@ namespace NonlinearElasticity
 
 		Vector<double> u_dot;
 		Vector<double> old_u_dot;
-		Vector<double> a_nplusalpha;
+		BlockVector<double> energy;
+		BlockVector<double> energy_RHS;
 
 
 		BlockVector<double> true_solution;
@@ -1129,7 +1167,7 @@ namespace NonlinearElasticity
 			setup_system();
 			savestep_no = 0;
 
-			output_results();
+			
 
 			save_counter = 1;
 			if (integrator != 2) {
@@ -1140,7 +1178,11 @@ namespace NonlinearElasticity
 
 				}
 			}
-
+			if (parameters.nu != 0.5) {
+				measure_energy();
+				solve_energy();
+			}
+			output_results();
 			std::cout << "New time step size : " << dt << std::endl;
 			std::cout << std::endl;
 
@@ -1408,7 +1450,8 @@ namespace NonlinearElasticity
 		old_pressure.reinit(n_p);
 
 
-		a_nplusalpha.reinit(n_u);
+		energy.reinit(dofs_per_block);
+		energy_RHS.reinit(dofs_per_block);
 
 		true_solution.reinit(dofs_per_block);
 
@@ -1645,7 +1688,7 @@ namespace NonlinearElasticity
 		double shifter;
 		if (present_time > dt) {
 			scale = 2. / 3.;
-			shifter = 1. / 3.;
+			shifter = 0;
 		}
 		else {
 			scale = 1.;
@@ -1723,7 +1766,7 @@ namespace NonlinearElasticity
 					}
 					Tensor<1, dim> W_prime_lin_u = wvol.W_prime_lin_u(wvol_form, Jf, HH, un - old_un);
 					cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
-						scale * N_u_i * rhs_values[q] +
+						rho_0 * scale * N_u_i * rhs_values[q] +
 						N_p_i * W_prime - shifter * Grad_p_i * W_prime_lin_u) * fe_values.JxW(q);
 				}
 			}
@@ -2009,6 +2052,80 @@ namespace NonlinearElasticity
 		}
 	}
 
+	template <int dim>
+	void Incompressible<dim>::measure_energy()
+	{
+
+
+		energy_RHS = 0;
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+
+		Vector<double>     cell_energy(dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Velocity(0);
+
+
+		Tensor<2, dim> FF;
+		double Jf;
+		Tensor<1, dim> vn;
+
+
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
+
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			cell_energy = 0;
+			fe_values.reinit(cell);
+
+			fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+			fe_values[Velocity].get_function_values(solution_dot, sol_vec_velocity);
+
+
+
+
+
+			for (const unsigned int q : fe_values.quadrature_point_indices())
+			{
+
+
+				FF = get_real_FF(displacement_grads[q]);
+				Jf = get_Jf(FF);
+				vn = sol_vec_velocity[q];
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					cell_energy[i] += 1/kappa * fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) + kappa * (Jf * std::log(Jf) - Jf + 1)) * fe_values.JxW(q);
+				}
+			}
+			cell->get_dof_indices(local_dof_indices);
+
+			constraints.distribute_local_to_global(cell_energy,
+				local_dof_indices,
+				energy_RHS);
+
+		}
+		energy_RHS.block(0) = 0;
+	}
+
 
 
 	template<int dim>
@@ -2159,7 +2276,7 @@ namespace NonlinearElasticity
 		const auto preconditioner_S_in = inverse_operator(op_aS, solver_aS, preconditioner_aS);
 
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_S_com;
-		preconditioner_S_com.initialize(Kuu);
+		preconditioner_S_com.initialize(Kpp);
 
 		Vector<double> un_motion(velocity.size());
 		if (present_time < 1.1 * dt) {
@@ -2244,6 +2361,24 @@ namespace NonlinearElasticity
 		solver_Kpp.solve(Kpp, p, Rp, preconditioner_Kpp);
 		constraints.distribute(solution);
 
+	}
+
+	template <int dim> 
+	void Incompressible<dim>::solve_energy()
+	{
+		const auto& Kpp = K.block(1, 1);
+
+		const auto& R = energy_RHS.block(1);
+
+		auto& E = energy.block(1);
+
+		SolverControl reduction_control_Kpp(1000, 1.0e-12);
+		SolverCG<Vector<double>> solver_Kpp(reduction_control_Kpp);
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kpp;
+		preconditioner_Kpp.initialize(Kpp);
+
+
+		solver_Kpp.solve(Kpp, E, R, preconditioner_Kpp);
 	}
 
 	template<int dim>
@@ -2458,9 +2593,10 @@ namespace NonlinearElasticity
 
 		BlockVector<double> extra_vector = solution;
 		extra_vector.block(0) = solution_dot.block(0);
+		extra_vector.block(1) = energy.block(1);
 
 		std::vector<std::string> extra_names(dim, "Velocity");
-		extra_names.emplace_back("Pressure_error2");
+		extra_names.emplace_back("energy");
 		std::vector<DataComponentInterpretation::DataComponentInterpretation>
 			interpretation3(dim,
 				DataComponentInterpretation::component_is_part_of_vector);
@@ -2530,7 +2666,10 @@ namespace NonlinearElasticity
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
 			//cout << "Saving results at time : " << present_time << std::endl;
 			++savestep_no;
-			//calculate_error(total_displacement, present_time, displacement_error_output, velocity_error_output);
+			if (parameters.nu != 0.5) {
+				measure_energy();
+				solve_energy();
+			}
 			output_results();
 			save_counter++;
 		}
