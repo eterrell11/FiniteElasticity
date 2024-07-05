@@ -1,5 +1,3 @@
-clear all
-close all
 error_table = readtable('error_table.csv');
 error_array = table2array(error_table);
 
@@ -13,3 +11,4 @@ if(size(error_array)~=0)
     saveas(gcf,"error.png")
 end
 close all
+quit
