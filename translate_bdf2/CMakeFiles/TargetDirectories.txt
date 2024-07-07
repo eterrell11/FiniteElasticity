@@ -1,0 +1,10 @@
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/rebuild_cache.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/info.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/edit_cache.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/strip_comments.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/distclean.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/runclean.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/release.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/debug.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/run.dir
+/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/CMakeFiles/translate_bdf2.dir

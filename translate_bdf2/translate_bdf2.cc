@@ -2550,8 +2550,15 @@ namespace NonlinearElasticity
 			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1]);
 			error_table.set_scientific("dEp_linf ", true);
 		}
+		std::string boi;
+		if (parameters.BodyForce != 0)
+			boi="BF";
+		if (parameters.TractionMagnitude != 0)
+                        boi="TR";
+		if (parameters.InitialVelocity != 0)
+                        boi="IV";
 		error_table.write_text(std::cout);
-		std::ofstream output("error_table.csv");
+		std::ofstream output("error_table"+boi+".csv");
 		std::ostringstream stream;
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
 		dt = parameters.dt;

@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2",
+  "command": "/nas/longleaf/apps/gcc/11.2.0/bin/g++ -DDEBUG -isystem /nas/longleaf/home/terrell1/longleaf/sfw/dealii/install-master/include -isystem /nas/longleaf/home/terrell1/longleaf/sfw/dealii/install-master/include/deal.II/bundled -isystem /usr/include/suitesparse -pedantic -Wall -Wextra -Wmissing-braces -Woverloaded-virtual -Wpointer-arith -Wsign-compare -Wsuggest-override -Wswitch -Wsynth -Wwrite-strings -Wno-placement-new -Wno-deprecated-declarations -Wno-literal-suffix -Wno-psabi -Wno-unused-local-typedefs -fopenmp-simd -pthread -O0 -ggdb -Wa,--compress-debug-sections -o CMakeFiles/translate_bdf2.dir/translate_bdf2.cc.o -c /nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/translate_bdf2.cc",
+  "file": "/nas/longleaf/home/terrell1/FiniteElasticityGit/FiniteElasticity/translate_bdf2/translate_bdf2.cc"
+}
+]
