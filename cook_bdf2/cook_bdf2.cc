@@ -2196,15 +2196,15 @@ namespace NonlinearElasticity
 		preconditioner_Kuu.initialize(Kuu);
 
 
-		SolverControl solver_control_S(1000, 1.0e-12);
+		SolverControl solver_control_S(2000, 1.0e-12);
 
 		const auto op_Kuu_inv = inverse_operator(op_Kuu, solver_Kuu, preconditioner_Kuu);
 		auto op_S = op_Kpp - op_Kpu * op_Kuu_inv * op_Kup;
 
-		SolverMinRes<Vector<double>> solver_S(solver_control_S);
+		SolverGMRES<Vector<double>> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
-		SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
+		SolverGMRES<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 		const auto op_aS = -1. * op_Kpu * linear_operator(preconditioner_Kuu) * op_Kup;
 		const auto preconditioner_S_in = inverse_operator(op_aS, solver_aS, preconditioner_aS);
