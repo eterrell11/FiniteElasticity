@@ -976,8 +976,8 @@ namespace NonlinearElasticity
 		void run();
 
 	private:
-		void		 create_simplex_grid(parallel::distributed::Triangulation<2>& triangulation);
-		void		 create_simplex_grid(parallel::distributed::Triangulation<3>& triangulation);
+		void		 create_simplex_grid(parallel::shared::Triangulation<2>& triangulation);
+		void		 create_simplex_grid(parallel::shared::Triangulation<3>& triangulation);
 		void		 create_grid();
 		void		 set_simulation_parameters();
 		void         setup_system();
@@ -1003,7 +1003,7 @@ namespace NonlinearElasticity
 		Parameters::AllParameters parameters;
 		int integrator;
 
-		parallel::distributed::Triangulation<dim> triangulation;
+		parallel::shared::Triangulation<dim> triangulation;
 		double cell_measure;
 		DoFHandler<dim>    dof_handler;
 
@@ -1095,8 +1095,8 @@ namespace NonlinearElasticity
 	template<int dim>
 	Incompressible<dim>::Incompressible(const std::string& input_file)
 		: parameters(input_file)
-		, integrator(parameters.integrator)
 		, mpi_communicator(MPI_COMM_WORLD)
+		, integrator(parameters.integrator)
 		, n_mpi_processes(Utilities::MPI::n_mpi_processes(mpi_communicator))
 		, this_mpi_process(Utilities::MPI::this_mpi_process(mpi_communicator))
 		, pcout(std::cout, (this_mpi_process == 0))
@@ -1227,7 +1227,7 @@ namespace NonlinearElasticity
 
 
 	template <int dim>
-	void Incompressible<dim>::create_simplex_grid(parallel::distributed::Triangulation<2>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<2>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -1266,7 +1266,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Incompressible<dim>::create_simplex_grid(parallel::distributed::Triangulation<3>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<3>& triangulation)
 	{
 		cell_measure = 1;
 		Triangulation<dim> quad_triangulation;
