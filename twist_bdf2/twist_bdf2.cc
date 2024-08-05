@@ -2304,7 +2304,7 @@ namespace NonlinearElasticity
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(*mapping_ptr,
 				dof_handler,
-				2,
+				1,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
 				constraints,
 				(*fe_ptr).component_mask(Velocity));
@@ -2345,7 +2345,7 @@ namespace NonlinearElasticity
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(*mapping_ptr,
 				dof_handler,
-				2,
+				1,
 				DirichletValues<dim>(present_time, parameters.TractionMagnitude, dt, mu),
 				constraints,
 				(*fe_ptr).component_mask(Velocity));
