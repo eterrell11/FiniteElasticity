@@ -1823,6 +1823,7 @@ namespace NonlinearElasticity
 	{
 		{
 			constraints.clear();
+			constraints.reinit(locally_relevant_dofs);
 			//present_time -= dt;
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
