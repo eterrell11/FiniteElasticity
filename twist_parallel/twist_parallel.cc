@@ -379,50 +379,156 @@ namespace NonlinearElasticity
 		cg.solve(*matrix, dst, src, *preconditioner);
 	}
 
-	template <class PreconditionerType>
+	
+
+	namespace ConstitutiveModels
+	{
+		template<int dim>
+		class WVol : public Function<dim>
+		{
+		public:
+			double	W_prime(const int& wvol_form, const double& Jf);
+			double  W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt);
+			Tensor<1, dim>  W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v);
+		};
+
+		template<int dim>
+		double	WVol<dim>::W_prime(const int& wvol_form, const double& Jf)
+		{
+			if (wvol_form == 0) {
+				return (Jf - 1.);
+			}
+			else if (wvol_form == 1) {
+				return std::log(Jf);
+			}
+		}
+		template<int dim>
+		double WVol<dim>::W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt)
+		{
+			if (wvol_form == 0) {
+				return dt * scalar_product(HH, grad_v);
+			}
+			else if (wvol_form == 1) {
+				return dt / Jf * scalar_product(HH, grad_v);
+			}
+		}
+		template<int dim>
+		Tensor<1, dim>  WVol<dim>::W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v)
+		{
+			if (wvol_form == 0) {
+				return transpose(HH) * v;
+			}
+			else if (wvol_form == 1) {
+				return transpose(HH) * v / Jf;
+			}
+		}
+
+	} //namespace ConstitutiveModels
+
+	// namespace PCField_Split
+	// {
+	// 	PreconditionFieldSplit::PreconditionFieldSplit()
+	// 	: PreconditionBase()
+	// 	{}
+
+	// 	PreconditionFieldSplit::PreconditionFieldSplit(
+	// 		const MPI_Comm		comm,
+	// 		const AdditionalData &additional_data_)
+	// 		: PreconditionBase(comm)
+	// 	{
+	// 		additional_data = additional_data_;
+
+	// 		PetscErrorCode ierr = PCCreate(comm, &pc);
+	// 		AssertThrow(ierr ==0, ExcPETScError(ierr));
+
+	// 		initialize();
+	// 	}
+
+	// 	PreconditionFieldSplit::AdditionalData::AdditionalData(
+	// 		const double omega)
+	// 		: omega(omega)
+	// 	{}
+
+	// 	PreconditionFieldSplit::PreconditionFieldSplit(
+	// 	const MatrixBase     &matrix,
+	// 	const AdditionalData &additional_data)
+	// 	: PreconditionBase(matrix.get_mpi_communicator())
+	// 	{
+	// 	initialize(matrix, additional_data);
+	// 	}
+
+	// 	void
+	// 	PreconditionFieldSplit::initialize()
+	// 	{
+	// 	PetscErrorCode ierr = PCSetType(pc, const_cast<char *>(PCBJACOBI));
+	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
+
+	// 	ierr = PCSetFromOptions(pc);
+	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
+	// 	}
+
+	// 	void
+	// 	PreconditionBlockJacobi::initialize(const MatrixBase     &matrix_,
+	// 									const AdditionalData &additional_data_)
+	// 	{
+	// 	clear();
+
+	// 	additional_data = additional_data_;
+
+	// 	create_pc_with_mat(matrix_);
+	// 	initialize();
+	// 	}
+	// } //namespace PCFieldSplit
+
+template <class PreconditionerType>
 	class SchurComplement : public Subscriptor
 	{
 	public:
 		SchurComplement(
 			const LA::MPI::BlockSparseMatrix& system_matrix,
-			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse);
+			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse,
+			const LA::MPI::BlockVector& exemplar);
 
-		void vmult(LA::MPI::BlockVector& dst, const LA::MPI::BlockVector& src) const;
+		void vmult(LA::MPI::Vector& dst, const LA::MPI::Vector& src) const;
 
 	private:
 		const SmartPointer<const LA::MPI::BlockSparseMatrix> system_matrix;
 		const SmartPointer<
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>>
 			A_inverse;
-
-		mutable LA::MPI::Vector tmp1, tmp2,tmp3;
+		const SmartPointer<const LA::MPI::BlockVector> exemplar;
+		mutable LA::MPI::Vector tmp1, tmp2;
 	};
-
-
 
 	template <class PreconditionerType>
 	SchurComplement<PreconditionerType>::SchurComplement(
-		const LA::MPI::BlockSparseMatrix& system_matrix,
-		const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse)
+		const LA::MPI::BlockSparseMatrix& system_matrix, 
+		const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse, 
+		const LA::MPI::BlockVector& exemplar)
 		: system_matrix(&system_matrix)
 		, A_inverse(&A_inverse)
+		, exemplar(&exemplar)
+		, tmp1(exemplar.block(0))
+		, tmp2(exemplar.block(0))
 	{}
 
 
 	template <class PreconditionerType>
 	void
-		SchurComplement<PreconditionerType>::vmult(LA::MPI::BlockVector& dst,
-			const LA::MPI::BlockVector& src) const
+		SchurComplement<PreconditionerType>::vmult(LA::MPI::Vector& dst,
+			const LA::MPI::Vector& src) const
 	{
-		tmp1.reinit(src.block(0));
-		tmp2.reinit(src.block(0));
 
-		system_matrix->block(0, 1).vmult(tmp1, src.block(1));
+		// FIX
+		// tmp1.reinit(src.block(0).m());
+		// tmp2.reinit(A.block(0,0).m());
+
+		system_matrix->block(0, 1).vmult(tmp1, src);
 		A_inverse->vmult(tmp2, tmp1);
-		system_matrix->block(1, 0).vmult(dst.block(1), -1.0 * tmp2);
-		system_matrix->block(1, 1).vmult_add(dst.block(1), src.block(1));
+		system_matrix->block(1, 0).vmult(dst, -1.0 * tmp2);
+		system_matrix->block(1, 1).vmult_add(dst, src);
 
-		dst.block(0) = src.block(0);
+		//dst.block(0) = src.block(0);
 	}
 
 	//Function for defining Kappa
@@ -992,16 +1098,19 @@ namespace NonlinearElasticity
 		void		 calculate_error();
 		void		 create_error_table();
 		void		 do_timestep();
+		
+		
+		Parameters::AllParameters parameters;
 
-		ConditionalOStream pcout;
 
 		MPI_Comm mpi_communicator;
+		int integrator;
 
 		const unsigned int n_mpi_processes;
 		const unsigned int this_mpi_process;
+		ConditionalOStream pcout;
 
-		Parameters::AllParameters parameters;
-		int integrator;
+
 
 		parallel::shared::Triangulation<dim> triangulation;
 		double cell_measure;
@@ -1030,6 +1139,7 @@ namespace NonlinearElasticity
 
 		BlockSparsityPattern sparsity_pattern;
 		LA::MPI::BlockSparseMatrix K;
+		LA::MPI::BlockSparseMatrix P;
 
 
 		LA::MPI::BlockVector R;
@@ -1037,6 +1147,8 @@ namespace NonlinearElasticity
 
 		LA::MPI::BlockVector solution;
 		LA::MPI::BlockVector relevant_solution;
+		LA::MPI::BlockVector error_solution_store;
+		LA::MPI::BlockVector relevant_error_solution_store;
 		LA::MPI::BlockVector solution_dot;
 		LA::MPI::BlockVector relevant_solution_dot;
 		LA::MPI::BlockVector old_solution;
@@ -1050,8 +1162,8 @@ namespace NonlinearElasticity
 		LA::MPI::Vector old_velocity;
 
 
-		BlockVector<double> true_solution;
-		BlockVector<double> error;
+		LA::MPI::BlockVector true_solution;
+		LA::MPI::BlockVector error;
 
 		double present_time;
 		double dt;
@@ -1078,7 +1190,7 @@ namespace NonlinearElasticity
 		double kappa;
 		double mu;
 
-		double height;
+		unsigned int height;
 
 		double tau;
 		int max_it;
@@ -1152,7 +1264,7 @@ namespace NonlinearElasticity
 		l1_p_eps_vec.reserve(max_it);
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
-		for (unsigned int ref_step = 0; ref_step < max_it; ++ref_step) {
+		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
 			if (ref_step == 0) {
 				if (parameters.Simplex == true) {
 					create_simplex_grid(triangulation);
@@ -1163,7 +1275,7 @@ namespace NonlinearElasticity
 			}
 
 			set_simulation_parameters();
-			for (unsigned int i = 0; i < ref_step; ++i) {
+			for (int i = 0; i < ref_step; ++i) {
 				dt *= 0.5;
 			}
 			setup_system();
@@ -1204,6 +1316,8 @@ namespace NonlinearElasticity
 
 			present_time = parameters.start_time;
 			timestep_no = 0;
+			error_solution_store = solution;
+
 		}
 		create_error_table();
 	}
@@ -1218,7 +1332,7 @@ namespace NonlinearElasticity
 		rho_0 = parameters.rho_0;
 		present_time = parameters.start_time;
 		dt = parameters.dt;
-		height = 6;
+		//unsigned int height = 6;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 	}
@@ -1275,10 +1389,10 @@ namespace NonlinearElasticity
 		};
 		std::vector<std::array<int, GeometryInfo<3>::vertices_per_cell>>
 			cell_vertices = { {{0, 1, 2, 3, 4, 5, 6, 7}} };
-		for (int h = 1; h < height; ++h) {
-			std::vector<Point<3>> new_vertices = { {-1.0, -1.0, 2. * (h + 1.)}, {1.0, -1.0, 2. * (h + 1.) }, {-1.0, 1.0, 2. * (h + 1.) }, {1.0, 1.0, 2. * (h + 1.)} };
+		for (unsigned int h = 1; h < height; ++h) {
+			std::vector<Point<3>> new_vertices = { {-1.0, -1.0, 2. * (double(h) + 1.)}, {1.0, -1.0, 2. *(double(h) + 1.) }, {-1.0, 1.0, 2. * (double(h) + 1.) }, {1.0, 1.0, 2. * (double(h) + 1.)} };
 			std::vector<std::array<int, GeometryInfo<3>::vertices_per_cell>>
-				new_cell_vertices = { {{4 * h, 4 * h + 1, 4 * h + 2, 4 * h + 3, 4 * h + 4, 4 * h + 5, 4 * h + 6, 4 * h + 7}} };
+				new_cell_vertices = { {{int(4 * h),int( 4 * h + 1), int(4 * h + 2), int(4 * h + 3), int(4 * h + 4), int(4 * h + 5), int(4 * h + 6), int(4 * h + 7)}} };
 			vertices.insert(vertices.end(), new_vertices.begin(), new_vertices.end());
 			cell_vertices.insert(cell_vertices.end(), new_cell_vertices.begin(), new_cell_vertices.end());
 		}
@@ -1317,7 +1431,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::create_grid()
 	{
 		cell_measure = 1;
-		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,height }, { -1.,-1.,0. }, { 1.,1., 2. * double(height) });
+		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,(height) }, { -1,-1,0 }, { 1.,1., 2. * height });
 		triangulation.refine_global(parameters.n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
@@ -1346,6 +1460,7 @@ namespace NonlinearElasticity
 
 
 		K.clear();
+		P.clear();
 		dof_handler.distribute_dofs(*fe_ptr);
 
 
@@ -1427,11 +1542,15 @@ namespace NonlinearElasticity
 
 		solution.reinit(owned_partitioning,
 			mpi_communicator);
+		error_solution_store.reinit(owned_partitioning,
+			mpi_communicator);
 		solution_dot.reinit(owned_partitioning,
 			mpi_communicator);
 		old_solution.reinit(owned_partitioning,
 			mpi_communicator);
 
+		relevant_error_solution_store.reinit(owned_partitioning, relevant_partitioning,
+			mpi_communicator);
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution_dot.reinit(owned_partitioning,
@@ -1451,14 +1570,17 @@ namespace NonlinearElasticity
 			mpi_communicator);
 
 
+		P.reinit(
+			owned_partitioning,
+			dsp,
+			mpi_communicator);
 
 
 
 
+		true_solution.reinit(owned_partitioning, mpi_communicator);
 
-		true_solution.reinit(dofs_per_block);
-
-		error.reinit(dofs_per_block);
+		error.reinit(owned_partitioning, mpi_communicator);
 
 		
 		velocity.reinit(owned_partitioning[0], mpi_communicator);
@@ -1493,7 +1615,6 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::assemble_system_mass()
 	{
-
 		K = 0;
 		R = 0;
 
@@ -1623,7 +1744,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::assemble_system_SI()
 	{
 
-
+		P = 0;
 		R = 0;
 		K.block(0, 1) = 0;
 		K.block(1, 0) = 0;
@@ -1655,6 +1776,7 @@ namespace NonlinearElasticity
 
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_preconditioner_matrix(dofs_per_cell, dofs_per_cell);
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
@@ -1665,6 +1787,8 @@ namespace NonlinearElasticity
 
 
 		Vector<double>     cell_rhs(dofs_per_cell);
+
+		
 
 		FExt<dim> right_hand_side;
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
@@ -1688,13 +1812,13 @@ namespace NonlinearElasticity
 		double shifter;
 		if (present_time >  dt) {
 			scale = 2. / 3.;
-			shifter = 1./3.;
+			shifter = 0 /*1./3.*/;
 		}
 		else {
 			scale = 1.;
 			shifter = 0.;
 		}
-		double temp_pressure;
+		//double temp_pressure;
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
 
@@ -1713,6 +1837,7 @@ namespace NonlinearElasticity
 			{
 				cell_rhs = 0;
 				cell_mass_matrix = 0;
+				cell_preconditioner_matrix = 0;
 				fe_values.reinit(cell);
 
 				solution.update_ghost_values();
@@ -1731,7 +1856,7 @@ namespace NonlinearElasticity
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					temp_pressure = sol_vec_pressure[q];
+					//temp_pressure = sol_vec_pressure[q];
 					un = sol_vec_displacement[q];
 					old_un = old_sol_vec_displacement[q];
 					FF = get_real_FF(old_displacement_grads[q]);
@@ -1758,6 +1883,7 @@ namespace NonlinearElasticity
 						{
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) + rho_0 * dt * dt / 3. * transpose(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
@@ -1806,11 +1932,14 @@ namespace NonlinearElasticity
 					local_dof_indices,
 					K,
 					R);
+				constraints.distribute_local_to_global(cell_preconditioner_matrix,
+					local_dof_indices,
+					P);
 			}
 		}
 		K.compress(VectorOperation::add);
 		R.compress(VectorOperation::add);
-
+		P.compress(VectorOperation::add);
 	}
 
 	
@@ -1823,7 +1952,7 @@ namespace NonlinearElasticity
 	{
 		{
 			constraints.clear();
-			constraints.reinit(locally_relevant_dofs);
+			constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));
 			//present_time -= dt;
 			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Pressure(dim);
@@ -1845,15 +1974,6 @@ namespace NonlinearElasticity
 			solve_SI_system();
 		}
 
-		//cout << "a norm is : " << acceleration.linfty_norm() << std::endl;
-		//cout << "v norm is : " << velocity.linfty_norm() << std::endl;
-		//cout << "d norm is : " << solution.block(0).linfty_norm() << std::endl;
-		//cout << "delta d norm is : " << solution_dot.block(0).linfty_norm() << std::endl;
-		//cout << "old_udot norm is: " << old_u_dot.linfty_norm() << std::endl;
-		//cout << "p norm is : " << solution.block(1).linfty_norm() << std::endl;
-		//cout << "Norm of Kt is : " << K.block(0, 0).l1_norm() << std::endl;
-		//cout << std::endl;
-
 
 		update_motion();
 		calculate_error();
@@ -1872,11 +1992,13 @@ namespace NonlinearElasticity
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
 		const auto& Kpu = K.block(1, 0);
-		const auto& Kpp = K.block(1, 1);
+		//const auto& Kpp = K.block(1, 1);
 
 
 		auto& Ru = R.block(0);
 		auto& Rp = R.block(1);
+
+		auto& Pp = P.block(1,1);
 
 
 		SolverControl reduction_control_Kuu(1000, 1.0e-12);
@@ -1885,19 +2007,23 @@ namespace NonlinearElasticity
 		preconditioner_Kuu.initialize(Kuu);
 
 
+		//PETScWrappers::PreconditionJacobi precondition_S_in;
+		PETScWrappers::PreconditionSOR precondition_S_comp;
+		precondition_S_comp.initialize(Pp);
+
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
 
 		SolverControl solver_control_S(2000, 1.0e-12);
-		SolverGMRES<LA::MPI::BlockVector> solver_S(solver_control_S);
+		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
 		//SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
-
+		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K, M_inverse);
+			K, M_inverse, R);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
@@ -1925,8 +2051,8 @@ namespace NonlinearElasticity
 		constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
 
-		solver_S.solve(schur_complement,fake_solution, R, preconditioner_aS);
-		p = fake_solution.block(1);
+		solver_S.solve(schur_complement, p, R.block(1), precondition_S_comp);
+		//p = fake_solution.block(1);
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
@@ -1952,16 +2078,11 @@ namespace NonlinearElasticity
 
 		if (present_time > dt) {
 			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-			/*solution.block(0) *= 4. / 3.;
-			solution.block(0).add(2. / 3. * dt, velocity);
-			solution.block(0).add(-1. / 3., old_solution.block(0));*/
 		}
 		else {
 			solution.block(0).add(dt, solution_dot.block(0));
 		}
 		old_solution.block(0) = solution_save;
-		
-		//std::cout << solution.block(1) << std::endl;
 			
 		pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
 		//solution.block(1).add(-mean);
@@ -1978,7 +2099,9 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Incompressible<dim>::calculate_error()
 	{
-
+		//error_solution_store.update_ghost_values();
+		relevant_error_solution_store = solution - error_solution_store;
+		//error_sol.update_ghost_values();
 		//VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
 		//error = (true_solution - solution);
 		const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim), dim + 1);
@@ -1992,11 +2115,11 @@ namespace NonlinearElasticity
 		QTrapezoid<1>  q_trapez;
 		QIterated<dim> quadrature(q_trapez, 5);
 
-
+		//u_cell_wise_error.update_ghost_values();
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.BodyForce, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L2_norm,
@@ -2008,8 +2131,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.BodyForce, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L1_norm,
@@ -2021,8 +2144,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.BodyForce, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::Linfty_norm,
@@ -2035,8 +2158,8 @@ namespace NonlinearElasticity
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L2_norm,
@@ -2048,8 +2171,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L1_norm,
@@ -2061,8 +2184,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
-			Solution<dim>(present_time, parameters.TractionMagnitude, kappa),
+			relevant_error_solution_store,
+			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::Linfty_norm,
