@@ -2073,11 +2073,11 @@ namespace NonlinearElasticity
 		preconditioner_Kuu.initialize(Kuu);
 
 		//LA::MPI::PreconditionAMG::AdditionalData data;
-		LA::MPI::PreconditionSOR preconditioner_S_comp;
-		preconditioner_S_comp.initialize(Pp);
+		// LA::MPI::PreconditionSOR preconditioner_S_comp;
+		// preconditioner_S_comp.initialize(Pp);
 
-		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
-		preconditioner_S_in.initialize(Kpp);
+		// PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
+		// preconditioner_S_in.initialize(Kpp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
