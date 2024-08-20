@@ -1465,7 +1465,7 @@ namespace NonlinearElasticity
 		const types::global_dof_index n_p = dofs_per_block[1];
 
 
-		// const FEValuesExtractors::Vector Velocity(0);
+		const FEValuesExtractors::Vector Velocity(0);
 		// const FEValuesExtractors::Scalar Pressure(dim); 
 		// BlockMask velocity_mask = (*fe_ptr).block_mask(Velocity);
 		// BlockMask pressure_mask = (*fe_ptr).block_mask(Pressure);
