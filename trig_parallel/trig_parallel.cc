@@ -874,26 +874,25 @@ namespace NonlinearElasticity
 	private:
 		const double time;
 		const double a;
-		const double kappa;
 	};
 
 	template <int dim>
-	Solution<dim>::Solution(double& present_time, double& velocity, double& kappa)
+	Solution<dim>::Solution(double& present_time, double& velocity)
 		: Function<dim>(dim + 1),
 		time(present_time),
-		a(velocity),
-		kappa(kappa)
+		a(velocity)
 	{}
 
 	template <int dim>
 	void
-		Solution<dim>::vector_value(const Point<dim>& /*p*/,
+		Solution<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
 		//Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] = a * time * time * time / 6.0;
-		values[1] = 0;
-		values[2] = 0;
+		values[0] = a * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]) * std::sin(M_PI * present_time);
+		values[1] = -a * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]) * std::sin(M_PI * present_time);
+		if (dim == 3)
+			values[2] = 0;
 	}
 	template <int dim>
 	void Solution<dim>::vector_value_list(
@@ -2192,8 +2191,8 @@ namespace NonlinearElasticity
 		//u_cell_wise_error.update_ghost_values();
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
-			Functions::ZeroFunction<dim>(dim + 1),
+			relevant_solution,
+			Solution<dim>(present_time, parameters.TractionMagnitude),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L2_norm,
@@ -2205,8 +2204,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
-			Functions::ZeroFunction<dim>(dim + 1),
+			relevant_solution,
+			Solution<dim>(present_time, parameters.TractionMagnitude),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L1_norm,
@@ -2218,8 +2217,8 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
-			Functions::ZeroFunction<dim>(dim + 1),
+			relevant_solution,
+			Solution<dim>(dim+1),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::Linfty_norm,
