@@ -1467,8 +1467,8 @@ namespace NonlinearElasticity
 
 		// const FEValuesExtractors::Vector Velocity(0);
 		// const FEValuesExtractors::Scalar Pressure(dim); 
-		BlockMask velocity_mask = (*fe_ptr).block_mask(Velocity);
-		BlockMask pressure_mask = (*fe_ptr).block_mask(Pressure);
+		// BlockMask velocity_mask = (*fe_ptr).block_mask(Velocity);
+		// BlockMask pressure_mask = (*fe_ptr).block_mask(Pressure);
 
 		owned_partitioning.resize(2);
 		owned_partitioning[0] = dof_handler.locally_owned_dofs().get_view(0, n_u);
