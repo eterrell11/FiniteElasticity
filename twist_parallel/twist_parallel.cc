@@ -487,7 +487,8 @@ template <class PreconditionerType>
 		SchurComplement(
 			const LA::MPI::BlockSparseMatrix& system_matrix,
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse,
-			const LA::MPI::BlockVector& exemplar);
+			const LA::MPI::BlockVector& exemplar,
+			const double& kappa);
 
 		void vmult(LA::MPI::Vector& dst, const LA::MPI::Vector& src) const;
 
@@ -497,19 +498,23 @@ template <class PreconditionerType>
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>>
 			A_inverse;
 		const SmartPointer<const LA::MPI::BlockVector> exemplar;
-		mutable LA::MPI::Vector tmp1, tmp2;
+		const double kappa;
+		mutable LA::MPI::Vector tmp1, tmp2, tmp3;
 	};
 
 	template <class PreconditionerType>
 	SchurComplement<PreconditionerType>::SchurComplement(
 		const LA::MPI::BlockSparseMatrix& system_matrix, 
 		const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse, 
-		const LA::MPI::BlockVector& exemplar)
+		const LA::MPI::BlockVector& exemplar,
+		const double& kappa)
 		: system_matrix(&system_matrix)
 		, A_inverse(&A_inverse)
 		, exemplar(&exemplar)
+		, kappa(kappa)
 		, tmp1(exemplar.block(0))
 		, tmp2(exemplar.block(0))
+		, tmp3(exemplar.block(1))
 	{}
 
 
@@ -518,17 +523,11 @@ template <class PreconditionerType>
 		SchurComplement<PreconditionerType>::vmult(LA::MPI::Vector& dst,
 			const LA::MPI::Vector& src) const
 	{
-
-		// FIX
-		// tmp1.reinit(src.block(0).m());
-		// tmp2.reinit(A.block(0,0).m());
-
 		system_matrix->block(0, 1).vmult(tmp1, src);
 		A_inverse->vmult(tmp2, tmp1);
 		system_matrix->block(1, 0).vmult(dst, -1.0 * tmp2);
-		system_matrix->block(1, 1).vmult_add(dst, src);
-
-		//dst.block(0) = src.block(0);
+		system_matrix->block(1, 1).vmult(tmp3, src);
+		dst.add(1./kappa, tmp3);
 	}
 
 	//Function for defining Kappa
@@ -536,7 +535,6 @@ template <class PreconditionerType>
 	double get_kappa(double& E, double& nu) {
 		double tmp;
 		tmp = E / (3. * (1. - 2. * nu));
-		//pcout << "kappa = " << tmp << std::endl;
 		return tmp;
 	}
 
@@ -544,7 +542,6 @@ template <class PreconditionerType>
 	template <int dim>
 	double get_mu(double& E, double& nu) {
 		double tmp = E / (2. * (1. + nu));
-		//pcout << "mu = " << tmp << std::endl;
 		return tmp;
 	}
 
@@ -1669,7 +1666,7 @@ template <class PreconditionerType>
 							double N_p_i = fe_values[Pressure].value(i, q);
 							for (const unsigned int j : fe_values.dof_indices())
 							{
-								cell_mass_matrix(i, j) += 1. / kappa * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
+								cell_mass_matrix(i, j) += N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
 
 							}
 						}
@@ -1725,7 +1722,7 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, j) += (scale * N_u_i * fe_values[Velocity].value(j, q) +
-									1. / kappa * N_p_i * fe_values[Pressure].value(j, q)) * fe_values.JxW(q);
+									N_p_i * fe_values[Pressure].value(j, q)) * fe_values.JxW(q);
 							}
 						}
 					}
@@ -1883,7 +1880,8 @@ template <class PreconditionerType>
 						{
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
-							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) + rho_0 * dt * dt / 3. * transpose(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
+								rho_0 * dt * dt * (1 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
@@ -1992,8 +1990,9 @@ template <class PreconditionerType>
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
 		const auto& Kpu = K.block(1, 0);
-		//const auto& Kpp = K.block(1, 1);
+		auto& Kpp = K.block(1, 1);
 
+		//Kpp /= kappa;
 
 		auto& Ru = R.block(0);
 		auto& Rp = R.block(1);
@@ -2006,10 +2005,12 @@ template <class PreconditionerType>
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
+		LA::MPI::PreconditionAMG::AdditionalData data;
+		LA::MPI::PreconditionAMG preconditioner_S_comp;
+		preconditioner_S_comp.initialize(Pp, data);
 
-		//PETScWrappers::PreconditionJacobi precondition_S_in;
-		PETScWrappers::PreconditionSOR precondition_S_comp;
-		precondition_S_comp.initialize(Pp);
+		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
+		preconditioner_S_in.initialize(Kpp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
@@ -2023,7 +2024,7 @@ template <class PreconditionerType>
 		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K, M_inverse, R);
+			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
@@ -2051,8 +2052,14 @@ template <class PreconditionerType>
 		constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
 
-		solver_S.solve(schur_complement, p, R.block(1), precondition_S_comp);
-		//p = fake_solution.block(1);
+		if (parameters.nu == 0.5)
+		{
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_in);
+		}
+		else
+		{
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+		}
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
