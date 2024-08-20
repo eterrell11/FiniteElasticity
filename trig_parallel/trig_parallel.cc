@@ -1482,19 +1482,36 @@ namespace NonlinearElasticity
 		
 
 		// HOMOGENEOUS CONSTRAINTS
-		{
-			constraints.clear();
-			constraints.reinit(locally_relevant_dofs);
+		constraints.clear();
+			const FEValuesExtractors::Scalar Velocityx(0);
+			const FEValuesExtractors::Scalar Velocityy(1);
+			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*mapping_ptr,
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				0,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Velocityx));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));
+				fe.component_mask(Velocityy));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				0,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				1,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Pressure));
 			constraints.close();
-
-		}
 
 
 
@@ -1937,23 +1954,36 @@ namespace NonlinearElasticity
 	template<int dim>
 	void Incompressible<dim>::solve_SI()
 	{
-		{
-			constraints.clear();
-			constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));
-			//present_time -= dt;
-			const FEValuesExtractors::Vector Velocity(0);
+		constraints.clear();
+			const FEValuesExtractors::Scalar Velocityx(0);
+			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*mapping_ptr,
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				0,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Velocityx));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));
-			//present_time += dt;
-
-		}
-		constraints.close();
+				fe.component_mask(Velocityy));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				0,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(mapping_simplex,
+				dof_handler,
+				1,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				fe.component_mask(Pressure));
+			constraints.close();
 		{
 			assemble_system_SI();
 		}
