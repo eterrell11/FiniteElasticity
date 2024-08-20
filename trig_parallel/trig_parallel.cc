@@ -1487,25 +1487,25 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Velocityx));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Pressure));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
@@ -1959,25 +1959,25 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Velocityx));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				fe.component_mask(Pressure));
-			VectorTools::interpolate_boundary_values(mapping_simplex,
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
