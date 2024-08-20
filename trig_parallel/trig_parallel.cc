@@ -1408,7 +1408,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::create_grid()
 	{
 		cell_measure = 1;
-		GridGenerator::subdivided_hyper_cube(triangulation,0, 1.);
+		GridGenerator::hyper_cube(triangulation,0, 1.);
 		triangulation.refine_global(parameters.n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
