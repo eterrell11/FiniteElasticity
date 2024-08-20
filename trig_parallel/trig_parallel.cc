@@ -629,28 +629,28 @@ namespace NonlinearElasticity
 
 	
 
-	template<int dim>
-	class FExt : public Function<dim>
-	{
-	public:
-		virtual void rhs_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& a, double& present_time, double& /*mu*/, double& /*kappa*/)
+	// template<int dim>
+	// class FExt : public Function<dim>
+	// {
+	// public:
+	// 	virtual void rhs_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& a, double& present_time, double& /*mu*/, double& /*kappa*/)
 
-		{
-			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
-			Assert(dim >= 2, ExcInternalError());
+	// 	{
+	// 		//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+	// 		Assert(dim >= 2, ExcInternalError());
 
-			values[0] = a * present_time;
-			values[1] = 0;
-		}
-		virtual void
-			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
-		{
-			const unsigned int n_points = points.size();
-			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-			for (unsigned int p = 0; p < n_points; ++p)
-				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
-		}
-	};
+	// 		values[0] = a * present_time;
+	// 		values[1] = 0;
+	// 	}
+	// 	virtual void
+	// 		rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
+	// 	{
+	// 		const unsigned int n_points = points.size();
+	// 		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+	// 		for (unsigned int p = 0; p < n_points; ++p)
+	// 			FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
+	// 	}
+	// };
 
 	template<int dim>
 	class FExt : public Function<dim>
