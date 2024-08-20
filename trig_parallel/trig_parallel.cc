@@ -1489,13 +1489,13 @@ namespace NonlinearElasticity
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
-				0,
+				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
-				1,
+				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Velocityy));
