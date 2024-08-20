@@ -683,7 +683,7 @@ namespace NonlinearElasticity
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
+				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu);
 		}
 	};
 
@@ -1837,7 +1837,7 @@ namespace NonlinearElasticity
 
 
 
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu);
 
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
