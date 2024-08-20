@@ -2073,7 +2073,7 @@ namespace NonlinearElasticity
 		preconditioner_Kuu.initialize(Kuu);
 
 		//LA::MPI::PreconditionAMG::AdditionalData data;
-		LA::MPI::PreconditionSOR preconditioner_S_comp;
+		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp);
 
 		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
