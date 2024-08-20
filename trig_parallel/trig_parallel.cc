@@ -1492,25 +1492,25 @@ namespace NonlinearElasticity
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Velocityx));
+				(*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Velocityy));
+				(*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Pressure));
+				(*fe_ptr).component_mask(Pressure));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Pressure));
+				(*fe_ptr).component_mask(Pressure));
 			constraints.close();
 
 
@@ -1964,25 +1964,25 @@ namespace NonlinearElasticity
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Velocityx));
+				(*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Velocityy));
+				(*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Pressure));
+				(*fe_ptr).component_mask(Pressure));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				fe.component_mask(Pressure));
+				(*fe_ptr).component_mask(Pressure));
 			constraints.close();
 		{
 			assemble_system_SI();
