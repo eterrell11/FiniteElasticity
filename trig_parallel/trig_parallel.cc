@@ -2072,9 +2072,9 @@ namespace NonlinearElasticity
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
-		LA::MPI::PreconditionAMG::AdditionalData data;
-		LA::MPI::PreconditionAMG preconditioner_S_comp;
-		preconditioner_S_comp.initialize(Pp, data);
+		//LA::MPI::PreconditionAMG::AdditionalData data;
+		LA::MPI::PreconditionSOR preconditioner_S_comp;
+		preconditioner_S_comp.initialize(Pp);
 
 		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
 		preconditioner_S_in.initialize(Kpp);
@@ -2121,11 +2121,11 @@ namespace NonlinearElasticity
 
 		if (parameters.nu == 0.5)
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_in);
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_aS);
 		}
 		else
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_aS);
 		}
 
 		Kup.vmult(tmp1, p);
