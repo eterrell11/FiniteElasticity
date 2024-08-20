@@ -1523,6 +1523,18 @@ namespace NonlinearElasticity
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+				dof_handler,
+				2,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+				dof_handler,
+				3,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Pressure));
 			constraints.close();
 
 
@@ -2004,6 +2016,18 @@ namespace NonlinearElasticity
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				1,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+				dof_handler,
+				2,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Pressure));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+				dof_handler,
+				3,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Pressure));
