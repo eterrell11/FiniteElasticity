@@ -425,62 +425,7 @@ namespace NonlinearElasticity
 
 	} //namespace ConstitutiveModels
 
-	// namespace PCField_Split
-	// {
-	// 	PreconditionFieldSplit::PreconditionFieldSplit()
-	// 	: PreconditionBase()
-	// 	{}
-
-	// 	PreconditionFieldSplit::PreconditionFieldSplit(
-	// 		const MPI_Comm		comm,
-	// 		const AdditionalData &additional_data_)
-	// 		: PreconditionBase(comm)
-	// 	{
-	// 		additional_data = additional_data_;
-
-	// 		PetscErrorCode ierr = PCCreate(comm, &pc);
-	// 		AssertThrow(ierr ==0, ExcPETScError(ierr));
-
-	// 		initialize();
-	// 	}
-
-	// 	PreconditionFieldSplit::AdditionalData::AdditionalData(
-	// 		const double omega)
-	// 		: omega(omega)
-	// 	{}
-
-	// 	PreconditionFieldSplit::PreconditionFieldSplit(
-	// 	const MatrixBase     &matrix,
-	// 	const AdditionalData &additional_data)
-	// 	: PreconditionBase(matrix.get_mpi_communicator())
-	// 	{
-	// 	initialize(matrix, additional_data);
-	// 	}
-
-	// 	void
-	// 	PreconditionFieldSplit::initialize()
-	// 	{
-	// 	PetscErrorCode ierr = PCSetType(pc, const_cast<char *>(PCBJACOBI));
-	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
-
-	// 	ierr = PCSetFromOptions(pc);
-	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
-	// 	}
-
-	// 	void
-	// 	PreconditionBlockJacobi::initialize(const MatrixBase     &matrix_,
-	// 									const AdditionalData &additional_data_)
-	// 	{
-	// 	clear();
-
-	// 	additional_data = additional_data_;
-
-	// 	create_pc_with_mat(matrix_);
-	// 	initialize();
-	// 	}
-	// } //namespace PCFieldSplit
-
-template <class PreconditionerType>
+	template <class PreconditionerType>
 	class SchurComplement : public Subscriptor
 	{
 	public:
