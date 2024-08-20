@@ -653,6 +653,41 @@ namespace NonlinearElasticity
 	};
 
 	template<int dim>
+	class FExt : public Function<dim>
+	{
+	public:
+		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time, double& mu)
+
+		{
+			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+			Assert(dim >= 2, ExcInternalError());
+			Point<dim> u;
+
+			for (unsigned int j = 0; j < 20; j++) {
+				u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+				u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			}
+
+			//PK1 contributions: (make it 2mu-1 for the original, potentially wrong, version)
+			values[0] = a * (2.0 * mu) * M_PI * M_PI * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			values[1] = -a * (2.0 * mu) * M_PI * M_PI * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			//Acceleration contributions:
+			values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+				+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+				+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+		}
+		virtual void
+			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
+		{
+			const unsigned int n_points = points.size();
+			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
+			for (unsigned int p = 0; p < n_points; ++p)
+				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
+		}
+	};
+
+	template<int dim>
 	class PressureRightHandSide : public Function<dim>
 	{
 	public:
@@ -1373,7 +1408,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::create_grid()
 	{
 		cell_measure = 1;
-		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,(height) }, { -1,-1,0 }, { 1.,1., 2. * height });
+		GridGenerator::subdivided_hyper_cube(triangulation,0, 1.);
 		triangulation.refine_global(parameters.n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
@@ -1381,8 +1416,17 @@ namespace NonlinearElasticity
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (abs(face_center[2] - 0.0) < 0.00001) {
+					if (abs(face_center[1] - 0.0) < 0.00001) {
+						face->set_boundary_id(0);
+					}
+					if (abs(face_center[0] - 0.0) < 0.00001) {
 						face->set_boundary_id(1);
+					}
+					if (abs(face_center[1] - 1.0) < 0.00001) {
+						face->set_boundary_id(2);
+					}
+					if (abs(face_center[0] - 1.0) < 0.00001) {
+						face->set_boundary_id(3);
 					}
 				}
 			cell_measure = std::min(cell_measure, cell->measure());
@@ -2318,7 +2362,7 @@ int main(int argc, char* argv[])
 		using namespace NonlinearElasticity;
 
 		Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
-		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
