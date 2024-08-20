@@ -678,7 +678,7 @@ namespace NonlinearElasticity
 				+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
 		}
 		virtual void
-			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
+			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu)
 		{
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
