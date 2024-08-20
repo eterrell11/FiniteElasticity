@@ -865,7 +865,7 @@ namespace NonlinearElasticity
 	class Solution : public Function<dim>
 	{
 	public:
-		Solution(double& present_time, double& velocity, double& kappa);
+		Solution(double& present_time, double& velocity);
 		virtual void vector_value(const Point<dim>& p,
 			Vector<double>& values) const override;
 		virtual void
@@ -889,10 +889,11 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		//Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] = a * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]) * std::sin(M_PI * present_time);
-		values[1] = -a * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]) * std::sin(M_PI * present_time);
+		values[0] = a * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]) * std::sin(M_PI * time);
+		values[1] = -a * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]) * std::sin(M_PI * time);
 		if (dim == 3)
 			values[2] = 0;
+		values[dim] = 0;
 	}
 	template <int dim>
 	void Solution<dim>::vector_value_list(
@@ -2218,7 +2219,7 @@ namespace NonlinearElasticity
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			relevant_solution,
-			Solution<dim>(dim+1),
+			Solution<dim>(present_time, parameters.TractionMagnitude),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::Linfty_norm,
