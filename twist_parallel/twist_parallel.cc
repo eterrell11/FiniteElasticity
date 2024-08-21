@@ -1213,14 +1213,14 @@ namespace NonlinearElasticity
 				dt *= 0.5;
 				n_ref += 1;
 			}
-			if (ref_step == 0) {
-				if (parameters.Simplex == true) {
-					create_simplex_grid(triangulation);
-				}
-				else {
-					create_grid();
-				}
+		
+			if (parameters.Simplex == true) {
+				create_simplex_grid(triangulation);
 			}
+			else {
+				create_grid();
+			}
+			
 
 			set_simulation_parameters();
 			
