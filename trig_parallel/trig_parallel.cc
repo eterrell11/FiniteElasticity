@@ -1168,6 +1168,7 @@ namespace NonlinearElasticity
 		double mu;
 
 		unsigned int height;
+		unsigned int n_ref;
 
 		double tau;
 		int max_it;
@@ -1242,19 +1243,20 @@ namespace NonlinearElasticity
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
-			if (ref_step == 0) {
-				if (parameters.Simplex == true) {
-					create_simplex_grid(triangulation);
-				}
-				else {
-					create_grid();
-				}
-			}
-
-			set_simulation_parameters();
 			for (int i = 0; i < ref_step; ++i) {
 				dt *= 0.5;
+				n_ref += 1;
 			}
+			if (parameters.Simplex == true) {
+				create_simplex_grid(triangulation);
+			}
+			else {
+				create_grid();
+			}
+		
+
+			set_simulation_parameters();
+			
 			setup_system();
 			savestep_no = 0;
 
@@ -1352,7 +1354,7 @@ namespace NonlinearElasticity
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 
 	}
 
@@ -1401,7 +1403,7 @@ namespace NonlinearElasticity
 		}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 	}
 
 	template <int dim>
@@ -1409,7 +1411,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1;
 		GridGenerator::hyper_cube(triangulation,0, 1.);
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
 			for (const auto& face : cell->face_iterators())
@@ -2082,7 +2084,7 @@ namespace NonlinearElasticity
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
 
-		SolverControl solver_control_S(2000, 1.0e-12);
+		SolverControl solver_control_S(2000, 1.0e-13);
 		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);

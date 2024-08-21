@@ -1211,7 +1211,7 @@ namespace NonlinearElasticity
 			n_ref = parameters.n_ref;
 			for (int i = 0; i < ref_step; ++i) {
 				dt *= 0.5;
-				n_ref += 1;
+				//n_ref += 1;
 			}
 		
 			if (parameters.Simplex == true) {
