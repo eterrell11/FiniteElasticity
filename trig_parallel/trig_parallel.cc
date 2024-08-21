@@ -1168,7 +1168,7 @@ namespace NonlinearElasticity
 		double mu;
 
 		unsigned int height;
-		unsigned int n_ref;
+		unsigned int n_ref
 
 		double tau;
 		int max_it;
@@ -1243,6 +1243,7 @@ namespace NonlinearElasticity
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
+			n_ref = parameters.n_ref;
 			for (int i = 0; i < ref_step; ++i) {
 				dt *= 0.5;
 				n_ref += 1;
