@@ -2194,7 +2194,7 @@ namespace NonlinearElasticity
 		//u_cell_wise_error.update_ghost_values();
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2207,7 +2207,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2220,7 +2220,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2234,7 +2234,7 @@ namespace NonlinearElasticity
 		//present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2247,7 +2247,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2260,7 +2260,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_solution,
+			solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
