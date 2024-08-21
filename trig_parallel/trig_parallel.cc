@@ -2234,7 +2234,7 @@ namespace NonlinearElasticity
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
+			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2247,7 +2247,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
+			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2260,7 +2260,7 @@ namespace NonlinearElasticity
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			relevant_error_solution_store,
+			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
 			(*quad_rule_ptr),
