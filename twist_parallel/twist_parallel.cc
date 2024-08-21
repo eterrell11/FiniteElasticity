@@ -1132,6 +1132,7 @@ namespace NonlinearElasticity
 		double kappa;
 		double mu;
 
+		unsigned int n_ref;
 		unsigned int height;
 
 		double tau;
@@ -1156,6 +1157,7 @@ namespace NonlinearElasticity
 		, pcout(std::cout, (this_mpi_process == 0))
 		, triangulation(mpi_communicator)
 		, dof_handler(triangulation)
+		, n_ref(parameters.n_ref)
 		, timestep_no(0)
 		, savestep_no(0)
 	{
@@ -1207,6 +1209,10 @@ namespace NonlinearElasticity
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
+			for (int i = 0; i < ref_step; ++i) {
+				dt *= 0.5;
+				n_ref += 1;
+			}
 			if (ref_step == 0) {
 				if (parameters.Simplex == true) {
 					create_simplex_grid(triangulation);
@@ -1217,9 +1223,7 @@ namespace NonlinearElasticity
 			}
 
 			set_simulation_parameters();
-			for (int i = 0; i < ref_step; ++i) {
-				dt *= 0.5;
-			}
+			
 			setup_system();
 			savestep_no = 0;
 
@@ -1317,7 +1321,7 @@ namespace NonlinearElasticity
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 
 	}
 
@@ -1366,7 +1370,7 @@ namespace NonlinearElasticity
 		}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 	}
 
 	template <int dim>
@@ -1374,7 +1378,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1;
 		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,(height) }, { -1,-1,0 }, { 1.,1., 2. * height });
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
 			for (const auto& face : cell->face_iterators())
