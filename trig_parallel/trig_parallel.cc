@@ -1168,7 +1168,7 @@ namespace NonlinearElasticity
 		double mu;
 
 		unsigned int height;
-		unsigned int n_ref
+		unsigned int n_ref;
 
 		double tau;
 		int max_it;
