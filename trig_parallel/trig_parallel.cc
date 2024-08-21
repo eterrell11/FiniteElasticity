@@ -1243,7 +1243,7 @@ namespace NonlinearElasticity
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
-			n_ref = parameters.n_ref;
+			set_simulation_parameters();
 			for (int i = 0; i < ref_step; ++i) {
 				dt *= 0.5;
 				n_ref += 1;
@@ -1256,7 +1256,6 @@ namespace NonlinearElasticity
 			}
 		
 
-			set_simulation_parameters();
 			
 			setup_system();
 			savestep_no = 0;
@@ -1312,7 +1311,7 @@ namespace NonlinearElasticity
 		rho_0 = parameters.rho_0;
 		present_time = parameters.start_time;
 		dt = parameters.dt;
-		//unsigned int height = 6;
+		n_ref = parameters.n_ref;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 	}
