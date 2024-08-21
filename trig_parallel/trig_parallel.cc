@@ -2176,7 +2176,7 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::calculate_error()
 	{
 		//error_solution_store.update_ghost_values();
-		relevant_error_solution_store = solution - error_solution_store;
+		//relevant_error_solution_store = solution - error_solution_store;
 		//error_sol.update_ghost_values();
 		//VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
 		//error = (true_solution - solution);
