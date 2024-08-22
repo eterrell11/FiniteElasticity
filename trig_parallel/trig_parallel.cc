@@ -671,7 +671,7 @@ namespace NonlinearElasticity
 			//PK1 contributions: (make it 2mu-1 for the original, potentially wrong, version)
 			values[0] = a * (2.0 * mu) * M_PI * M_PI * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 			values[1] = -a * (2.0 * mu) * M_PI * M_PI * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-			Acceleration contributions:
+			//Acceleration contributions:
 			values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
 				+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
 			values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
