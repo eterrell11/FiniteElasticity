@@ -579,7 +579,7 @@ namespace NonlinearElasticity
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
 		//full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
-		full_pk1_stress = mu * ful_FF;
+		full_pk1_stress = mu * full_FF;
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
