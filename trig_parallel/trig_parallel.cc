@@ -1906,7 +1906,7 @@ namespace NonlinearElasticity
 						auto solution_extrap = solution + dt * solution_dot;
 						relevant_solution = solution_extrap;
 						fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-						FF = get_real_FF(displacement_grads);
+						FF = get_real_FF(displacement_grads[q]);
 						Jf = get_Jf(FF);
 						HH_tilde = get_HH(FF,Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf, HH);
