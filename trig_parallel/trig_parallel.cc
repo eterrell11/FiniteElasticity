@@ -2189,7 +2189,7 @@ namespace NonlinearElasticity
 		//solution.block(1).add(-pressure_mean);
 
 		QTrapezoid<1>  q_trapez;
-		QIterated<dim> quadrature(q_trapez, 5);
+		QIterated<dim> error_quadrature(q_trapez, 5);
 
 		//u_cell_wise_error.update_ghost_values();
 		VectorTools::integrate_difference(*mapping_ptr,
@@ -2197,7 +2197,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
-			quadrature,
+			error_quadrature,
 			VectorTools::L2_norm,
 			&velocity_mask);
 
@@ -2210,7 +2210,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
-			(*quad_rule_ptr),
+			error_quadrature,
 			VectorTools::L1_norm,
 			&velocity_mask);
 
@@ -2223,7 +2223,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
-			(*quad_rule_ptr),
+			error_quadrature,
 			VectorTools::Linfty_norm,
 			&velocity_mask);
 
@@ -2237,7 +2237,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
-			(*quad_rule_ptr),
+			error_quadrature,
 			VectorTools::L2_norm,
 			&pressure_mask);
 
@@ -2250,7 +2250,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
-			(*quad_rule_ptr),
+			error_quadrature,
 			VectorTools::L1_norm,
 			&pressure_mask);
 
@@ -2263,7 +2263,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Functions::ZeroFunction<dim>(dim + 1),
 			p_cell_wise_error,
-			(*quad_rule_ptr),
+			error_quadrature,
 			VectorTools::Linfty_norm,
 			&pressure_mask);
 
