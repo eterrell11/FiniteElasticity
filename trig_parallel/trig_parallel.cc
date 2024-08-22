@@ -2197,7 +2197,7 @@ namespace NonlinearElasticity
 			relevant_solution,
 			Solution<dim>(present_time, parameters.InitialVelocity),
 			u_cell_wise_error,
-			(*quad_rule_ptr),
+			quadrature,
 			VectorTools::L2_norm,
 			&velocity_mask);
 
