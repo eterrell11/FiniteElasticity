@@ -889,8 +889,15 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		//Assert(values.size() == (dim), ExcDimensionMismatch(values.size(), dim));
-		values[0] = a * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]) * std::sin(M_PI * time);
-		values[1] = -a * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]) * std::sin(M_PI * time);
+		Point<dim> u;
+
+		for (unsigned int j = 0; j < 20; j++)
+		{
+			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+		}
+		values[0] = a * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::sin(M_PI * time);
+		values[1] = -a * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::sin(M_PI * time);
 		if (dim == 3)
 			values[2] = 0;
 		values[dim] = 0;
