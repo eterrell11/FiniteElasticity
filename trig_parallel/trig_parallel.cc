@@ -1249,9 +1249,11 @@ namespace NonlinearElasticity
 				n_ref += 1;
 			}
 			if (parameters.Simplex == true) {
+				triangulation.clear();
 				create_simplex_grid(triangulation);
 			}
 			else {
+				triangulation.clear();
 				create_grid();
 			}
 		
@@ -1901,7 +1903,7 @@ namespace NonlinearElasticity
 					HH_tilde = 2. * HH - old_HH;
 					pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 
-					if (present_time <= dt*1.1)
+					if (present_time < dt*1.1)
 					{
 						auto solution_extrap = solution + dt * solution_dot;
 						auto tmp_relevant_solution(relevant_solution);
