@@ -893,8 +893,8 @@ namespace NonlinearElasticity
 
 		for (unsigned int j = 0; j < 20; j++)
 		{
-			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
+			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
 		}
 		values[0] = a * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::sin(M_PI * time);
 		values[1] = -a * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::sin(M_PI * time);
