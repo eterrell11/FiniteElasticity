@@ -1901,6 +1901,18 @@ namespace NonlinearElasticity
 					HH_tilde = 2. * HH - old_HH;
 					pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 
+					if (present_time <= dt*1.1)
+					{
+						auto solution_extrap = solution + dt * solution_dot;
+						relevant_solution = solution_extrap;
+						fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
+						FF = get_real_FF(displacement_grads);
+						Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF,Jf);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf, HH);
+					}
+					
+
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
 					{
