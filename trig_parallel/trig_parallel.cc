@@ -1904,14 +1904,14 @@ namespace NonlinearElasticity
 					if (present_time <= dt*1.1)
 					{
 						auto solution_extrap = solution + dt * solution_dot;
-						auto tmp_relevant_solution;
-						tmp_relevant_solution.reinit(relevant_solution);
+						auto tmp_relevant_solution(relevant_solution);
+						
 						tmp_revant_solution = solution_extrap;
 						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, displacement_grads);
 						FF = get_real_FF(displacement_grads[q]);
 						old_Jf = get_Jf(FF);
 						HH_tilde = get_HH(FF,old_Jf);
-						pk1_dev_tilde = get_pk1_dev(FF, mu, old_Jf, HH);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, old_Jf, HH_tilde);
 					}
 					
 
