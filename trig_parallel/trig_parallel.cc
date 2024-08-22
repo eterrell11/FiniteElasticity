@@ -1907,7 +1907,7 @@ namespace NonlinearElasticity
 					{
 						LA::MPI::BlockVector solution_extrap;
 						solution_extrap.reinit(solution);
-						solution_extra = solution + dt * solution_dot;
+						solution_extrap = solution + dt * solution_dot;
 						auto tmp_relevant_solution(relevant_solution);
 						
 						tmp_relevant_solution = solution_extrap;
