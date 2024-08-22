@@ -1905,7 +1905,7 @@ namespace NonlinearElasticity
 
 					if (present_time < dt*1.1)
 					{
-						auto solution_extrap;
+						LA::MPI::BlockVector solution_extrap;
 						solution_extrap.reinit(solution);
 						solution_extra = solution + dt * solution_dot;
 						auto tmp_relevant_solution(relevant_solution);
