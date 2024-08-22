@@ -1905,7 +1905,9 @@ namespace NonlinearElasticity
 
 					if (present_time < dt*1.1)
 					{
-						auto solution_extrap = solution + dt * solution_dot;
+						auto solution_extrap;
+						solution_extrap.reinit(solution);
+						solution_extra = solution + dt * solution_dot;
 						auto tmp_relevant_solution(relevant_solution);
 						
 						tmp_relevant_solution = solution_extrap;
