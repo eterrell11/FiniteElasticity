@@ -2454,6 +2454,10 @@ template <int dim>
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
 			//cout << "Saving results at time : " << present_time << std::endl;
+			if (parameters.nu != 0.5) {
+				measure_energy();
+				solve_energy();
+			}
 			++savestep_no;
 			output_results();
 			save_counter++;
