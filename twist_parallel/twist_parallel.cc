@@ -2392,7 +2392,7 @@ template <int dim>
 
 		LA::MPI::BlockVector extra_vector = solution;
 		extra_vector.block(0) = velocity;
-		extra_vector.block(1) = energy;
+		extra_vector.block(1) = energy.block(1);
 
 		std::vector<std::string> extra_names(dim, "Velocity");
 		extra_names.emplace_back("Energy");
