@@ -2178,7 +2178,10 @@ namespace NonlinearElasticity
 		auto solution_save = solution.block(0);
 
 		if (present_time > dt) {
-			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+			//solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+			solution.block(0) = 4./3.*solution_save;
+			solution.block(0).add(2./3., velocity);
+			solution.block(0).add(-1./3.,old_solution.block(0) );
 		}
 		else {
 			solution.block(0).add(dt, solution_dot.block(0));
