@@ -425,7 +425,62 @@ namespace NonlinearElasticity
 
 	} //namespace ConstitutiveModels
 
-	template <class PreconditionerType>
+	// namespace PCField_Split
+	// {
+	// 	PreconditionFieldSplit::PreconditionFieldSplit()
+	// 	: PreconditionBase()
+	// 	{}
+
+	// 	PreconditionFieldSplit::PreconditionFieldSplit(
+	// 		const MPI_Comm		comm,
+	// 		const AdditionalData &additional_data_)
+	// 		: PreconditionBase(comm)
+	// 	{
+	// 		additional_data = additional_data_;
+
+	// 		PetscErrorCode ierr = PCCreate(comm, &pc);
+	// 		AssertThrow(ierr ==0, ExcPETScError(ierr));
+
+	// 		initialize();
+	// 	}
+
+	// 	PreconditionFieldSplit::AdditionalData::AdditionalData(
+	// 		const double omega)
+	// 		: omega(omega)
+	// 	{}
+
+	// 	PreconditionFieldSplit::PreconditionFieldSplit(
+	// 	const MatrixBase     &matrix,
+	// 	const AdditionalData &additional_data)
+	// 	: PreconditionBase(matrix.get_mpi_communicator())
+	// 	{
+	// 	initialize(matrix, additional_data);
+	// 	}
+
+	// 	void
+	// 	PreconditionFieldSplit::initialize()
+	// 	{
+	// 	PetscErrorCode ierr = PCSetType(pc, const_cast<char *>(PCBJACOBI));
+	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
+
+	// 	ierr = PCSetFromOptions(pc);
+	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
+	// 	}
+
+	// 	void
+	// 	PreconditionBlockJacobi::initialize(const MatrixBase     &matrix_,
+	// 									const AdditionalData &additional_data_)
+	// 	{
+	// 	clear();
+
+	// 	additional_data = additional_data_;
+
+	// 	create_pc_with_mat(matrix_);
+	// 	initialize();
+	// 	}
+	// } //namespace PCFieldSplit
+
+template <class PreconditionerType>
 	class SchurComplement : public Subscriptor
 	{
 	public:
@@ -1132,7 +1187,6 @@ namespace NonlinearElasticity
 		double kappa;
 		double mu;
 
-		unsigned int n_ref;
 		unsigned int height;
 
 		double tau;
@@ -1208,22 +1262,19 @@ namespace NonlinearElasticity
 		linfty_p_eps_vec.reserve(max_it);
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
-			n_ref = parameters.n_ref;
-			for (int i = 0; i < ref_step; ++i) {
-				dt *= 0.5;
-				//n_ref += 1;
+			if (ref_step == 0) {
+				if (parameters.Simplex == true) {
+					create_simplex_grid(triangulation);
+				}
+				else {
+					create_grid();
+				}
 			}
-		
-			if (parameters.Simplex == true) {
-				create_simplex_grid(triangulation);
-			}
-			else {
-				create_grid();
-			}
-			
 
 			set_simulation_parameters();
-			
+			for (int i = 0; i < ref_step; ++i) {
+				dt *= 0.5;
+			}
 			setup_system();
 			savestep_no = 0;
 
@@ -1321,7 +1372,7 @@ namespace NonlinearElasticity
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
-		triangulation.refine_global(n_ref);
+		triangulation.refine_global(parameters.n_ref);
 
 	}
 
@@ -1370,7 +1421,7 @@ namespace NonlinearElasticity
 		}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
 
-		triangulation.refine_global(n_ref);
+		triangulation.refine_global(parameters.n_ref);
 	}
 
 	template <int dim>
@@ -1378,7 +1429,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1;
 		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,(height) }, { -1,-1,0 }, { 1.,1., 2. * height });
-		triangulation.refine_global(n_ref);
+		triangulation.refine_global(parameters.n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
 			for (const auto& face : cell->face_iterators())
@@ -1949,7 +2000,7 @@ namespace NonlinearElasticity
 		auto& Pp = P.block(1,1);
 
 
-		SolverControl reduction_control_Kuu(1000, 1.0e-13);
+		SolverControl reduction_control_Kuu(1000, 1.0e-12);
 		SolverCG<LA::MPI::Vector> solver_Kuu(reduction_control_Kuu);
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
@@ -1959,12 +2010,12 @@ namespace NonlinearElasticity
 		preconditioner_S_comp.initialize(Pp, data);
 
 		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
-		preconditioner_S_in.initialize(Pp);
+		preconditioner_S_in.initialize(Kpp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
 
-		SolverControl solver_control_S(2000, 1.0e-13);
+		SolverControl solver_control_S(2000, 1.0e-12);
 		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
@@ -2033,10 +2084,7 @@ namespace NonlinearElasticity
 		auto solution_save = solution.block(0);
 
 		if (present_time > dt) {
-			//solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-			solution.block(0) = 4./3.*solution_save;
-			solution.block(0).add(2./3., velocity);
-			solution.block(0).add(-1./3.,old_solution.block(0) );
+			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
 		}
 		else {
 			solution.block(0).add(dt, solution_dot.block(0));
