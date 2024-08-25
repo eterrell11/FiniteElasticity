@@ -2071,7 +2071,7 @@ template <int dim>
 
 		SolverControl reduction_control_Kpp(1000, 1.0e-12);
 		SolverCG<LA::MPI::Vector> solver_Kpp(reduction_control_Kpp);
-		LA::MPI::PreconditionBlockJacobi preconditioner_Kpp;
+		PETScWrappers::PreconditionBlockJacobi preconditioner_Kpp;
 		preconditioner_Kpp.initialize(Kpp);
 
 
