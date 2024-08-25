@@ -2392,9 +2392,10 @@ template <int dim>
 
 		LA::MPI::BlockVector extra_vector = solution;
 		extra_vector.block(0) = velocity;
+		extra_vector.block(1) = energy;
 
 		std::vector<std::string> extra_names(dim, "Velocity");
-		extra_names.emplace_back("Pressure_error2");
+		extra_names.emplace_back("Energy");
 		std::vector<DataComponentInterpretation::DataComponentInterpretation>
 			interpretation3(dim,
 				DataComponentInterpretation::component_is_part_of_vector);
