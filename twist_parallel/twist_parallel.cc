@@ -1095,6 +1095,8 @@ template <class PreconditionerType>
 		void		 calculate_error();
 		void		 create_error_table();
 		void		 do_timestep();
+		void		 measure_energy();
+		void		 solve_energy();
 		
 		
 		Parameters::AllParameters parameters;
@@ -1152,7 +1154,8 @@ template <class PreconditionerType>
 		LA::MPI::BlockVector relevant_old_solution;
 
 
-
+		LA::MPI::BlockVector energy;
+		LA::MPI::BlockVector energy_RHS;
 
 		
 		LA::MPI::Vector velocity;
@@ -1277,9 +1280,6 @@ template <class PreconditionerType>
 			}
 			setup_system();
 			savestep_no = 0;
-
-			output_results();
-
 			save_counter = 1;
 			if (integrator != 2) {
 				{
@@ -1289,6 +1289,15 @@ template <class PreconditionerType>
 
 				}
 			}
+
+			if(parameters.nu != 0.5)
+			{
+				measure_energy();
+				solve_energy();
+			}
+			output_results();
+
+			
 
 			pcout << "New time step size : " << dt << std::endl;
 			pcout << std::endl;
