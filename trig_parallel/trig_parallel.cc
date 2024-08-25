@@ -2103,7 +2103,7 @@ namespace NonlinearElasticity
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp);
 
-		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
+		PETScWrappers::PreconditionAMG preconditioner_S_in;
 		preconditioner_S_in.initialize(Pp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
