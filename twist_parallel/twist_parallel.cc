@@ -1290,7 +1290,7 @@ template <class PreconditionerType>
 				}
 			}
 
-			if(parameters.nu != 0.5)
+			if(parameters.nu == 0.5)
 			{
 				measure_energy();
 				solve_energy();
@@ -2016,7 +2016,7 @@ template <class PreconditionerType>
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) + kappa * (Jf * std::log(Jf) - Jf + 1)) * fe_values.JxW(q);
+					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) ) * fe_values.JxW(q);
 				}
 			}
 			cell->get_dof_indices(local_dof_indices);
@@ -2454,7 +2454,7 @@ template <int dim>
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
 			//cout << "Saving results at time : " << present_time << std::endl;
-			if (parameters.nu != 0.5) {
+			if (parameters.nu== 0.5) {
 				measure_energy();
 				solve_energy();
 			}
