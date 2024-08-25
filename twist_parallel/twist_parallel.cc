@@ -1554,6 +1554,10 @@ template <class PreconditionerType>
 			mpi_communicator);
 		old_solution.reinit(owned_partitioning,
 			mpi_communicator);
+		energy.reinit(owned_partitioning,
+			mpi_communicator);
+		energy_rhs.reinit(owned_partitioning,
+			mpi_communicator);
 
 		relevant_error_solution_store.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
