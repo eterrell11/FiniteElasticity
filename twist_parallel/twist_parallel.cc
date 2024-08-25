@@ -1949,7 +1949,80 @@ template <class PreconditionerType>
 		P.compress(VectorOperation::add);
 	}
 
-	
+	template <int dim>
+	void Incompressible<dim>::measure_energy()
+	{
+
+
+		energy_RHS = 0;
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+
+		Vector<double>     cell_energy(dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Velocity(0);
+
+
+		Tensor<2, dim> FF;
+		double Jf;
+		Tensor<1, dim> vn;
+
+		double vol_change;
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			cell_energy = 0;
+			fe_values.reinit(cell);
+
+			fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+			fe_values[Velocity].get_function_values(solution_dot, sol_vec_velocity);
+
+			solution.update_ghost_values();
+			
+
+
+
+			for (const unsigned int q : fe_values.quadrature_point_indices())
+			{
+
+
+				FF = get_real_FF(displacement_grads[q]);
+				Jf = get_Jf(FF);
+				vn = sol_vec_velocity[q];
+
+				for (const unsigned int i : fe_values.dof_indices())
+				{
+					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) + kappa * (Jf * std::log(Jf) - Jf + 1)) * fe_values.JxW(q);
+				}
+			}
+			cell->get_dof_indices(local_dof_indices);
+
+			constraints.distribute_local_to_global(cell_energy,
+				local_dof_indices,
+				energy_RHS);
+
+		}
+		energy_RHS.block(0) = 0;
+	}
 
 
 
@@ -1987,7 +2060,23 @@ template <class PreconditionerType>
 
 	}
 
+template <int dim> 
+	void Incompressible<dim>::solve_energy()
+	{
+		const auto& Kpp = K.block(1, 1);
 
+		const auto& R = energy_RHS.block(1);
+
+		auto& E = energy.block(1);
+
+		SolverControl reduction_control_Kpp(1000, 1.0e-12);
+		SolverCG<LA::MPI::Vector> solver_Kpp(reduction_control_Kpp);
+		LA::MPI::PreconditionBlockJacobi preconditioner_Kpp;
+		preconditioner_Kpp.initialize(Kpp);
+
+
+		solver_Kpp.solve(Kpp, E, R, preconditioner_Kpp);
+	}
 
 
 	template <int dim>
