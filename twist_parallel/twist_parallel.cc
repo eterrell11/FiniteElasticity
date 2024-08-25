@@ -1556,11 +1556,6 @@ template <class PreconditionerType>
 			mpi_communicator);
 		energy.reinit(owned_partitioning,
 			mpi_communicator);
-		energy_rhs.reinit(owned_partitioning,
-			mpi_communicator);
-
-		energy.reinit(owned_partitioning,
-			mpi_communicator);
 		energy_RHS.reinit(owned_partitioning,
 			mpi_communicator);
 
