@@ -2027,6 +2027,8 @@ template <class PreconditionerType>
 
 		}
 		energy_RHS.block(0) = 0;
+		energy_RHS.compress(VectorOperation::add);
+
 	}
 
 
@@ -2068,6 +2070,7 @@ template <class PreconditionerType>
 template <int dim> 
 	void Incompressible<dim>::solve_energy()
 	{
+		energy.update_ghost_values();
 		const auto& Kpp = K.block(1, 1);
 
 		const auto& R = energy_RHS.block(1);
