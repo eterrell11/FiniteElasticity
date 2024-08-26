@@ -1998,11 +1998,11 @@ template <class PreconditionerType>
 			cell_energy = 0;
 			fe_values.reinit(cell);
 
-			fe_values[Velocity].get_function_gradients(solution, displacement_grads);
-			fe_values[Velocity].get_function_values(solution_dot, sol_vec_velocity);
+			fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
+			fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
 
 			solution.update_ghost_values();
-			
+			solution_dot.update_ghost_values();
 
 
 
