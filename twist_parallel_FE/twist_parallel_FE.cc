@@ -1843,6 +1843,13 @@ template <class PreconditionerType>
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
+
+		LA::MPI::BlockVector solution_extrap;
+		solution_extrap.reinit(solution);
+		solution_extrap = solution;
+		solution_extrap.add(dt, solution_dot);
+		auto tmp_relevant_solution(relevant_solution);
+		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
@@ -1855,11 +1862,14 @@ template <class PreconditionerType>
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
 
+				
+
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
+				fe_values[Velocity].get_function_gradients(tmp_relevant_solution, tmp_displacement_grads);
 
 
 
@@ -1892,7 +1902,6 @@ template <class PreconditionerType>
 						auto tmp_relevant_solution(relevant_solution);
 							
 						tmp_relevant_solution = solution_extrap;
-						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, tmp_displacement_grads);
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
 						HH_tilde = get_HH(FF,tmp_Jf);
