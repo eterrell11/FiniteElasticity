@@ -1883,6 +1883,22 @@ template <class PreconditionerType>
 					HH_tilde = 2. * HH - old_HH;
 					pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 
+					if (present_time < dt*1.1)
+					{
+						LA::MPI::BlockVector solution_extrap;
+						solution_extrap.reinit(solution);
+						solution_extrap = solution + dt * solution_dot;
+						auto tmp_relevant_solution(relevant_solution);
+						
+						tmp_relevant_solution = solution_extrap;
+						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, displacement_grads);
+						FF = get_real_FF(displacement_grads[q]);
+						double tmp_Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF,tmp_Jf);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+					}
+
+
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
 					{
