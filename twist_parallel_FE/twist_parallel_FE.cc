@@ -1897,17 +1897,11 @@ template <class PreconditionerType>
 
 					if (present_time < dt*1.1)
 					{
-						// LA::MPI::BlockVector solution_extrap;
-						// solution_extrap.reinit(solution);
-						// solution_extrap = solution;
-						// solution_extrap.add(dt, solution_dot);
-						// auto tmp_relevant_solution(relevant_solution);
-							
-						// tmp_relevant_solution = solution_extrap;
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
-						HH_tilde = 2. * HH - old_HH;
+						HH_tilde = get_HH(FF, tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+						HH_tilde = 2. * HH - old_HH;
 					}
 					else 
 					{
