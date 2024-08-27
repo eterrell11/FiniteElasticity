@@ -1895,6 +1895,7 @@ template <class PreconditionerType>
 						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, displacement_grads);
 						FF = get_real_FF(displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
+						pcout << tmp_Jf << std::endl;
 						HH_tilde = get_HH(FF,tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
 					// }
