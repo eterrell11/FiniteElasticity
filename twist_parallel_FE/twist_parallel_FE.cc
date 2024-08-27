@@ -1834,6 +1834,7 @@ template <class PreconditionerType>
 		Tensor<1,dim> old_un;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
@@ -1891,8 +1892,8 @@ template <class PreconditionerType>
 						auto tmp_relevant_solution(relevant_solution);
 							
 						tmp_relevant_solution = solution_extrap;
-						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, displacement_grads);
-						FF = get_real_FF(displacement_grads[q]);
+						fe_values[Velocity].get_function_gradients(tmp_relevant_solution, tmp_displacement_grads);
+						FF = get_real_FF(tmp_displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
 						HH_tilde = get_HH(FF,tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
