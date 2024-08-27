@@ -2148,7 +2148,7 @@ template <int dim>
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp, data);
 
-		PETScWrappers::PreconditionSOR preconditioner_S_in;
+		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
 		preconditioner_S_in.initialize(Pp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
