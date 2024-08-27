@@ -1895,7 +1895,7 @@ template <class PreconditionerType>
 
 				
 
-					if (present_time < dt*1.1)
+					// if (present_time < dt*1.1)
 					{
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
@@ -1903,11 +1903,11 @@ template <class PreconditionerType>
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
 						HH_tilde = 2. * HH - old_HH;
 					}
-					else 
-					{
-						HH_tilde = 2. * HH - old_HH;
-						pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
-					}
+					// else 
+					// {
+					// 	HH_tilde = 2. * HH - old_HH;
+					// 	pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+					// }
 
 
 					//temp_pressure -= pressure_mean;
