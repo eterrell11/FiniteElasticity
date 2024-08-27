@@ -1850,6 +1850,8 @@ template <class PreconditionerType>
 		solution_extrap.add(dt, solution_dot);
 		auto tmp_relevant_solution(relevant_solution);
 
+
+		tmp_relevant_solution = solution_extrap;
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
