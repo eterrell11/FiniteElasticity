@@ -1893,8 +1893,8 @@ template <class PreconditionerType>
 
 				
 
-					if (present_time < dt*1.1)
-					{
+					// if (present_time < dt*1.1)
+					// {
 						// LA::MPI::BlockVector solution_extrap;
 						// solution_extrap.reinit(solution);
 						// solution_extrap = solution;
@@ -1906,12 +1906,12 @@ template <class PreconditionerType>
 						double tmp_Jf = get_Jf(FF);
 						HH_tilde = get_HH(FF,tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-					}
-					else 
-					{
-						HH_tilde = 2. * HH - old_HH;
-						pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
-					}
+					// }
+					// else 
+					// {
+					// 	HH_tilde = 2. * HH - old_HH;
+					// 	pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+					// }
 
 
 					//temp_pressure -= pressure_mean;
