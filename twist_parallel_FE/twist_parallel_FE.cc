@@ -1906,7 +1906,7 @@ template <class PreconditionerType>
 						// tmp_relevant_solution = solution_extrap;
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						double tmp_Jf = get_Jf(FF);
-						HH_tilde = get_HH(FF,tmp_Jf);
+						//HH_tilde = get_HH(FF,tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
 					}
 					else 
