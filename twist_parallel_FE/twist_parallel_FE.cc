@@ -1811,7 +1811,6 @@ template <class PreconditionerType>
 		double Jf;
 		Tensor<1, dim> vn;
 
-		double vol_change;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
@@ -1920,7 +1919,6 @@ template <int dim>
 		const auto& Kuu = K.block(0, 0);
 		const auto& Kup = K.block(0, 1);
 		const auto& Kpu = K.block(1, 0);
-		auto& Kpp = K.block(1, 1);
 
 		//Kpp /= kappa;
 
