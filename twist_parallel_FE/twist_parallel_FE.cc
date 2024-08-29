@@ -203,10 +203,8 @@ namespace NonlinearElasticity
 			int n_ref;
 			unsigned int velocity_order;
 			unsigned int pressure_order;
-			int max_NS_it;
 			bool LumpMass;
 			bool Simplex;
-			double e_tol;
 			unsigned int max_ref;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
@@ -231,10 +229,6 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Integer(0),
 					"Pressure order");
-				prm.declare_entry("max_it",
-					"100",
-					Patterns::Integer(0),
-					"max_it");
 				prm.declare_entry("LumpMass",
 					"false",
 					Patterns::Bool(),
@@ -243,10 +237,6 @@ namespace NonlinearElasticity
 					"false",
 					Patterns::Bool(),
 					"Simplex");
-				prm.declare_entry("e_tol",
-					"0.000001",
-					Patterns::Double(),
-					"e_tol");
 				prm.declare_entry("max_ref",
 					"5",
 					Patterns::Integer(0),
@@ -262,10 +252,8 @@ namespace NonlinearElasticity
 				n_ref = prm.get_integer("n_ref");
 				velocity_order = prm.get_integer("Velocity order");
 				pressure_order = prm.get_integer("Pressure order");
-				max_NS_it = prm.get_double("max_it");
 				LumpMass = prm.get_bool("LumpMass");
 				Simplex = prm.get_bool("Simplex");
-				e_tol = prm.get_double("e_tol");
 				max_ref = prm.get_integer("max_ref");
 			}
 			prm.leave_subsection();
