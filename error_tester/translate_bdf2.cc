@@ -2113,7 +2113,7 @@ namespace NonlinearElasticity
 				vn = sol_vec_velocity[q];
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_energy[i] += 1/kappa * fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) + kappa * (Jf * std::log(Jf) - Jf + 1)) * fe_values.JxW(q);
+					cell_energy[i] += 1/kappa * fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF)-3.) + kappa * (Jf * std::log(Jf) - Jf + 1)) * fe_values.JxW(q);
 				}
 			}
 			cell->get_dof_indices(local_dof_indices);

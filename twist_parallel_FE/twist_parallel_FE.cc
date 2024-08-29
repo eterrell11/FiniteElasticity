@@ -2295,7 +2295,7 @@ template <int dim>
 			u_cell_wise_error,
 			VectorTools::Linfty_norm);
 
-		present_time -= dt;
+		// present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			relevant_error_solution_store,
@@ -2334,7 +2334,7 @@ template <int dim>
 		pressure_error_output[2] = VectorTools::compute_global_error(triangulation,
 			p_cell_wise_error,
 			VectorTools::Linfty_norm);
-		present_time += dt;
+		// present_time += dt;
 		//solution.block(1).add(pressure_mean);
 
 		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
