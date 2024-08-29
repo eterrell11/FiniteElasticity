@@ -206,6 +206,7 @@ namespace NonlinearElasticity
 			bool LumpMass;
 			bool Simplex;
 			unsigned int max_ref;
+			bool AB2_extrap;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -241,6 +242,10 @@ namespace NonlinearElasticity
 					"5",
 					Patterns::Integer(0),
 					"max_ref");
+				prm.declare_entry("AB2_extrap",
+					"true",
+					Patterns::Bool(),
+					"AB2_extrap");
 			}
 			prm.leave_subsection();
 		}
@@ -255,6 +260,7 @@ namespace NonlinearElasticity
 				LumpMass = prm.get_bool("LumpMass");
 				Simplex = prm.get_bool("Simplex");
 				max_ref = prm.get_integer("max_ref");
+				AB2_extrap = prm.get_bool("AB2_extrap");
 			}
 			prm.leave_subsection();
 		}
