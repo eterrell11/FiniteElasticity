@@ -1685,7 +1685,7 @@ template <class PreconditionerType>
 					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				
-					if (AB2_extrap){
+					if (parameters.AB2_extrap){
 						if (present_time < dt*1.1)
 						{
 							FF = get_real_FF(tmp_displacement_grads[q]);
