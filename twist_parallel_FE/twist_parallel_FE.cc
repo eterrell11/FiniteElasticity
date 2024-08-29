@@ -425,60 +425,6 @@ namespace NonlinearElasticity
 
 	} //namespace ConstitutiveModels
 
-	// namespace PCField_Split
-	// {
-	// 	PreconditionFieldSplit::PreconditionFieldSplit()
-	// 	: PreconditionBase()
-	// 	{}
-
-	// 	PreconditionFieldSplit::PreconditionFieldSplit(
-	// 		const MPI_Comm		comm,
-	// 		const AdditionalData &additional_data_)
-	// 		: PreconditionBase(comm)
-	// 	{
-	// 		additional_data = additional_data_;
-
-	// 		PetscErrorCode ierr = PCCreate(comm, &pc);
-	// 		AssertThrow(ierr ==0, ExcPETScError(ierr));
-
-	// 		initialize();
-	// 	}
-
-	// 	PreconditionFieldSplit::AdditionalData::AdditionalData(
-	// 		const double omega)
-	// 		: omega(omega)
-	// 	{}
-
-	// 	PreconditionFieldSplit::PreconditionFieldSplit(
-	// 	const MatrixBase     &matrix,
-	// 	const AdditionalData &additional_data)
-	// 	: PreconditionBase(matrix.get_mpi_communicator())
-	// 	{
-	// 	initialize(matrix, additional_data);
-	// 	}
-
-	// 	void
-	// 	PreconditionFieldSplit::initialize()
-	// 	{
-	// 	PetscErrorCode ierr = PCSetType(pc, const_cast<char *>(PCBJACOBI));
-	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
-
-	// 	ierr = PCSetFromOptions(pc);
-	// 	AssertThrow(ierr == 0, ExcPETScError(ierr));
-	// 	}
-
-	// 	void
-	// 	PreconditionBlockJacobi::initialize(const MatrixBase     &matrix_,
-	// 									const AdditionalData &additional_data_)
-	// 	{
-	// 	clear();
-
-	// 	additional_data = additional_data_;
-
-	// 	create_pc_with_mat(matrix_);
-	// 	initialize();
-	// 	}
-	// } //namespace PCFieldSplit
 
 template <class PreconditionerType>
 	class SchurComplement : public Subscriptor
@@ -707,26 +653,7 @@ template <class PreconditionerType>
 		}
 	};
 
-	template<int dim>
-	class PressureRightHandSide : public Function<dim>
-	{
-	public:
-		virtual void rhs_value(const Point<dim>& p, double& value, double& a, double& present_time, double& mu, double& kappa)
-
-		{
-			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
-			Assert(dim >= 2, ExcInternalError());
-			value = 0;
-		}
-		virtual void
-			rhs_value_list(const std::vector<Point<dim>>& points, std::vector<double>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
-		{
-			const unsigned int n_points = points.size();
-			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-			for (unsigned int p = 0; p < n_points; ++p)
-				PressureRightHandSide<dim>::rhs_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
-		}
-	};
+	
 
 	template<int dim>
 	class TractionVector : public Function<dim>
@@ -836,49 +763,7 @@ template <class PreconditionerType>
 			InitialVelocity<dim>::vector_value(points[p], value_list[p]);
 	}
 
-	template <int dim>
-	class InitialAcceleration : public Function<dim>
-	{
-	public:
-		InitialAcceleration(double& InitialVelocity, double& mu, double& dt);
-		virtual void vector_value(const Point<dim>& p,
-			Vector<double>& values) const override;
-		virtual void
-			vector_value_list(const std::vector<Point<dim>>& points,
-				std::vector<Vector<double>>& value_list) const override;
-	private:
-		const double velocity;
-		const double mu;
-		const double dt;
-	};
-
-	template <int dim>
-	InitialAcceleration<dim>::InitialAcceleration(double& InitialVelocity, double& mu, double& dt)
-		: Function<dim>(dim + 1)
-		, velocity(InitialVelocity)
-		, mu(mu)
-		, dt(dt)
-	{}
-
-	template <int dim>
-	void
-		InitialAcceleration<dim>::vector_value(const Point<dim>& /*p*/,
-			Vector<double>& values) const
-	{
-		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = 0;
-		values[1] = 0;
-	}
-	template <int dim>
-	void InitialAcceleration<dim>::vector_value_list(
-		const std::vector<Point<dim>>& points,
-		std::vector<Vector<double>>& value_list) const
-	{
-		const unsigned int n_points = points.size();
-		Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
-		for (unsigned int p = 0; p < n_points; ++p)
-			InitialAcceleration<dim>::vector_value(points[p], value_list[p]);
-	}
+	
 
 
 	template <int dim>
