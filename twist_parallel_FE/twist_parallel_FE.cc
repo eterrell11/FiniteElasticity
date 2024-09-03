@@ -880,7 +880,7 @@ template <class PreconditionerType>
 		void		 assemble_Rp();
 		void		 assemble_Rv();
 		void         solve_SI();
-		void		 solve_FE();
+		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
 		void		 solve_SI_system();
 		void		 update_motion();
 		void         output_results() const;
@@ -947,7 +947,8 @@ template <class PreconditionerType>
 
 		LA::MPI::BlockVector solution_extrap;
 		LA::MPI::BlockVector relevant_solution_extrap;
-
+		LA::MPI::BlockVector solution_dot_extrap;
+		LA::MPI::BlockVector relevant_solution_dot_extrap;
 
 
 		LA::MPI::BlockVector energy;
@@ -1346,6 +1347,8 @@ template <class PreconditionerType>
 			mpi_communicator);
 		solution_extrap.reinit(owned_partitioning,
 			mpi_communicator);
+		solution_dot_extrap.reinit(owned_partitioning,
+			mpi_communicator);
 		error_solution_store.reinit(owned_partitioning,
 			mpi_communicator);
 		solution_dot.reinit(owned_partitioning,
@@ -1363,6 +1366,8 @@ template <class PreconditionerType>
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution_extrap.reinit(owned_partitioning, relevant_partitioning,
+			mpi_communicator);
+		relevant_solution_dot_extrap.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution_dot.reinit(owned_partitioning,
 			relevant_partitioning,
@@ -2042,7 +2047,7 @@ template <class PreconditionerType>
 		solution_extrap.add(dt, solution_dot);
 		relevant_solution_extrap = solution_extrap;
 
-		
+
 		{
 			assemble_system_SI();
 		}
@@ -2170,14 +2175,12 @@ template <int dim>
 
 
 	template <int dim>
-	void Incompressible<dim>::solve_FE()
+	void Incompressible<dim>::solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol)
 	{
 
-		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
 
 		const auto& Kuu = K.block(0, 0);
 
-		//Kpp /= kappa;
 
 		auto& Ru = R.block(0);
 
@@ -2187,14 +2190,14 @@ template <int dim>
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
-		auto& v = solution_dot.block(0);
+		auto& v = sol.block(0);
 		solver_Kuu.solve(Kuu, v, R.block(0), preconditioner_Kuu);
 
 
 		
-		constraints.distribute(solution_dot);
+		constraints.distribute(sol);
 
-		relevant_solution_dot = solution_dot;
+		rel_sol = sol;
 
 	}
 	
