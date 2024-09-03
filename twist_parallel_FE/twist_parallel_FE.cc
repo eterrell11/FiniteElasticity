@@ -1857,7 +1857,7 @@ template <class PreconditionerType>
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
-		std::vector<Tensor<1,dim>> sol_vec_velocity(n_q_points);
+		std::vector<Tensor<1,dim>> sol_vec_velocity(n_q_points, Tensor<1,dim>());
 
 
 
