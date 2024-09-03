@@ -1068,6 +1068,7 @@ template <class PreconditionerType>
 				else {
 					create_grid();
 				}
+				
 			}
 
 			set_simulation_parameters();
@@ -1075,6 +1076,13 @@ template <class PreconditionerType>
 				dt *= 0.5;
 			}
 			setup_system();
+			if (ref_step == 0)
+			{
+				error_solution_store.reinit(owned_partitioning,
+					mpi_communicator);
+				relevant_error_solution_store.reinit(owned_partitioning, relevant_partitioning,
+					mpi_communicator);
+			}
 			savestep_no = 0;
 			save_counter = 1;
 			if (integrator != 2) {
@@ -1348,8 +1356,6 @@ template <class PreconditionerType>
 			mpi_communicator);
 		solution_dot_extrap.reinit(owned_partitioning,
 			mpi_communicator);
-		error_solution_store.reinit(owned_partitioning,
-			mpi_communicator);
 		solution_dot.reinit(owned_partitioning,
 			mpi_communicator);
 		old_solution.reinit(owned_partitioning,
@@ -1360,8 +1366,6 @@ template <class PreconditionerType>
 			mpi_communicator);
 
 
-		relevant_error_solution_store.reinit(owned_partitioning, relevant_partitioning,
-			mpi_communicator);
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution_extrap.reinit(owned_partitioning, relevant_partitioning,
@@ -2189,7 +2193,7 @@ template <int dim>
 
 		const auto& Kuu = K.block(0, 0);
 
-
+		auto& Rv = R.block(0);
 
 
 		SolverControl reduction_control_Kuu(1000, 1.0e-12);
@@ -2197,8 +2201,17 @@ template <int dim>
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
+
+		LA::MPI::Vector un_motion(velocity);		
+		un_motion = 0;
+		LA::MPI::Vector tmp1(Rv);
+		tmp1 = 0;
+
+		un_motion.add(1.0, velocity);
+		
+		K.block(0,0).vmult_add(Rv, un_motion);
 		auto& v = sol.block(0);
-		solver_Kuu.solve(Kuu, v, R.block(0), preconditioner_Kuu);
+		solver_Kuu.solve(Kuu, v, Rv, preconditioner_Kuu);
 
 
 		
