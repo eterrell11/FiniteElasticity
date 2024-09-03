@@ -2043,11 +2043,13 @@ template <class PreconditionerType>
 		constraints.close();
 
 
-		solution_extrap = solution;
-		solution_extrap.add(dt, solution_dot);
+		// solution_extrap = solution;
+		// solution_extrap.add(dt, solution_dot);
+		// relevant_solution_extrap = solution_extrap;
+		solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
+		solution_extrap = solution + 0.5 * dt * solution_dot;
 		relevant_solution_extrap = solution_extrap;
-
-
+		
 		{
 			assemble_system_SI();
 		}
