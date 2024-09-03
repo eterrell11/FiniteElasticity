@@ -1904,8 +1904,8 @@ template <class PreconditionerType>
 					{
 						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-						cell_rhs(i) += (N_u_i * vn - dt * scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
-							dt * rho_0 * N_u_i * rhs_values[q]) * fe_values.JxW(q);
+						cell_rhs(i) += (scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
+							rho_0 * N_u_i * rhs_values[q]) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
@@ -2054,10 +2054,10 @@ template <class PreconditionerType>
 		// solution_extrap.add(dt, solution_dot);
 		// relevant_solution_extrap = solution_extrap;
 
-		// assemble_Rv();
-		// solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
-		// solution_extrap = solution + 0.5 * dt *( solution_dot_extrap + solution_dot);
-		solution_extrap = solution + dt * solution_dot;
+
+		assemble_Rv();
+		solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
+		solution_extrap = solution + 0.5 * dt *( solution_dot_extrap + solution_dot);
 		relevant_solution_extrap = solution_extrap;
 
 		{
