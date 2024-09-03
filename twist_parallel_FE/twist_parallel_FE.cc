@@ -877,7 +877,6 @@ template <class PreconditionerType>
 		void         setup_system();
 		void         assemble_system_mass();
 		void         assemble_system_SI();
-		void		 assemble_Rp();
 		void		 assemble_Rv();
 		void         solve_SI();
 		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
@@ -1852,10 +1851,13 @@ template <class PreconditionerType>
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
 
+		Tensor<1,dim> vn;
+
 		double temp_pressure;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
+		std::vector<Tensor<1,dim>> sol_vec_velocity(n_q_points);
 
 
 
@@ -1874,6 +1876,7 @@ template <class PreconditionerType>
 				
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
+				fe_values[Velocity].get_function_gradients(relevant_solution_dot, sol_vec_velocity);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 
 
@@ -1884,7 +1887,7 @@ template <class PreconditionerType>
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
 					temp_pressure = sol_vec_pressure[q];
-					
+					vn = sol_vec_velocity[q];
 					FF = get_real_FF(displacement_grads[q]);
 					Jf = get_Jf(FF);
 					HH = get_HH(FF, Jf);
@@ -1897,8 +1900,8 @@ template <class PreconditionerType>
 					{
 						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
-							rho_0 *N_u_i * rhs_values[q]) * fe_values.JxW(q);
+						cell_rhs(i) += (N_u_i * vn - dt * scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
+							dt * rho_0 * N_u_i * rhs_values[q]) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
