@@ -945,6 +945,10 @@ template <class PreconditionerType>
 		LA::MPI::BlockVector old_solution;
 		LA::MPI::BlockVector relevant_old_solution;
 
+		LA::MPI::BlockVector solution_extrap;
+		LA::MPI::BlockVector relevant_solution_extrap;
+
+
 
 		LA::MPI::BlockVector energy;
 		LA::MPI::BlockVector energy_RHS;
@@ -1340,6 +1344,8 @@ template <class PreconditionerType>
 
 		solution.reinit(owned_partitioning,
 			mpi_communicator);
+		solution_extrap.reinit(owned_partitioning,
+			mpi_communicator);
 		error_solution_store.reinit(owned_partitioning,
 			mpi_communicator);
 		solution_dot.reinit(owned_partitioning,
@@ -1355,6 +1361,8 @@ template <class PreconditionerType>
 		relevant_error_solution_store.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
+			mpi_communicator);
+		relevant_solution_extrap.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
 		relevant_solution_dot.reinit(owned_partitioning,
 			relevant_partitioning,
@@ -1636,14 +1644,7 @@ template <class PreconditionerType>
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
 
-		LA::MPI::BlockVector solution_extrap;
-		solution_extrap.reinit(solution);
-		solution_extrap = solution;
-		solution_extrap.add(dt, solution_dot);
-		auto tmp_relevant_solution(relevant_solution);
-
-
-		tmp_relevant_solution = solution_extrap;
+		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
@@ -1663,7 +1664,7 @@ template <class PreconditionerType>
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
-				fe_values[Velocity].get_function_gradients(tmp_relevant_solution, tmp_displacement_grads);
+				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
 
 
@@ -1852,14 +1853,8 @@ template <class PreconditionerType>
 		std::vector<double> sol_vec_pressure(n_q_points);
 
 
-		LA::MPI::BlockVector solution_extrap;
-		solution_extrap.reinit(solution);
-		solution_extrap = solution;
-		solution_extrap.add(dt, solution_dot);
-		auto tmp_relevant_solution(relevant_solution);
 
 
-		tmp_relevant_solution = solution_extrap;
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
@@ -2041,6 +2036,13 @@ template <class PreconditionerType>
 
 		}
 		constraints.close();
+
+
+		solution_extrap = solution;
+		solution_extrap.add(dt, solution_dot);
+		relevant_solution_extrap = solution_extrap;
+
+		
 		{
 			assemble_system_SI();
 		}
