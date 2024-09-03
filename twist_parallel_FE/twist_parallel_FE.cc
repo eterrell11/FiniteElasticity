@@ -1842,7 +1842,7 @@ template <class PreconditionerType>
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) ) * fe_values.JxW(q);
+					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - 3.)) * fe_values.JxW(q);
 				}
 			}
 			cell->get_dof_indices(local_dof_indices);

@@ -1208,7 +1208,7 @@ namespace NonlinearElasticity
 			std::cout << std::endl;
 
 
-			while (present_time < end_time - 1e-12) {
+			while (present_time < end_time - 1e-10) {
 				do_timestep();
 			}
 
