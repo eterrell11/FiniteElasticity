@@ -1846,9 +1846,7 @@ template <class PreconditionerType>
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
 
-		//double temp_pressure;
-		Tensor<1,dim> un;
-		Tensor<1,dim> old_un;
+		double temp_pressure;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
@@ -1899,7 +1897,7 @@ template <class PreconditionerType>
 					{
 						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + temp_pressure * HH) +
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
 							rho_0 *N_u_i * rhs_values[q]) * fe_values.JxW(q);
 					}
 				}
