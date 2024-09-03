@@ -1876,7 +1876,7 @@ template <class PreconditionerType>
 				
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-				fe_values[Velocity].get_function_gradients(relevant_solution_dot, sol_vec_velocity);
+				fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 
 
