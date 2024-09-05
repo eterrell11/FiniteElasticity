@@ -2396,10 +2396,13 @@ template <int dim>
 			nu_str = "49";
 		if (parameters.nu == 0.5)
 			nu_str = "5";
-		std::ofstream output("error_table" + boi + nu_str + ".csv");
-		error_table.write_text(std::cout);
-		//std::ofstream output("error_table.csv");
+		error_table.write_text(pcout);
+		
+		
+		//This part actually generates the csv file
 		std::ostringstream stream;
+		std::ofstream output("error_table" + boi + nu_str + ".csv");
+
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
 		dt = parameters.dt;
 		for (int i = 1; i < max_it; ++i) {
