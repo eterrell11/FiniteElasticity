@@ -2396,7 +2396,8 @@ template <int dim>
 			nu_str = "49";
 		if (parameters.nu == 0.5)
 			nu_str = "5";
-		error_table.write_text(pcout);
+		if(this_mpi_process == 0)
+			error_table.write_text(std::cout);
 		
 		
 		//This part actually generates the csv file
