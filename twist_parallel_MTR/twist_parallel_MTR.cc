@@ -1921,7 +1921,6 @@ template <int dim>
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 						pk1_dev_tilde = pk1_dev;
 						HH_tilde = HH;
-						std::cout << pk1_dev_tilde << std::endl;
 
 					}
 					else 
@@ -1938,7 +1937,6 @@ template <int dim>
 
 						HH_tilde = 0.5 * (HH + old_HH);
 						pk1_dev_tilde = 0.5 * (pk1_dev + old_pk1_dev);
-						std::cout << pk1_dev_tilde << std::endl;
 					}
 
 
