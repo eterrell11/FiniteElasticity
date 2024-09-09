@@ -2565,7 +2565,7 @@ template <int dim>
 		constraints.distribute(sol);
 
 		relevant_solution = solution;
-		relevant_sol = sol;
+		rel_sol = sol;
 
 	}
 
