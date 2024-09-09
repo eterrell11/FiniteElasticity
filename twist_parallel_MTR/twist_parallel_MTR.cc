@@ -2876,7 +2876,7 @@ template <int dim>
 		{
 			solve_SBDF2();
 		}
-		if (paramters.integrator == 2)
+		if (parameters.integrator == 2)
 			solve_MTR();
 
 
