@@ -2563,8 +2563,8 @@ template <int dim>
 		constraints.distribute(solution);
 		constraints.distribute(solution_dot);
 
-		relevant_solution = solution;
-		relevant_solution_dot = solution_dot;
+		relevant_solution = sol;
+		relevant_solution_dot = sol_dot;
 
 	}
 
