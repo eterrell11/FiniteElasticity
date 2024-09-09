@@ -2543,7 +2543,7 @@ template <int dim>
 
 		auto& v = sol.block(0);
 
-		auto& p = sol.block(1);
+		auto& p = solution.block(1);
 		constraints.set_zero(solution);
 		constraints.set_zero(sol);
 
