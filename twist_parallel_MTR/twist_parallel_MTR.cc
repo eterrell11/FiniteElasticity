@@ -2876,6 +2876,8 @@ template <int dim>
 		{
 			solve_SBDF2();
 		}
+		if (paramters.integrator == 2)
+			solve_MTR();
 
 
 		if (present_time > end_time)
