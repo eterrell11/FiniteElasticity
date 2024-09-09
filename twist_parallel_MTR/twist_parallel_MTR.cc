@@ -2351,9 +2351,10 @@ template <int dim>
 
 		old_velocity = velocity;
 		velocity = solution_dot.block(0);
+		old_solution.block(0) = solution.block(0);
 		solution.block(0) += 0.5 * dt * (velocity + old_velocity);
 
-		old_solution.block(0) = solution_save;
+
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 
