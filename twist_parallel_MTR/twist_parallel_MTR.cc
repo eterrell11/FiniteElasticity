@@ -1467,12 +1467,8 @@ template <class PreconditionerType>
 		bool lump_mass = parameters.LumpMass;
 
 		double scale;
-		if (parameters.integrator == 1) {
-			scale = rho_0 / dt;
-		}
-		else {
-			scale = 1.;
-		}
+		scale = rho_0 / dt;
+		
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
 			{
