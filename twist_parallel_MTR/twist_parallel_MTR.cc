@@ -883,7 +883,7 @@ template <class PreconditionerType>
 		void         solve_MTR();
 		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
 		void		 solve_SBDF2_system();
-		void		 solve_MTR_system();
+		void		 solve_MTR_system(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
 		//void		 update_motion();
 		void         output_results() const;
 		void		 calculate_error();
@@ -1864,16 +1864,7 @@ template <int dim>
 		Tensor<2, dim> old_pk1_dev;
 		Tensor<2, dim> pk1_dev_tilde;
 
-		double scale;
-		double shifter;
-		if (present_time >  dt) {
-			scale = 2. / 3.;
-			shifter = 0 /*1./3.*/;
-		}
-		else {
-			scale = 1.;
-			shifter = 0.;
-		}
+	
 		//double temp_pressure;
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
@@ -1918,9 +1909,6 @@ template <int dim>
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					//temp_pressure = sol_vec_pressure[q];
-					un = sol_vec_displacement[q];
-					old_un = old_sol_vec_displacement[q];
 					FF = get_real_FF(old_displacement_grads[q]);
 					Jf = get_Jf(FF);
 					old_HH = get_HH(FF, Jf);
@@ -1932,28 +1920,29 @@ template <int dim>
 					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				
-					if (parameters.AB2_extrap){
-						if (present_time < dt*1.1)
-						{
-							FF = get_real_FF(tmp_displacement_grads[q]);
-							double tmp_Jf = get_Jf(FF);
-							HH_tilde = get_HH(FF, tmp_Jf);
-							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-							HH_tilde = 2. * HH - old_HH;
-						}
-						else 
-						{
-							HH_tilde = 2. * HH - old_HH;
-							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
-						}
+					if (MTR_counter==0)
+					{
+						FF = get_real_FF(displacement_grads[q]);
+						Jf = get_Jf(FF);
+						HH = get_HH(FF, Jf);
+						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
+						pk1_dev_tilde = pk1_dev;
+						HH_tilde = HH;
 					}
 					else 
 					{
-						FF = get_real_FF(tmp_displacement_grads[q]);
-						double tmp_Jf = get_Jf(FF);
-						HH_tilde = get_HH(FF, tmp_Jf);
-						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-						HH_tilde = 2. * HH - old_HH;
+						FF = get_real_FF(tmp_old_displacement_grads[q]);
+						Jf = get_Jf(FF);
+						old_HH = get_HH(FF, Jf);
+						old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
+
+						FF = get_real_FF(displacement_grads[q]);
+						Jf = get_Jf(FF);
+						HH = get_HH(FF, Jf);
+						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
+
+						HH_tilde = 0.5 * (HH + old_HH);
+						pk1_dev_tilde = 0.5 * (pk1_dev + old_pk1_dev);
 					}
 
 
@@ -1991,11 +1980,6 @@ template <int dim>
 
 						for (const unsigned int q : fe_face_values.quadrature_point_indices())
 						{
-							un = face_sol_vec_displacement[q];
-							old_un = old_face_sol_vec_displacement[q];
-							FF = get_real_FF(face_displacement_grads[q]);
-							Jf = get_Jf(FF);
-							HH = get_HH(FF, Jf);
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
 								if (face->boundary_id() == 1) {
@@ -2353,18 +2337,19 @@ template <int dim>
 			assemble_system_MTR(MTR_counter);
 		}
 		{
-			solve_MTR_system();
+			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
 		}
 		++MTR_counter;
 		{
 			assemble_system_MTR(MTR_counter);
 		}
 		{
-			solve_MTR_system();
+			solve_MTR_system(solution_dot, solution_dot_extrap);
 		}
 
 		old_velocity = velocity;
 		velocity = solution_dot.block(0);
+		solution.block(0) += 0.5 * dt * (velocity + old_velocity);
 
 		auto solution_save = solution.block(0);
 
