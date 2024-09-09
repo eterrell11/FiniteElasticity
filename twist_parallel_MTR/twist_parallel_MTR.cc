@@ -1931,7 +1931,7 @@ template <int dim>
 					}
 					else 
 					{
-						FF = get_real_FF(tmp_old_displacement_grads[q]);
+						FF = get_real_FF(tmp_displacement_grads[q]);
 						Jf = get_Jf(FF);
 						old_HH = get_HH(FF, Jf);
 						old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
@@ -2481,7 +2481,7 @@ template <int dim>
 	}
 
 	template <int dim>
-	void Incompressible<dim>::solve_MTR_system()
+	void Incompressible<dim>::solve_MTR_system(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol)
 	{
 
 		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
@@ -2539,9 +2539,9 @@ template <int dim>
 		tmp1 *= -1.0;
 		Kpu.vmult_add(Rp, tmp1);
 
-		auto& v = solution_dot.block(0);
+		auto& v = sol.block(0);
 
-		auto& p = solution.block(1);
+		auto& p = sol.block(1);
 		auto fake_solution = solution;
 		constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
