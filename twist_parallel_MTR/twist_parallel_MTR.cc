@@ -2340,6 +2340,8 @@ template <int dim>
 			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
 		}
 		++MTR_counter;
+		solution_extrap.block(0) = solution.block(0) + dt * solution_dot_extrap.block(0);
+		relevant_solution_extrap - solution_extrap;
 		{
 			assemble_system_MTR(MTR_counter);
 		}
@@ -2561,10 +2563,10 @@ template <int dim>
 		//Solve for velocity
 
 		constraints.distribute(solution);
-		constraints.distribute(solution_dot);
+		constraints.distribute(sol);
 
-		relevant_solution = sol;
-		relevant_solution_dot = sol_dot;
+		relevant_solution = solution;
+		relevant_solution_dot = sol;
 
 	}
 
