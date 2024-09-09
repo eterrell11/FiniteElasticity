@@ -1088,14 +1088,11 @@ template <class PreconditionerType>
 			}
 			savestep_no = 0;
 			save_counter = 1;
-			if (integrator != 2) {
-				{
-					//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
-					assemble_system_mass();
-					pcout << "Mass matrix assembled" << std::endl;
 
-				}
-			}
+			//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
+			assemble_system_mass();
+			pcout << "Mass matrix assembled" << std::endl;
+
 
 			if(parameters.nu == 0.5)
 			{
