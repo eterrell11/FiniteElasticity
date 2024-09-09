@@ -2370,7 +2370,7 @@ template <int dim>
 
 	}
 
-template <int dim> 
+	template <int dim> 
 	void Incompressible<dim>::solve_energy()
 	{
 		energy.update_ghost_values();
@@ -2544,9 +2544,8 @@ template <int dim>
 		auto& v = sol.block(0);
 
 		auto& p = sol.block(1);
-		auto fake_solution = solution;
 		constraints.set_zero(solution);
-		constraints.set_zero(solution_dot);
+		constraints.set_zero(sol);
 
 		if (parameters.nu == 0.5)
 		{
@@ -2566,7 +2565,7 @@ template <int dim>
 		constraints.distribute(sol);
 
 		relevant_solution = solution;
-		relevant_solution_dot = sol;
+		relevant_sol = sol;
 
 	}
 
