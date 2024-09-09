@@ -884,7 +884,7 @@ template <class PreconditionerType>
 		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
 		void		 solve_SBDF2_system();
 		void		 solve_MTR_system();
-		void		 update_motion();
+		//void		 update_motion();
 		void         output_results() const;
 		void		 calculate_error();
 		void		 create_error_table();
@@ -1797,7 +1797,7 @@ template <class PreconditionerType>
 
 
 template <int dim>
-	void Incompressible<dim>::assemble_system_MTR()
+	void Incompressible<dim>::assemble_system_MTR(int& MTR_counter)
 	{
 
 		P = 0;
@@ -1966,15 +1966,15 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+								dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
-								/*rho_0 * dt * dt * (1 / 3.) **/ (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
-							rho_0 * scale * N_u_i * rhs_values[q] +
-							N_p_i * (Jf - 1.0) - shifter * Grad_p_i * transpose(HH) * (un - old_un)) * fe_values.JxW(q);
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde) +
+							rho_0 * N_u_i * rhs_values[q] +
+							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
@@ -1998,9 +1998,8 @@ template <int dim>
 							HH = get_HH(FF, Jf);
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
-								cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
 								if (face->boundary_id() == 1) {
-									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+									cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 								}
 							}
@@ -2305,7 +2304,20 @@ template <int dim>
 		}
 
 
-		update_motion();
+		old_velocity = velocity;
+		velocity = solution_dot.block(0);
+
+		auto solution_save = solution.block(0);
+		if (present_time > dt) {
+			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+		}
+		else {
+			solution.block(0).add(dt, solution_dot.block(0));
+		}
+		old_solution.block(0) = solution_save;
+		relevant_solution = solution;
+		relevant_old_solution = old_solution;
+
 		calculate_error();
 
 	}
@@ -2335,17 +2347,38 @@ template <int dim>
 		solution_extrap = solution;
 		solution_extrap.add(dt, solution_dot);
 		relevant_solution_extrap = solution_extrap;
-
+		int MTR_counter=0;
 
 		{
-			assemble_system_MTR();
+			assemble_system_MTR(MTR_counter);
+		}
+		{
+			solve_MTR_system();
+		}
+		++MTR_counter;
+		{
+			assemble_system_MTR(MTR_counter);
 		}
 		{
 			solve_MTR_system();
 		}
 
+		old_velocity = velocity;
+		velocity = solution_dot.block(0);
 
-		update_motion();
+		auto solution_save = solution.block(0);
+
+		if (present_time > dt) {
+			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+		}
+		else {
+			solution.block(0).add(dt, solution_dot.block(0));
+		}
+		old_solution.block(0) = solution_save;
+		relevant_solution = solution;
+		relevant_old_solution = old_solution;
+
+
 		calculate_error();
 
 	}
@@ -2512,13 +2545,9 @@ template <int dim>
 		tmp1 = 0;
 		//LA::MPI::Vector tmp2(Rp);
 
-		if (present_time < 1.1*dt) {
-			un_motion.add(1.0, velocity);
-		}
-		else
-		{
-			un_motion.add(4./3., velocity, -1./3., old_velocity);
-		}
+
+		un_motion.add(1.0, velocity);
+		
 		K.block(0,0).vmult_add(Ru, un_motion);
 
 		M_inverse.vmult(tmp1, Ru);
@@ -2590,28 +2619,28 @@ template <int dim>
 
 	}
 	
-	template<int dim>
-	void Incompressible<dim>::update_motion()
-	{
-		old_velocity = velocity;
-		velocity = solution_dot.block(0);
+	// template<int dim>
+	// void Incompressible<dim>::update_motion()
+	// {
+	// 	old_velocity = velocity;
+	// 	velocity = solution_dot.block(0);
 
-		auto solution_save = solution.block(0);
+	// 	auto solution_save = solution.block(0);
 
-		if (present_time > dt) {
-			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-		}
-		else {
-			solution.block(0).add(dt, solution_dot.block(0));
-		}
-		old_solution.block(0) = solution_save;
+	// 	if (present_time > dt) {
+	// 		solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+	// 	}
+	// 	else {
+	// 		solution.block(0).add(dt, solution_dot.block(0));
+	// 	}
+	// 	old_solution.block(0) = solution_save;
 			
-		pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
-		//solution.block(1).add(-mean);
+	// 	pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
+	// 	//solution.block(1).add(-mean);
 		
-		relevant_solution = solution;
-		relevant_old_solution = old_solution;
-	}
+	// 	relevant_solution = solution;
+	// 	relevant_old_solution = old_solution;
+	// }
 
 
 
