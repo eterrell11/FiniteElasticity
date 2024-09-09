@@ -2346,7 +2346,7 @@ template <int dim>
 			assemble_system_MTR(MTR_counter);
 		}
 		{
-			solve_MTR_system(solution_dot, solution_dot_extrap);
+			solve_MTR_system(solution_dot, relevant_solution_dot);
 		}
 
 		old_velocity = velocity;
