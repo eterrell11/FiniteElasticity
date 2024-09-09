@@ -2328,9 +2328,9 @@ template <int dim>
 		constraints.close();
 
 
-		solution_extrap = solution;
-		solution_extrap.add(dt, solution_dot);
-		relevant_solution_extrap = solution_extrap;
+		// solution_extrap = solution;
+		// solution_extrap.add(dt, solution_dot);
+		// relevant_solution_extrap = solution_extrap;
 		int MTR_counter=0;
 
 		{
