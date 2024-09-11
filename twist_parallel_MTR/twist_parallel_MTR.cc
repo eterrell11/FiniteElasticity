@@ -1912,7 +1912,7 @@ template <int dim>
 					if (MTR_counter==1)
 					{
 						//temp_pressure = 0;
-						FF = get_real_FF(dtmp_isplacement_grads[q]);
+						FF = get_real_FF(tmp_isplacement_grads[q]);
 						Jf = get_Jf(FF);
 						HH = get_HH(FF, Jf);
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
