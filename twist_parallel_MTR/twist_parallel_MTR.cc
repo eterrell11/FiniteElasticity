@@ -1913,7 +1913,7 @@ template <int dim>
 					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				
-					if (MTR_counter==0)
+					if (MTR_counter==1)
 					{
 						//temp_pressure = 0;
 						FF = get_real_FF(displacement_grads[q]);
@@ -2324,17 +2324,18 @@ template <int dim>
 		constraints.close();
 
 
-		// solution_extrap = solution;
-		// solution_extrap.add(dt, solution_dot);
-		// relevant_solution_extrap = solution_extrap;
+		solution_extrap = solution;
+		solution_extrap.add(dt*0.5, solution_dot);
+		relevant_solution_extrap = solution_extrap;
 		int MTR_counter=0;
 
-		{
-			assemble_system_MTR(MTR_counter);
-		}
-		{
-			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
-		}
+		// {
+		// 	assemble_system_MTR(MTR_counter);
+		// }
+		// {
+		// 	solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
+		// }
+
 		++MTR_counter;
 		solution_extrap.block(0) = solution.block(0) + dt * solution_dot_extrap.block(0);
 		relevant_solution_extrap = solution_extrap;
