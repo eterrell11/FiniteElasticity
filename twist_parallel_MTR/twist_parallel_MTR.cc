@@ -1858,7 +1858,7 @@ template <int dim>
 		Tensor<2, dim> pk1_dev_tilde;
 
 	
-		double temp_pressure;
+		//double temp_pressure;
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
 
@@ -1951,8 +1951,8 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (0.5 * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+								0.5 * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
