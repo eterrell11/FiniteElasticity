@@ -1902,26 +1902,27 @@ template <int dim>
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					FF = get_real_FF(old_displacement_grads[q]);
-					Jf = get_Jf(FF);
-					old_HH = get_HH(FF, Jf);
-					old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
+					// FF = get_real_FF(old_displacement_grads[q]);
+					// Jf = get_Jf(FF);
+					// old_HH = get_HH(FF, Jf);
+					// old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
 
-					FF = get_real_FF(displacement_grads[q]);
-					Jf = get_Jf(FF);
-					HH = get_HH(FF, Jf);
-					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 				
 					if (MTR_counter==1)
 					{
 						//temp_pressure = 0;
-						FF = get_real_FF(displacement_grads[q]);
+						FF = get_real_FF(dtmp_isplacement_grads[q]);
 						Jf = get_Jf(FF);
 						HH = get_HH(FF, Jf);
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 						pk1_dev_tilde = pk1_dev;
 						HH_tilde = HH;
+						
+						FF = get_real_FF(displacement_grads[q]);
+						Jf = get_Jf(FF);
+						HH = get_HH(FF, Jf);
+						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
 					}
 					else 
