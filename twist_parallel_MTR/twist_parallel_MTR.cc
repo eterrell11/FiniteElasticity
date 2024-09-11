@@ -2337,7 +2337,7 @@ template <int dim>
 		// }
 
 		++MTR_counter;
-		solution_extrap.block(0) = solution.block(0) + dt * solution_dot_extrap.block(0);
+		//solution_extrap.block(0) = solution.block(0) + dt * solution_dot_extrap.block(0);
 		relevant_solution_extrap = solution_extrap;
 		{
 			assemble_system_MTR(MTR_counter);
