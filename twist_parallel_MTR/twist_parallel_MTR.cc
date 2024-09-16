@@ -2335,7 +2335,7 @@ template <int dim>
 			solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
 		}
 		
-		solution_extrap.add(dt*0.5, solution_dot);
+		solution_extrap.add(dt, solution_dot);
 		relevant_solution_extrap = solution_extrap;
 
 		++MTR_counter;
