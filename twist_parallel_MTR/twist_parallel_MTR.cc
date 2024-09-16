@@ -2121,7 +2121,7 @@ template <int dim>
 					{
 						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
 						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-						cell_rhs(i) += (scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
+						cell_rhs(i) += 0.5*(scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
 							rho_0 * N_u_i * rhs_values[q]) * fe_values.JxW(q);
 					}
 				}
@@ -2139,7 +2139,7 @@ template <int dim>
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
 								if (face->boundary_id() == 1) {
-									cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+									cell_rhs(i) += 0.5 *fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 								}
 							}
@@ -2326,20 +2326,21 @@ template <int dim>
 
 
 		solution_extrap = solution;
-		solution_extrap.add(dt*0.5, solution_dot);
-		relevant_solution_extrap = solution_extrap;
 		int MTR_counter=0;
 
-		// {
-		// 	assemble_system_MTR(MTR_counter);
-		// }
-		// {
-		// 	solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
-		// }
+		{
+			assemble_Rv();
+		}
+		{
+			solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
+		}
+		
+		solution_extrap.add(dt*0.5, solution_dot);
+		relevant_solution_extrap = solution_extrap;
 
 		++MTR_counter;
 		//solution_extrap.block(0) = solution.block(0) + dt * solution_dot_extrap.block(0);
-		relevant_solution_extrap = solution_extrap;
+		//relevant_solution_extrap = solution_extrap;
 		{
 			assemble_system_MTR(MTR_counter);
 		}
