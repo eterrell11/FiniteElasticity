@@ -2197,6 +2197,7 @@ template <int dim>
 		Tensor<2, dim> FF;
 		double Jf;
 		Tensor<1, dim> vn;
+		double pn;
 
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
