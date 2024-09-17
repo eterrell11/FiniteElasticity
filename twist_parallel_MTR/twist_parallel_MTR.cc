@@ -2201,6 +2201,7 @@ template <int dim>
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
+		std::vector<double> sol_vec_pressure(n_q_points);
 
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -2210,6 +2211,7 @@ template <int dim>
 
 			fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 			fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
+			fe_values[Velocity].get_function_values(relevant_solution, sol_vec_pressure);
 
 			solution.update_ghost_values();
 			solution_dot.update_ghost_values();
@@ -2223,10 +2225,13 @@ template <int dim>
 				FF = get_real_FF(displacement_grads[q]);
 				Jf = get_Jf(FF);
 				vn = sol_vec_velocity[q];
+				pn = sol_vec_pressure[q];
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - 3.)) * fe_values.JxW(q);
+					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
+					 + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - 3.) //Deviatoric energy
+					  + 0.5 * (Jf-1.) * pn) * fe_values.JxW(q); //
 				}
 			}
 			cell->get_dof_indices(local_dof_indices);
