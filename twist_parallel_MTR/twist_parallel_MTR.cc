@@ -1909,7 +1909,7 @@ template <int dim>
 
 
 				
-					if (MTR_counter==1)
+					if (MTR_counter==0)
 					{
 						//temp_pressure = 0;
 						FF = get_real_FF(tmp_displacement_grads[q]);
