@@ -1899,9 +1899,9 @@ template <int dim>
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
 
-
+				present_time -= 0.5 * dt;
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-
+				present_time += 0.5 * dt;
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
@@ -2104,9 +2104,9 @@ template <int dim>
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 
 
-
+				present_time -= 0.5 * dt;
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-
+				present_time += 0.5 * dt;
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
