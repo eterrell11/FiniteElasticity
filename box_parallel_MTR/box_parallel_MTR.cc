@@ -1241,24 +1241,26 @@ template <class PreconditionerType>
 	template <int dim>
 	void Incompressible<dim>::create_grid()
 	{
-		cell_measure = 1;
-		GridGenerator::subdivided_hyper_rectangle(triangulation, { 1, 1,(height) }, { -1,-1,0 }, { 1.,1., 2. * height });
+		cell_measure = 1.;
+		GridGenerator::hyper_cube(triangulation, 0, 1);
 		triangulation.refine_global(parameters.n_ref);
-		for (const auto& cell : triangulation.active_cell_iterators())
-		{
-			for (const auto& face : cell->face_iterators())
+		for (const auto& cell : triangulation.active_cell_iterators()) {
+			for (const auto& face : cell->face_iterators()) {
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (abs(face_center[2] - 0.0) < 0.00001) {
+					if (face_center[1] == 0) {
 						face->set_boundary_id(1);
 					}
+					if (face_center[1] == 1) {
+						face->set_boundary_id(2);
+					}
 				}
+			}
 			cell_measure = std::min(cell_measure, cell->measure());
 		}
-
+		std::cout << "minimum cell size: " << cell_measure << std::endl;
 	}
-
 
 
 
@@ -1759,7 +1761,7 @@ template <class PreconditionerType>
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
 								cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
-								if (face->boundary_id() == 1) {
+								if (face->boundary_id() == 2) {
 									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 								}
@@ -2918,7 +2920,7 @@ int main(int argc, char* argv[])
 		using namespace NonlinearElasticity;
 
 		Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
-		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
