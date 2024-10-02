@@ -1262,10 +1262,10 @@ template <class PreconditionerType>
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (face_center[1] == 0) {
+					if (face_center[dim] == 0) {
 						face->set_boundary_id(1);
 					}
-					if (face_center[1] == 1) {
+					if (face_center[dim] == 1) {
 						face->set_boundary_id(2);
 					}
 				}
