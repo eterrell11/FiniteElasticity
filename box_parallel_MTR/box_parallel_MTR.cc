@@ -1178,10 +1178,10 @@ template <class PreconditionerType>
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (face_center[0] == 0) {
+					if (face_center[1] == 0) {
 						face->set_boundary_id(1);
 					}
-					if (face_center[0] == 1) {
+					if (face_center[1] == 1) {
 						face->set_boundary_id(2);
 					}
 				}
@@ -2078,6 +2078,10 @@ template <int dim>
 		Tensor<1,dim> vn;
 
 		double temp_pressure;
+		LA::MPI::BlockVector extra_solution;
+		extra_solution.reinit(relevant_solution);
+		if (present_time >= dt)
+			extra_solution.block(1) = 1.5*solution.block(1) - 0.5 * old_solution.block(1)
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
