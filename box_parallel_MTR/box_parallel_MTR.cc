@@ -207,6 +207,7 @@ namespace NonlinearElasticity
 			bool Simplex;
 			unsigned int max_ref;
 			bool AB2_extrap;
+			double epsilon;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -246,6 +247,10 @@ namespace NonlinearElasticity
 					"true",
 					Patterns::Bool(),
 					"AB2_extrap");
+				prm.declare_entry("epsilon",
+					"0.0",
+					Patterns::Double(),
+					"epsilon");
 			}
 			prm.leave_subsection();
 		}
@@ -261,6 +266,7 @@ namespace NonlinearElasticity
 				Simplex = prm.get_bool("Simplex");
 				max_ref = prm.get_integer("max_ref");
 				AB2_extrap = prm.get_bool("AB2_extrap");
+				epsilon = prm.get_double("epsilon");
 			}
 			prm.leave_subsection();
 		}
@@ -1516,7 +1522,7 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, i) += scale * N_u_i * fe_values[Velocity].value(j, q) * fe_values.JxW(q);
-
+								
 							}
 						}
 					}
