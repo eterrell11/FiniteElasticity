@@ -753,7 +753,7 @@ template <class PreconditionerType>
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 		//values[0] = -velocity * std::sin(M_PI * p[dim - 1] / 12.) * p[1];
-		values[dim-1] = -velocity * std::sin(M_PI * p[dim - 1] / 2.) * p[1];
+		values[dim-1] = -velocity * std::sin(M_PI * p[dim - 1] / 2.) * p[dim-1];
 		// if (dim == 3) {
 		// 	values[2] = 0;
 		// }
@@ -2112,7 +2112,9 @@ template <int dim>
 		double temp_pressure;
 		LA::MPI::BlockVector extra_solution;
 		extra_solution.reinit(relevant_solution);
-		if (present_time >= dt)
+		if(present_time == dt)
+			extra_solution.block(1) = 1.5 * solution.block(1);
+		if (present_time >= 2*dt)
 			extra_solution.block(1) = 1.5*solution.block(1) - 0.5 * old_solution.block(1);
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
