@@ -479,7 +479,7 @@ template <class PreconditionerType>
 		system_matrix->block(1, 1).vmult(tmp3, src);
 		dst.add(1./kappa, tmp3);
 		system_stab_matrix->block(1,1).vmult(tmp3,src);
-		dst.add(tmp3);
+		dst.add(1.,tmp3);
 	}
 
 	//Function for defining Kappa
