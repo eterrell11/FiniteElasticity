@@ -740,8 +740,8 @@ template <class PreconditionerType>
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = -velocity * std::sin(M_PI * p[dim - 1] / 12.) * p[1];
-		values[1] = velocity * std::sin(M_PI * p[dim - 1] / 12.) * p[0];
+		//values[0] = -velocity * std::sin(M_PI * p[dim - 1] / 12.) * p[1];
+		values[1] = -velocity * std::sin(M_PI * p[dim - 1] / 2.) * p[0];
 		if (dim == 3) {
 			values[2] = 0;
 		}
