@@ -432,6 +432,7 @@ template <class PreconditionerType>
 	public:
 		SchurComplement(
 			const LA::MPI::BlockSparseMatrix& system_matrix,
+			const LA::MPI::BlockSparseMatrix& system_stab_matrix,
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse,
 			const LA::MPI::BlockVector& exemplar,
 			const double& kappa);
@@ -440,6 +441,7 @@ template <class PreconditionerType>
 
 	private:
 		const SmartPointer<const LA::MPI::BlockSparseMatrix> system_matrix;
+		const SmartPointer<const LA::MPI::BlockSparseMatrix> system_stab_matrix;
 		const SmartPointer<
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>>
 			A_inverse;
@@ -451,10 +453,12 @@ template <class PreconditionerType>
 	template <class PreconditionerType>
 	SchurComplement<PreconditionerType>::SchurComplement(
 		const LA::MPI::BlockSparseMatrix& system_matrix, 
+		const LA::MPI::BlockSparseMatrix& system_stab_matrix, 
 		const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse, 
 		const LA::MPI::BlockVector& exemplar,
 		const double& kappa)
 		: system_matrix(&system_matrix)
+		, system_matrix(&system_stab_matrix)
 		, A_inverse(&A_inverse)
 		, exemplar(&exemplar)
 		, kappa(kappa)
@@ -474,6 +478,8 @@ template <class PreconditionerType>
 		system_matrix->block(1, 0).vmult(dst, -1.0 * tmp2);
 		system_matrix->block(1, 1).vmult(tmp3, src);
 		dst.add(1./kappa, tmp3);
+		system_stab_matrix->block(1,1).vmult(tmp3,src);
+		dst.add(tmp3);
 	}
 
 	//Function for defining Kappa
@@ -1501,8 +1507,10 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, j) += N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-								cell_mass_stab_matrix(i,i) += epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-								cell_mass_stab_matrix(i,j) -= epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
+								if (parameters.integrator == 2){
+									cell_mass_stab_matrix(i,i) += epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
+									cell_mass_stab_matrix(i,j) -= epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
+								}
 							}
 						}
 					}
@@ -2451,7 +2459,7 @@ template <int dim>
 		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K, M_inverse, R, kappa);
+			K,K_stab, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
@@ -2543,7 +2551,7 @@ template <int dim>
 		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K, M_inverse, R, kappa);
+			K,K_stab, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
