@@ -1518,6 +1518,9 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
+					constraints.distribute_local_to_global(cell_mass_stab_matrix,
+						local_dof_indices,
+						K_stab);
 				}
 			}
 			for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1546,6 +1549,9 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
+					constraints.distribute_local_to_global(cell_mass_stab_matrix,
+						local_dof_indices,
+						K_stab);
 				}
 			}
 		}
@@ -1573,10 +1579,14 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
+					constraints.distribute_local_to_global(cell_mass_stab_matrix,
+						local_dof_indices,
+						K_stab);
 				}
 			}
 		}
 		K.compress(VectorOperation::add);
+		K_stab.compress(VectorOperation::add);
 	}
 
 
