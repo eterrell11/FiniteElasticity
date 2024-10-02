@@ -458,7 +458,7 @@ template <class PreconditionerType>
 		const LA::MPI::BlockVector& exemplar,
 		const double& kappa)
 		: system_matrix(&system_matrix)
-		, system_matrix(&system_stab_matrix)
+		, system_stab_matrix(&system_stab_matrix)
 		, A_inverse(&A_inverse)
 		, exemplar(&exemplar)
 		, kappa(kappa)
