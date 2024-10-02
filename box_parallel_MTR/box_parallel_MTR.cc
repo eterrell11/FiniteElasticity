@@ -1982,7 +1982,7 @@ template <int dim>
 						{
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
-								if (face->boundary_id() == 1) {
+								if (face->boundary_id() == 2) {
 									cell_rhs(i) += fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 								}
