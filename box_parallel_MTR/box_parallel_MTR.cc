@@ -2081,7 +2081,7 @@ template <int dim>
 		LA::MPI::BlockVector extra_solution;
 		extra_solution.reinit(relevant_solution);
 		if (present_time >= dt)
-			extra_solution.block(1) = 1.5*solution.block(1) - 0.5 * old_solution.block(1)
+			extra_solution.block(1) = 1.5*solution.block(1) - 0.5 * old_solution.block(1);
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
@@ -2105,7 +2105,7 @@ template <int dim>
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
-				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
+				fe_values[Pressure].get_function_values(extra_solution, sol_vec_pressure);
 
 
 				//present_time -= 0.5 * dt;
