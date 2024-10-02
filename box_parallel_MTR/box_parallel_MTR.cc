@@ -938,6 +938,7 @@ template <class PreconditionerType>
 
 		BlockSparsityPattern sparsity_pattern;
 		LA::MPI::BlockSparseMatrix K;
+		LA::MPI::BlockSparseMatrix K_stab;
 		LA::MPI::BlockSparseMatrix P;
 
 
@@ -1396,6 +1397,10 @@ template <class PreconditionerType>
 			owned_partitioning,
 			dsp,
 			mpi_communicator);
+		K_stab.reinit(
+			owned_partitioning,
+			dsp,
+			mpi_communicator);	
 
 
 		P.reinit(
@@ -1445,7 +1450,7 @@ template <class PreconditionerType>
 	{
 		K = 0;
 		R = 0;
-
+		K_stab =0;
 		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
 			*quad_rule_ptr,
@@ -1461,6 +1466,7 @@ template <class PreconditionerType>
 
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_mass_stab_matrix(dofs_per_cell, dofs_per_cell);
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
@@ -1474,13 +1480,14 @@ template <class PreconditionerType>
 
 		double scale;
 		scale = rho_0 / dt;
-		
+		double epsilon = parameters.epsilon;
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
 			{
 				if (cell->subdomain_id() == this_mpi_process)
 				{
 					cell_mass_matrix = 0;
+					cell_mass_stab_matrix = 0;
 					fe_values.reinit(cell);
 
 
@@ -1494,7 +1501,8 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, j) += N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-
+								cell_mass_stab_matrix(i,i) += epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
+								cell_mass_stab_matrix(i,j) -= epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
 							}
 						}
 					}
@@ -1509,6 +1517,7 @@ template <class PreconditionerType>
 				if (cell->subdomain_id() == this_mpi_process)
 				{
 					cell_mass_matrix = 0;
+					cell_mass_stab_matrix = 0;
 					fe_values.reinit(cell);
 
 
@@ -1522,7 +1531,6 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, i) += scale * N_u_i * fe_values[Velocity].value(j, q) * fe_values.JxW(q);
-								
 							}
 						}
 					}
