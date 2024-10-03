@@ -1988,13 +1988,13 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += ((0.5+0.5*MTR_counter) * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								(1-0.5*MTR_counter) *dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-(0.5+0.5*MTR_counter) * scalar_product(Grad_u_i, pk1_dev_tilde) +
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde) +
 							rho_0 * N_u_i * rhs_values[q] +
 							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
@@ -2383,7 +2383,7 @@ template <int dim>
 			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
 		}
 		
-		solution_extrap.add(dt, solution_dot);
+		solution_extrap.add(0.5 * dt, solution_dot);
 		relevant_solution_extrap = solution_extrap;
 
 		++MTR_counter;
