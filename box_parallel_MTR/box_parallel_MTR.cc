@@ -1893,7 +1893,7 @@ template <int dim>
 		Tensor<2, dim> pk1_dev_tilde;
 
 	
-		//double temp_pressure;
+		double temp_pressure;
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
 
@@ -1946,7 +1946,7 @@ template <int dim>
 				
 					if (MTR_counter==0)
 					{
-						//temp_pressure = 0;
+						temp_pressure = 0;
 						// FF = get_real_FF(tmp_displacement_grads[q]);
 						// Jf = get_Jf(FF);
 						// HH = get_HH(FF, Jf);
@@ -1963,7 +1963,7 @@ template <int dim>
 					}
 					else 
 					{
-						//temp_pressure = sol_vec_pressure[q];
+						temp_pressure = sol_vec_pressure[q];
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						Jf = get_Jf(FF);
 						old_HH = get_HH(FF, Jf);
@@ -1974,8 +1974,8 @@ template <int dim>
 						HH = get_HH(FF, Jf);
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
-						HH_tilde = old_HH; //0.5 * (HH + old_HH);
-						pk1_dev_tilde = old_pk1_dev ; //0.5 * (pk1_dev + old_pk1_dev);
+						HH_tilde = 0.5 * (HH + old_HH);//old_HH; //
+						pk1_dev_tilde = 0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
 					}
 
 
@@ -1989,12 +1989,12 @@ template <int dim>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1-0.5*MTR_counter) *dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+								/*(1-0.5*double(MTR_counter)) */dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde) +
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + temp_pressure * HH) +
 							rho_0 * N_u_i * rhs_values[q] +
 							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
@@ -2384,7 +2384,7 @@ template <int dim>
 		}
 		
 		solution_extrap.add(0.5 * dt, solution_dot_extrap);
-		//solution_extrap.add(0.5 * dt, solution_dot);
+		solution_extrap.add(0.5 * dt, solution_dot);
 		
 		relevant_solution_extrap = solution_extrap;
 
