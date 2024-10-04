@@ -1485,7 +1485,7 @@ template <class PreconditionerType>
 		bool lump_mass = parameters.LumpMass;
 
 		double scale;
-		scale = rho_0;
+		scale = rho_0/dt;
 		double epsilon = parameters.epsilon;
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1988,14 +1988,14 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (dt * 0.5*scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+							cell_mass_matrix(i, j) += (0.5*scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								/*(1-0.5*double(MTR_counter)) */dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-dt * scalar_product(Grad_u_i, pk1_dev_tilde + 0.5 * temp_pressure * HH) +
-							 dt * rho_0 * N_u_i * rhs_values[q] +
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + 0.5 * temp_pressure * HH) +
+							 rho_0 * N_u_i * rhs_values[q] +
 							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
 				}
@@ -2173,9 +2173,9 @@ template <int dim>
 					{
 
 						fe_face_values.reinit(cell, face);
-
+						present_time -= 0.5 * dt;
 						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
-
+						present_time += 0.5 * dt;
 						for (const unsigned int q : fe_face_values.quadrature_point_indices())
 						{
 							for (const unsigned int i : fe_face_values.dof_indices())
@@ -2380,7 +2380,7 @@ template <int dim>
 			assemble_system_MTR(MTR_counter);
 		}
 		{
-			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
+			solve_MTR_system(solution_dot_extrap, relevant_solution_dot);
 		}
 		
 		solution_extrap.add(0.5 * dt, solution_dot_extrap);
