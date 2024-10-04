@@ -1974,7 +1974,7 @@ template <int dim>
 						HH = get_HH(FF, Jf);
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
-						HH_tilde = 0.5 * (HH + old_HH);//old_HH; //
+						HH_tilde = old_HH; //
 						pk1_dev_tilde = 0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
 					}
 
