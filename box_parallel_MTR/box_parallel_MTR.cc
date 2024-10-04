@@ -2377,10 +2377,10 @@ template <int dim>
 		int MTR_counter=0;
 
 		{
-			assemble_Rv();
+			assemble_system_MTR(MTR_counter);
 		}
 		{
-			solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
+			solve_MTR_system(solution_dot_extrap, relevant_solution_dot_extrap);
 		}
 		
 		solution_extrap.add(0.5 * dt, solution_dot_extrap);
