@@ -1485,7 +1485,7 @@ template <class PreconditionerType>
 		bool lump_mass = parameters.LumpMass;
 
 		double scale;
-		scale = rho_0 / dt;
+		scale = rho_0;
 		double epsilon = parameters.epsilon;
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1988,14 +1988,14 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (0.5*scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+							cell_mass_matrix(i, j) += (dt * 0.5*scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								/*(1-0.5*double(MTR_counter)) */dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + 0.5 * temp_pressure * HH) +
-							rho_0 * N_u_i * rhs_values[q] +
+						cell_rhs(i) += (-dt * scalar_product(Grad_u_i, pk1_dev_tilde + 0.5 * temp_pressure * HH) +
+							 dt * rho_0 * N_u_i * rhs_values[q] +
 							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
 				}
