@@ -2384,7 +2384,7 @@ template <int dim>
 		}
 		
 		solution_extrap.add(0.5 * dt, solution_dot_extrap);
-		solution_extrap.add(0.5 * dt, solution_dot);
+		//solution_extrap.add(0.5 * dt, solution_dot);
 		
 		relevant_solution_extrap = solution_extrap;
 
