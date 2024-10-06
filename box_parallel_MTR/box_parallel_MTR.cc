@@ -645,9 +645,9 @@ template <class PreconditionerType>
 		{
 			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			Assert(dim >= 2, ExcInternalError());
-
-			values[0] = a * present_time;
-			values[1] = 0;
+			values =0;
+			values[dim-1] = a * present_time;
+			
 		}
 		virtual void
 			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
@@ -668,7 +668,7 @@ template <class PreconditionerType>
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[0] = TractionMagnitude * time;
+			values[dim-1] = TractionMagnitude * time;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
