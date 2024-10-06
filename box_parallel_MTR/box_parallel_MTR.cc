@@ -668,7 +668,7 @@ template <class PreconditionerType>
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[dim-1] = TractionMagnitude * time;
+			values[dim-1] = TractionMagnitude;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
