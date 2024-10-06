@@ -1938,7 +1938,9 @@ template <int dim>
 				}
 				else
 				{
+					present_time -= dt;
 					right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+					present_time += dt;
 				}
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
