@@ -2000,7 +2000,6 @@ template <int dim>
 								(1-0.5*double(MTR_counter)) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
-							std::cout << (1-0.5*double(MTR_counter)) << std::endl;
 						}
 						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde) +
 							 rho_0 * N_u_i * rhs_values[q] +
