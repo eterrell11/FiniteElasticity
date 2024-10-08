@@ -2388,14 +2388,14 @@ template <int dim>
 		solution_extrap = solution;
 		int MTR_counter=0;
 
-		// {
-		// 	assemble_system_MTR(MTR_counter);
-		// }
-		// {
-		// 	solve_MTR_system(solution_dot_extrap, relevant_solution_dot);
-		// }
+		{
+			assemble_system_MTR(MTR_counter);
+		}
+		{
+			solve_MTR_system(solution_dot_extrap, relevant_solution_dot);
+		}
 		
-		solution_extrap.add(dt, solution_dot);
+		solution_extrap.add(dt, solution_dot_extrap);
 		//solution_extrap.add(0.5 * dt, solution_dot);
 		
 		relevant_solution_extrap = solution_extrap;
