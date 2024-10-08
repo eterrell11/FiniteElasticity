@@ -2908,7 +2908,7 @@ template <int dim>
 		data_out.add_data_vector(subdomain, "subdomain");
 
 
-		data_out.build_patches(1);
+		data_out.build_patches(2);
 		std::string output("output-" + std::to_string(savestep_no) + ".vtu");
 		data_out.write_vtu_in_parallel(output, mpi_communicator);
 
