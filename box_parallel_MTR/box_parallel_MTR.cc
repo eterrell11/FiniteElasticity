@@ -1897,6 +1897,10 @@ template <int dim>
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
 
+		double midpoint_toggle=1.;
+		if (parameters.nu < 0.5)
+			midpoint_toggle =0.5;
+
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
@@ -1997,7 +2001,7 @@ template <int dim>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								/*(1-0.5*double(MTR_counter))*/ dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+								midpoint_toggle * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 						}
