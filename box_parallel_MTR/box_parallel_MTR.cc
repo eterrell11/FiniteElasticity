@@ -2348,13 +2348,13 @@ template <int dim>
 		velocity = solution_dot.block(0);
 
 		auto solution_save = solution.block(0);
-		// if (present_time > dt) {
-		// 	solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-		// }
-		// else {
-		// 	solution.block(0).add(dt, solution_dot.block(0));
-		// }
-		solution.block(0) += 0.5 * dt * (old_velocity + velocity);
+		if (present_time > dt) {
+			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+		}
+		else {
+			solution.block(0).add(dt, solution_dot.block(0));
+		}
+		//solution.block(0) += 0.5 * dt * (old_velocity + velocity);
 		old_solution.block(0) = solution_save;
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
@@ -2413,7 +2413,9 @@ template <int dim>
 		old_velocity = velocity;
 		velocity = solution_dot.block(0);
 		old_solution = solution;
-		solution.block(0) += 0.5 * dt * (velocity + old_velocity);
+		auto solution_save = solution.block(0);
+
+		solution.block(0) = solution_save + 0.5 * dt * (velocity + old_velocity);
 		solution.block(1) = solution_dot.block(1);
 
 		relevant_solution = solution;
