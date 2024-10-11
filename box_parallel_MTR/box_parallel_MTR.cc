@@ -2284,7 +2284,7 @@ template <int dim>
 
 				for (const unsigned int i : fe_values.dof_indices())
 				{
-					cell_energy[i] += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
+					cell_energy(i) += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
 					 + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) //Deviatoric energy
 					  + 0.5 * (Jf-1.) * pn) * fe_values.JxW(q); //Volumetric energy
 				}
