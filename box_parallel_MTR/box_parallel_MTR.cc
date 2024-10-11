@@ -2296,7 +2296,7 @@ template <int dim>
 				energy_RHS);
 
 		}
-		std::cout << energy_RHS.block(1).l2_norm() <<std::endl;;
+		//std::cout << energy_RHS.block(1).l2_norm() <<std::endl;;
 		energy_RHS.block(0) = 0;
 		energy_RHS.compress(VectorOperation::add);
 
