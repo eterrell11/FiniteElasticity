@@ -2296,7 +2296,6 @@ template <int dim>
 				energy_RHS);
 
 		}
-		//std::cout << energy_RHS.block(1).l2_norm() <<std::endl;;
 		energy_RHS.block(0) = 0;
 		energy_RHS.compress(VectorOperation::add);
 
@@ -2887,7 +2886,8 @@ template <int dim>
 			"Pressure_error",
 			DataOut<dim>::type_cell_data);
 
-		LA::MPI::BlockVector extra_vector = solution;
+		LA::MPI::BlockVector extra_vector = relevant_solution;
+		extra_vector.reinit(relevant_solution);
 		extra_vector.block(0) = velocity;
 		extra_vector.block(1) = energy.block(1);
 
