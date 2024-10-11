@@ -2296,6 +2296,7 @@ template <int dim>
 				energy_RHS);
 
 		}
+		cout << energy_RHS.norm() <<std::endl;;
 		energy_RHS.block(0) = 0;
 		energy_RHS.compress(VectorOperation::add);
 
