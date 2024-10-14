@@ -2530,7 +2530,7 @@ template <int dim>
 
 		if (parameters.nu == 0.5)
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_aS);
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_in);
 		}
 		else
 		{
