@@ -1139,8 +1139,14 @@ template <class PreconditionerType>
 
 			present_time = parameters.start_time;
 			timestep_no = 0;
-			error_solution_store.block(0) = solution.block(0);
-			error_solution_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+			if (parameters.integrator==2){
+				error_solution_store.block(0) = solution.block(0);
+				error_solution_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+			}
+			else{
+				error_solution_store.block(0) = solution.block(0);
+				error_solution_store.block(1) = solution.block(1);
+			}
 
 		}
 		create_error_table();
@@ -2695,7 +2701,11 @@ template <int dim>
 		LA::MPI::BlockVector tmp_error_store;
 		tmp_error_store.reinit(solution);
 		tmp_error_store.block(0) = solution.block(0);
-		tmp_error_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+		if (parameters.integrator==2)
+			tmp_error_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+		else
+			tmp_error_store.block(1) = solution.block(1);
+
 		relevant_error_solution_store = tmp_error_store - error_solution_store;
 		//error_sol.update_ghost_values();
 		//VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
