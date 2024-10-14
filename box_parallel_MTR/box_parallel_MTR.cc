@@ -1942,9 +1942,9 @@ template <int dim>
 
 				if (MTR_counter==1)
 				{
-				present_time -= 0.5 * dt;
+				present_time -= dt;
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-				present_time += 0.5 * dt;
+				present_time += dt;
 				}
 				else
 				{
@@ -2026,9 +2026,15 @@ template <int dim>
 						fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
 						fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
 
-						present_time -= 0.5 * dt;
-						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
-						present_time += 0.5 * dt;
+						if(MTR_counter==1){
+							present_time -= 0.5 * dt;
+							traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+							present_time += 0.5 * dt;
+						}
+						else {
+							present_time -= 0.5 * dt;
+							traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+							present_time += 0.5 * dt;}
 						for (const unsigned int q : fe_face_values.quadrature_point_indices())
 						{
 							for (const unsigned int i : fe_face_values.dof_indices())
