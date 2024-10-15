@@ -1940,11 +1940,11 @@ template <int dim>
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
-				if (MTR_counter==1)
+				if (MTR_counter==0)
 				{
-				//present_time -= dt;
+				present_time -= dt;
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-				//present_time += dt;
+				present_time += dt;
 				}
 				else
 				{
