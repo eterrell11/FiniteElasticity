@@ -1137,8 +1137,7 @@ template <class PreconditionerType>
 				error_solution_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
 			}
 			else{
-				error_solution_store.block(0) = solution.block(0);
-				error_solution_store.block(1) = solution.block(1);
+				error_solution_store = solution;
 			}
 
 		}
@@ -2242,40 +2241,42 @@ template <int dim>
 
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
-			cell_energy = 0;
-			fe_values.reinit(cell);
-
-			fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-			fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
-			fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
-
-			solution.update_ghost_values();
-			solution_dot.update_ghost_values();
-
-
-
-			for (const unsigned int q : fe_values.quadrature_point_indices())
+			if (cell->subdomain_id() == this_mpi_process)
 			{
+				cell_energy = 0;
+				fe_values.reinit(cell);
+
+				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
+				fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
+				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
+
+				solution.update_ghost_values();
+				solution_dot.update_ghost_values();
 
 
-				FF = get_real_FF(displacement_grads[q]);
-				Jf = get_Jf(FF);
-				vn = sol_vec_velocity[q];
-				pn = sol_vec_pressure[q];
 
-				for (const unsigned int i : fe_values.dof_indices())
+				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					cell_energy(i) += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
-					 + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) //Deviatoric energy
-					  + 0.5 * (Jf-1.) * pn) * fe_values.JxW(q); //Volumetric energy
+
+
+					FF = get_real_FF(displacement_grads[q]);
+					Jf = get_Jf(FF);
+					vn = sol_vec_velocity[q];
+					pn = sol_vec_pressure[q];
+
+					for (const unsigned int i : fe_values.dof_indices())
+					{
+						cell_energy(i) += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
+						+ 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) //Deviatoric energy
+						+ 0.5 * (Jf-1.) * pn) * fe_values.JxW(q); //Volumetric energy
+					}
 				}
+				cell->get_dof_indices(local_dof_indices);
+
+				constraints.distribute_local_to_global(cell_energy,
+					local_dof_indices,
+					energy_RHS);
 			}
-			cell->get_dof_indices(local_dof_indices);
-
-			constraints.distribute_local_to_global(cell_energy,
-				local_dof_indices,
-				energy_RHS);
-
 		}
 		energy_RHS.block(0) = 0;
 		energy_RHS.compress(VectorOperation::add);
