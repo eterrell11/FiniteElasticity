@@ -2462,7 +2462,7 @@ template <int dim>
 			M_inverse(Kuu, preconditioner_Kuu);
 
 		SolverControl solver_control_S(2000, 1.0e-13);
-		SolverMinRes<LA::MPI::Vector> solver_S(solver_control_S);
+		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
 		//SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
