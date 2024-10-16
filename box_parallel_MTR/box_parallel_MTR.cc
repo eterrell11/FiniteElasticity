@@ -432,7 +432,6 @@ template <class PreconditionerType>
 	public:
 		SchurComplement(
 			const LA::MPI::BlockSparseMatrix& system_matrix,
-			const LA::MPI::BlockSparseMatrix& system_stab_matrix,
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse,
 			const LA::MPI::BlockVector& exemplar,
 			const double& kappa);
@@ -441,7 +440,6 @@ template <class PreconditionerType>
 
 	private:
 		const SmartPointer<const LA::MPI::BlockSparseMatrix> system_matrix;
-		const SmartPointer<const LA::MPI::BlockSparseMatrix> system_stab_matrix;
 		const SmartPointer<
 			const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>>
 			A_inverse;
@@ -453,12 +451,10 @@ template <class PreconditionerType>
 	template <class PreconditionerType>
 	SchurComplement<PreconditionerType>::SchurComplement(
 		const LA::MPI::BlockSparseMatrix& system_matrix, 
-		const LA::MPI::BlockSparseMatrix& system_stab_matrix, 
 		const InverseMatrix<LA::MPI::SparseMatrix, PreconditionerType>& A_inverse, 
 		const LA::MPI::BlockVector& exemplar,
 		const double& kappa)
 		: system_matrix(&system_matrix)
-		, system_stab_matrix(&system_stab_matrix)
 		, A_inverse(&A_inverse)
 		, exemplar(&exemplar)
 		, kappa(kappa)
@@ -478,8 +474,6 @@ template <class PreconditionerType>
 		system_matrix->block(1, 0).vmult(dst, -1.0 * tmp2);
 		system_matrix->block(1, 1).vmult(tmp3, src);
 		dst.add(1./kappa, tmp3);
-		system_stab_matrix->block(1,1).vmult(tmp3,src);
-		dst.add(1.,tmp3);
 	}
 
 	//Function for defining Kappa
@@ -944,7 +938,6 @@ template <class PreconditionerType>
 
 		BlockSparsityPattern sparsity_pattern;
 		LA::MPI::BlockSparseMatrix K;
-		LA::MPI::BlockSparseMatrix K_stab;
 		LA::MPI::BlockSparseMatrix P;
 
 
@@ -1409,10 +1402,6 @@ template <class PreconditionerType>
 			owned_partitioning,
 			dsp,
 			mpi_communicator);
-		K_stab.reinit(
-			owned_partitioning,
-			dsp,
-			mpi_communicator);	
 
 
 		P.reinit(
@@ -1462,7 +1451,6 @@ template <class PreconditionerType>
 	{
 		K = 0;
 		R = 0;
-		K_stab =0;
 		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
 			*quad_rule_ptr,
@@ -1478,8 +1466,6 @@ template <class PreconditionerType>
 
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
-		FullMatrix<double> cell_mass_stab_matrix(dofs_per_cell, dofs_per_cell);
-
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
@@ -1492,14 +1478,12 @@ template <class PreconditionerType>
 
 		double scale;
 		scale = rho_0/dt;
-		double epsilon = parameters.epsilon;
 		if (lump_mass == true) {
 			for (const auto& cell : dof_handler.active_cell_iterators())
 			{
 				if (cell->subdomain_id() == this_mpi_process)
 				{
 					cell_mass_matrix = 0;
-					cell_mass_stab_matrix = 0;
 					fe_values.reinit(cell);
 
 
@@ -1513,10 +1497,6 @@ template <class PreconditionerType>
 							for (const unsigned int j : fe_values.dof_indices())
 							{
 								cell_mass_matrix(i, j) += N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-								if (parameters.integrator == 2){
-									cell_mass_stab_matrix(i,i) += epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-									cell_mass_stab_matrix(i,j) -= epsilon * N_p_i * fe_values[Pressure].value(j, q) * fe_values.JxW(q);
-								}
 							}
 						}
 					}
@@ -1524,9 +1504,6 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
-					constraints.distribute_local_to_global(cell_mass_stab_matrix,
-						local_dof_indices,
-						K_stab);
 				}
 			}
 			for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1534,7 +1511,6 @@ template <class PreconditionerType>
 				if (cell->subdomain_id() == this_mpi_process)
 				{
 					cell_mass_matrix = 0;
-					cell_mass_stab_matrix = 0;
 					fe_values.reinit(cell);
 
 
@@ -1555,9 +1531,6 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
-					constraints.distribute_local_to_global(cell_mass_stab_matrix,
-						local_dof_indices,
-						K_stab);
 				}
 			}
 		}
@@ -1585,14 +1558,10 @@ template <class PreconditionerType>
 					constraints.distribute_local_to_global(cell_mass_matrix,
 						local_dof_indices,
 						K);
-					constraints.distribute_local_to_global(cell_mass_stab_matrix,
-						local_dof_indices,
-						K_stab);
 				}
 			}
 		}
 		K.compress(VectorOperation::add);
-		K_stab.compress(VectorOperation::add);
 	}
 
 
@@ -2492,7 +2461,7 @@ template <int dim>
 			M_inverse(Kuu, preconditioner_Kuu);
 
 		SolverControl solver_control_S(2000, 1.0e-13);
-		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
+		SolverMinRes<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
 		//SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
@@ -2500,7 +2469,7 @@ template <int dim>
 		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K,K_stab, M_inverse, R, kappa);
+			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
@@ -2592,7 +2561,7 @@ template <int dim>
 		
 
 		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
-			K,K_stab, M_inverse, R, kappa);
+			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
@@ -2703,7 +2672,7 @@ template <int dim>
 	template<int dim>
 	void Incompressible<dim>::calculate_error()
 	{
-		//error_solution_store.update_ghost_values();
+		error_solution_store.update_ghost_values();
 		LA::MPI::BlockVector tmp_error_store;
 		tmp_error_store.reinit(solution);
 		tmp_error_store.block(0) = solution.block(0);
