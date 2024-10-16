@@ -371,7 +371,7 @@ namespace NonlinearElasticity
 		LA::MPI::Vector& dst,
 		const LA::MPI::Vector& src) const
 	{
-		SolverControl            solver_control(src.size(), 1e-6 * src.l2_norm());
+		SolverControl            solver_control(src.size(), 1e-12);
 		SolverCG<LA::MPI::Vector> cg(solver_control);
 
 		dst = 0;
@@ -1707,7 +1707,7 @@ template <class PreconditionerType>
 							double tmp_Jf = get_Jf(FF);
 							HH_tilde = get_HH(FF, tmp_Jf);
 							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-							HH_tilde = 2. * HH - old_HH;
+							//HH_tilde = 2. * HH - old_HH;
 						}
 						else 
 						{
@@ -2506,13 +2506,13 @@ template <int dim>
 		{
 			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
 		}
+		constraints.distribute(solution);
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
 		solver_Kuu.solve(Kuu, v, Ru, preconditioner_Kuu);
 		//Solve for velocity
 
-		constraints.distribute(solution);
 		constraints.distribute(solution_dot);
 
 		relevant_solution = solution;
