@@ -2446,7 +2446,7 @@ template <int dim>
 		auto& Pp = P.block(1,1);
 
 
-		SolverControl reduction_control_Kuu(1000, 1.0e-13);
+		SolverControl reduction_control_Kuu(1000, 1.0e-12);
 		SolverCG<LA::MPI::Vector> solver_Kuu(reduction_control_Kuu);
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
@@ -2461,7 +2461,7 @@ template <int dim>
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
 
-		SolverControl solver_control_S(2000, 1.0e-13);
+		SolverControl solver_control_S(2000, 1.0e-12);
 		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);

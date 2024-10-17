@@ -2766,7 +2766,7 @@ namespace NonlinearElasticity
 		for (int i = 0; i < max_it; ++i) {
 			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
 			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
-			//dt *= 0.5;
+			dt *= 0.5;
 			if (i > 0) {
 				error_table.add_value("dt ", dt);
 				error_table.set_scientific("dt ", true);
@@ -2827,8 +2827,8 @@ namespace NonlinearElasticity
 		dt = parameters.dt;
 		for (int i = 1; i < max_it; ++i) {
 			dt *= 0.5;
-			stream << dt << ',' << abs(l2_u_eps_vec[i] - l2_u_eps_vec[i - 1]) << ',' << abs(l1_u_eps_vec[i] - l1_u_eps_vec[i - 1]) << ',' << abs(linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1])
-				<< ',' << abs(l2_p_eps_vec[i] - l2_p_eps_vec[i - 1]) << ',' << abs(l1_p_eps_vec[i] - l1_p_eps_vec[i - 1]) << ',' << abs(linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1]) << '\n';
+			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i] - l1_u_eps_vec[i - 1]) << ',' << abs(linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1])
+				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i] - l1_p_eps_vec[i - 1]) << ',' << abs(linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1]) << '\n';
 		}
 		output << stream.str();
 		
