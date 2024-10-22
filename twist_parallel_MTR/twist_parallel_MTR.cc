@@ -2871,7 +2871,7 @@ template <int dim>
 		double time = 0;
 		for (int i = 1; i < int(parameters.end_time/parameters.save_time); ++i) {
 			time += parameters.save_time;
-			stream << time << ',' << total_energy_vector[i] << '\n';
+			stream << time << ',' << total_energy_vector[i]/total_energy_vector[0] << '\n';
 		}
 		output << stream.str();
 	}
