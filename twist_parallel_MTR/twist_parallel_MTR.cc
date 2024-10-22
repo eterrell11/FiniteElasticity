@@ -2867,7 +2867,7 @@ template <int dim>
 
 		//This part actually generates the csv file
 		std::ostringstream stream;
-		std::ofstream output("energy_table" + boi + nu_str + "dt" + std::tostring(dt) + ".csv");
+		std::ofstream output("energy_table" + boi + nu_str + "dt" + std::to_string(dt) + ".csv");
 
 		stream << "Time" << ',' << "E(t)/E(0)" << '\n';
 		double time = 0;
