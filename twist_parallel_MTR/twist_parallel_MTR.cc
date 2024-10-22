@@ -1094,7 +1094,6 @@ template <class PreconditionerType>
 					mpi_communicator);
 			}
 			savestep_no = 0;
-			save_counter = 1;
 
 			//TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
 			assemble_system_mass();
@@ -1106,6 +1105,7 @@ template <class PreconditionerType>
 			measure_energy();
 			solve_energy();
 			total_energy_vector[save_counter] = total_energy;
+			save_counter = 1;
 			output_results();
 
 			
