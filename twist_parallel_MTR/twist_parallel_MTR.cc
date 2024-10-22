@@ -35,6 +35,7 @@
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/table_handler.h>
+#include <fmt/core.h>
 
 
 
@@ -2865,7 +2866,7 @@ template <int dim>
 
 		//This part actually generates the csv file
 		std::ostringstream stream;
-		std::string dtstring = string(std::format("{:.0e}\n", dt));
+		std::string dtstring = fmt::format("{:.0e}\n", dt);
 		std::ofstream output("energy_table" + boi + nu_str + "dt" + dtstring + ".csv");
 
 		stream << "Time" << ',' << "E(t)/E(0)" << '\n';
