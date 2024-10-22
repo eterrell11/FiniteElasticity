@@ -979,7 +979,7 @@ template <class PreconditionerType>
 		double pressure_mean;
 
 		double total_energy;
-
+		Vector<double> total_energy_vector;
 
 		Vector<double> u_cell_wise_error;
 		Vector<double> p_cell_wise_error;
@@ -1439,6 +1439,8 @@ template <class PreconditionerType>
 		relevant_solution = solution;
 		relevant_old_solution = solution;
 		pressure_mean = solution.block(1).mean_value();
+
+		total_energy_vector.reinit(int(parameters.end_time/parameters.dt))
 	}
 
 
