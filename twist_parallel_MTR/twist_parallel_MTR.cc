@@ -978,6 +978,8 @@ template <class PreconditionerType>
 		unsigned int savestep_no;
 		double pressure_mean;
 
+		double total_energy;
+
 
 		Vector<double> u_cell_wise_error;
 		Vector<double> p_cell_wise_error;
@@ -2199,7 +2201,7 @@ template <int dim>
 	void Incompressible<dim>::measure_energy()
 	{
 
-
+		total_energy = 0;
 		energy_RHS = 0;
 
 		FEValues<dim> fe_values(*mapping_ptr,
@@ -2264,6 +2266,9 @@ template <int dim>
 						cell_energy(i) += fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
 						+ 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) //Deviatoric energy
 						+ 0.5 * (Jf-1.) * pn) * fe_values.JxW(q); //Volumetric energy
+						total_energy +=  fe_values[Pressure].value(i,q) * (0.5 * vn * vn // Kinetic energy
+						+ 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) //Deviatoric energy
+						+ 0.5 * (Jf-1.) * pn) * fe_values.JxW(q);
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
