@@ -2979,7 +2979,7 @@ int main(int argc, char* argv[])
 		using namespace NonlinearElasticity;
 
 		Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
-		NonlinearElasticity::Incompressible<3> incompressible("parameter_file.prm");
+		NonlinearElasticity::Incompressible<2> incompressible("parameter_file.prm");
 		incompressible.run();
 	}
 	catch (std::exception& exc)
