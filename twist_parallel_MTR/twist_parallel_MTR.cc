@@ -32,6 +32,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <string>
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/table_handler.h>
