@@ -662,7 +662,7 @@ template <class PreconditionerType>
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[dim-1] = -TractionMagnitude;
+			values[dim-1] = TractionMagnitude;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
@@ -1188,10 +1188,10 @@ template <class PreconditionerType>
 				{
 					const Point<dim> face_center = face->center();
 					if (face_center[0] == 0) {
-						face->set_boundary_id(0);
+						face->set_boundary_id(1);
 					}
 					if (abs(face_center[0] - 4.8) < 0.001) {
-						face->set_boundary_id(1);
+						face->set_boundary_id(2);
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
@@ -1238,10 +1238,10 @@ template <class PreconditionerType>
 				{
 					const Point<dim> face_center = face->center();
 					if (face_center[0] == 0) {
-						face->set_boundary_id(0);
+						face->set_boundary_id(1);
 					}
 					if (abs(face_center[0] - 0.48) < 0.015) {
-						face->set_boundary_id(1);
+						face->set_boundary_id(2);
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
@@ -1277,10 +1277,10 @@ template <class PreconditionerType>
 				{
 					const Point<dim> face_center = face->center();
 					if (face_center[0] == 0) {
-						face->set_boundary_id(0);
+						face->set_boundary_id(1);
 					}
 					if (abs(face_center[0] - 480) < 0.01) {
-						face->set_boundary_id(1);
+						face->set_boundary_id(2);
 					}
 				}
 			}
