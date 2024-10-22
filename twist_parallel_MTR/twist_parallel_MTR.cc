@@ -1442,7 +1442,7 @@ template <class PreconditionerType>
 		relevant_old_solution = solution;
 		pressure_mean = solution.block(1).mean_value();
 
-		total_energy_vector.reinit(int(parameters.end_time/parameters.save_time));
+		total_energy_vector.reinit(int(parameters.end_time/parameters.save_time)+1);
 	}
 
 
@@ -2869,8 +2869,7 @@ template <int dim>
 
 		stream << "dt" << ',' << "Energy" << '\n';
 		double time = 0;
-		//stream << time << ',' << total_energy_vector[0]/total_energy_vector[0] << '\n';
-		for (int i = 0; i < int(parameters.end_time/parameters.save_time); ++i) {
+		for (int i = 0; i < (int(parameters.end_time/parameters.save_time)+1); ++i) {
 			time += parameters.save_time;
 			stream << time << ',' << total_energy_vector[i]/total_energy_vector[0] << '\n';
 		}
