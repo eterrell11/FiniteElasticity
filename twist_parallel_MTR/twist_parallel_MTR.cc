@@ -1105,7 +1105,7 @@ template <class PreconditionerType>
 			// {
 			measure_energy();
 			solve_energy();
-			// }
+			total_energy_vector[save_counter] = total_energy;
 			output_results();
 
 			
