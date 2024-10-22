@@ -1440,7 +1440,7 @@ template <class PreconditionerType>
 		relevant_old_solution = solution;
 		pressure_mean = solution.block(1).mean_value();
 
-		total_energy_vector.reinit(int(parameters.end_time/parameters.dt));
+		total_energy_vector.reinit(int(parameters.end_time/parameters.save_time));
 	}
 
 
@@ -2794,8 +2794,6 @@ template <int dim>
 		TableHandler error_table;
 		dt = parameters.dt;
 		for (int i = 1; i < max_it; ++i) {
-			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
-			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
 			dt *= 0.5;
 			error_table.add_value("dt ", dt);
 			error_table.set_scientific("dt ", true);
@@ -2843,6 +2841,39 @@ template <int dim>
 		}
 		output << stream.str();
 	}
+
+	template<int dim>
+	void Incompressible<dim>::create_energy_table()
+	{
+
+		std::string boi;
+		std::string nu_str;
+		if (parameters.BodyForce != 0)
+			boi = "BF";
+		if (parameters.TractionMagnitude != 0)
+			boi = "TR";
+		if (parameters.InitialVelocity != 0)
+			boi = "IV";
+		if (parameters.nu == 0.4)
+			nu_str = "4";
+		if (parameters.nu == 0.49)
+			nu_str = "49";
+		if (parameters.nu == 0.5)
+			nu_str = "5";
+
+		//This part actually generates the csv file
+		std::ostringstream stream;
+		std::ofstream output("energy_table" + boi + nu_str + ".csv");
+
+		stream << "dt" << ',' << "Energy" << '\n';
+		double time = 0;
+		for (int i = 1; i < int(parameters.end_time/parameters.save_time); ++i) {
+			time += parameters.save_time;
+			stream << time << ',' << total_energy_vector[i] << '\n';
+		}
+		output << stream.str();
+	}
+
 
 	//Spits out solution into vectors then into .vtks
 	template<int dim>
@@ -2938,7 +2969,7 @@ template <int dim>
 			// if (parameters.nu== 0.5) {
 			measure_energy();
 			solve_energy();
-			// }
+			total_energy_vector[save_counter] = total_energy;
 			++savestep_no;
 			output_results();
 			save_counter++;
