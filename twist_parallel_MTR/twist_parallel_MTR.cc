@@ -1440,7 +1440,7 @@ template <class PreconditionerType>
 		relevant_old_solution = solution;
 		pressure_mean = solution.block(1).mean_value();
 
-		total_energy_vector.reinit(int(parameters.end_time/parameters.dt))
+		total_energy_vector.reinit(int(parameters.end_time/parameters.dt));
 	}
 
 
