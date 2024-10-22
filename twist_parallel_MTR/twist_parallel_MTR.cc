@@ -892,6 +892,7 @@ template <class PreconditionerType>
 		void         output_results() const;
 		void		 calculate_error();
 		void		 create_error_table();
+		void 		 create_energy_table();
 		void		 do_timestep();
 		void		 measure_energy();
 		void		 solve_energy();
@@ -1142,6 +1143,7 @@ template <class PreconditionerType>
 
 		}
 		create_error_table();
+		create_energy_table();
 	}
 
 	template <int dim>
