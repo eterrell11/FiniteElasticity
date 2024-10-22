@@ -1161,7 +1161,7 @@ template <class PreconditionerType>
 
 
 	template <int dim>
-	void Incompressible<dim>::create_simplex_grid(Triangulation<2>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<2>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -1200,7 +1200,7 @@ template <class PreconditionerType>
 	}
 
 	template <int dim>
-	void Incompressible<dim>::create_simplex_grid(Triangulation<3>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<3>& triangulation)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -1248,6 +1248,7 @@ template <class PreconditionerType>
 
 		triangulation.refine_global(parameters.n_ref);
 	}
+	
 	template <int dim>
 	void Incompressible<dim>::create_grid()
 	{
