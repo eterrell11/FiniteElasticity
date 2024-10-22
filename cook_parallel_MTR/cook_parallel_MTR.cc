@@ -1248,10 +1248,11 @@ template <class PreconditionerType>
 
 		triangulation.refine_global(parameters.n_ref);
 	}
-	
+
 	template <int dim>
 	void Incompressible<dim>::create_grid()
 	{
+		Triangulation<dim> tmp_triangulation;
 		cell_measure = 1.;
 		std::vector<Point<2>> vertices = {
 			{0.0,0.0} , {0.0,440}, {480, 600}, {480, 440} };
@@ -1267,8 +1268,8 @@ template <class PreconditionerType>
 			}
 			cells[i].material_id = 0;
 		}
-		triangulation.create_triangulation(vertices, cells, SubCellData());
-		triangulation.refine_global(parameters.n_ref);
+		tmp_triangulation.create_triangulation(vertices, cells, SubCellData());
+		triangulation.copy_triangulation(tmp_triangulation);
 
 		for (const auto& cell : triangulation.active_cell_iterators()) {
 			for (const auto& face : cell->face_iterators()) {
@@ -1286,6 +1287,8 @@ template <class PreconditionerType>
 			cell_measure = std::min(cell_measure, cell->measure());
 		}
 		std::cout << "minimum cell size: " << cell_measure << std::endl;
+		triangulation.refine_global(parameters.n_ref);
+
 	}
 
 
