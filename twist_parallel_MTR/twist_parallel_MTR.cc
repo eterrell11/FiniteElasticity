@@ -976,7 +976,7 @@ template <class PreconditionerType>
 		double rho_0;
 		double end_time;
 		double save_time;
-		double save_counter;
+		int save_counter;
 		unsigned int timestep_no;
 		unsigned int savestep_no;
 		double pressure_mean;
