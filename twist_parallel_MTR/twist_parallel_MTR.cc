@@ -1109,7 +1109,8 @@ template <class PreconditionerType>
 			total_energy_vector[save_counter] = total_energy;
 
 			save_counter = 1;
-			create_energy_table();
+			if (this_mpi_process==0)
+				create_energy_table();
 
 			output_results();
 
