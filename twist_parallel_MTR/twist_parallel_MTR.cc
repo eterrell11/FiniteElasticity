@@ -1107,7 +1107,10 @@ template <class PreconditionerType>
 			measure_energy();
 			solve_energy();
 			total_energy_vector[save_counter] = total_energy;
+
 			save_counter = 1;
+			create_energy_table();
+
 			output_results();
 
 			
@@ -2867,7 +2870,7 @@ template <int dim>
 		energy_stream << "Time" << ',' << "E(t)/E(0)" << '\n';
 		double time = 0;
 		
-		int total_counter =  (int(parameters.end_time/parameters.save_time+1));
+		int total_counter =  min(save_counter,int(parameters.end_time/parameters.save_time+1));
 		for (int i = 0; i <total_counter; ++i) {
 			energy_stream << time << ',' << (total_energy_vector[i]/total_energy_vector[0]) << '\n';
 			time += parameters.save_time;
@@ -2974,6 +2977,8 @@ template <int dim>
 			++savestep_no;
 			output_results();
 			save_counter++;
+			create_energy_table();
+
 		}
 	}
 
