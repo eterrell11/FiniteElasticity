@@ -2875,7 +2875,7 @@ template <int dim>
 		energy_stream << "Time" << ',' << "E(t)/E(0)" << '\n';
 		double time = 0;
 		
-		int total_counter =  std::min(save_counter,int(parameters.end_time/parameters.save_time+1));
+		int total_counter =  save_counter ;//std::min(save_counter,int(parameters.end_time/parameters.save_time+1));
 		for (int i = 0; i <total_counter; ++i) {
 			energy_stream << time << ',' << (total_energy_vector[i]/total_energy_vector[0]) << '\n';
 			time += parameters.save_time;
