@@ -1148,9 +1148,11 @@ template <class PreconditionerType>
 			}
 
 		}
-		create_error_table();
 		if (this_mpi_process==0)
+		{
+			create_error_table();
 			create_energy_table();
+		}
 	}
 
 	template <int dim>
@@ -2976,9 +2978,9 @@ template <int dim>
 			// if (parameters.nu== 0.5) {
 			measure_energy();
 			solve_energy();
-			total_energy_vector[save_counter] = total_energy;
 			++savestep_no;
 			output_results();
+			total_energy_vector[save_counter] = total_energy;
 			save_counter++;
 			if (this_mpi_process==0)
 				create_energy_table();
