@@ -1148,7 +1148,8 @@ template <class PreconditionerType>
 
 		}
 		create_error_table();
-		create_energy_table();
+		if (this_mpi_process==0)
+			create_energy_table();
 	}
 
 	template <int dim>
