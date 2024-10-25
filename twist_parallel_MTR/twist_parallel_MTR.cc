@@ -2862,6 +2862,7 @@ template <int dim>
 			nu_str = "49";
 		if (parameters.nu == 0.5)
 			nu_str = "5";
+		
 
 		//This part actually generates the csv file
 		std::ostringstream energy_stream;
@@ -2977,7 +2978,8 @@ template <int dim>
 			++savestep_no;
 			output_results();
 			save_counter++;
-			create_energy_table();
+			if (this_mpi_process==0)
+				create_energy_table();
 
 		}
 	}
