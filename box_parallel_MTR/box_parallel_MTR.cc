@@ -2678,7 +2678,7 @@ template <int dim>
 		tmp_error_store.reinit(solution);
 		tmp_error_store.block(0) = solution.block(0);
 		if (parameters.integrator==2)
-			tmp_error_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+			tmp_error_store.block(1) = 1.0 * solution.block(1) - 0.0 * old_solution.block(1);
 		else
 			tmp_error_store.block(1) = solution.block(1);
 
