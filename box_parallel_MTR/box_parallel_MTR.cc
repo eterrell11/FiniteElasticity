@@ -1873,7 +1873,7 @@ template <int dim>
 
 		double midpoint_toggle=1.;
 		if (parameters.nu < 0.5)
-			midpoint_toggle =0.5;
+			midpoint_toggle =1.0;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
