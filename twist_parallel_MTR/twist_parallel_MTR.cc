@@ -1950,7 +1950,8 @@ template <int dim>
 						// pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 						// pk1_dev_tilde = pk1_dev;
 						// HH_tilde = HH;
-						
+						midpoint_toggle = 1.0;
+
 						FF = get_real_FF(displacement_grads[q]);
 						Jf = get_Jf(FF);
 						HH = get_HH(FF, Jf);
@@ -1973,6 +1974,7 @@ template <int dim>
 
 						HH_tilde = 0.5 * (old_HH + HH); //
 						pk1_dev_tilde = 0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
+						midpoint_toggle =0.5;
 					}
 
 
@@ -1985,12 +1987,12 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, 0.5 * (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i, midpoint_toggle * (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								midpoint_toggle * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH_tilde)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 						}
-						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + temp_pressure * HH_tilde) +
+						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + (1-midpoint_toggle)* temp_pressure * HH_tilde) +
 							 rho_0 * N_u_i * rhs_values[q] +
 							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
 					}
