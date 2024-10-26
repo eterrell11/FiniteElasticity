@@ -1968,7 +1968,7 @@ template <int dim>
 					if (parameters.nu ==0.5 && MTR_counter==1)
 					{
 						trapezoid_toggle = 1.0;
-						midpoint_toggle = 0.5;
+						midpoint_toggle = 1.0;
 					}
 
 					//temp_pressure -= pressure_mean;
