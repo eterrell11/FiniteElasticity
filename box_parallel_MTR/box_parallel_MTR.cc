@@ -1134,7 +1134,7 @@ template <class PreconditionerType>
 			timestep_no = 0;
 			if (parameters.integrator==2){
 				error_solution_store.block(0) = solution.block(0);
-				error_solution_store.block(1) = 1.5 * solution.block(1) - 0.5 * old_solution.block(1);
+				error_solution_store.block(1) = 1.0* solution.block(1) - 0.0 * old_solution.block(1);
 			}
 			else{
 				error_solution_store = solution;
