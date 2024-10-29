@@ -1975,7 +1975,7 @@ template <int dim>
 						HH_tilde = old_HH; //0.5 * (old_HH + HH); //
 						pk1_dev_tilde = old_pk1_dev;//0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
 						trapezoid_toggle = 1.0;
-						midpoint_toggle = 1.0;
+						midpoint_toggle = 0.5;
 					}
 
 					if (parameters.nu ==0.5 && MTR_counter==1)
