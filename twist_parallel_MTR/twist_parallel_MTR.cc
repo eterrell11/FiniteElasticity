@@ -1957,7 +1957,7 @@ template <int dim>
 						pk1_dev_tilde = pk1_dev;
 						HH_tilde = HH;
 						trapezoid_toggle = 1.0;
-						midpoint_toggle = 0.5
+						midpoint_toggle = 0.5;
 					}
 					else 
 					{
