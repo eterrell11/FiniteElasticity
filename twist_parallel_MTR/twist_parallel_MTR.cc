@@ -1957,7 +1957,7 @@ template <int dim>
 						pk1_dev_tilde = pk1_dev;
 						HH_tilde = HH;
 						trapezoid_toggle = 1.0;
-						midpoint_toggle = 0.5;
+						midpoint_toggle = 1.0;
 					}
 					else 
 					{
@@ -1972,8 +1972,8 @@ template <int dim>
 						HH = get_HH(FF, Jf);
 						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
-						HH_tilde = old_HH; //0.5 * (old_HH + HH); //
-						pk1_dev_tilde = old_pk1_dev;//0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
+						HH_tilde = 0.5 * (old_HH + HH); //
+						pk1_dev_tilde =0.5 * (pk1_dev + old_pk1_dev); //old_pk1_dev ; //
 						trapezoid_toggle = 1.0;
 						midpoint_toggle = 0.5;
 					}
@@ -2394,7 +2394,7 @@ template <int dim>
 		}
 		
 		solution_extrap.add(0.5*dt, solution_dot_extrap);
-		//solution_extrap.add(0.5 * dt, solution_dot);
+		solution_extrap.add(0.5 * dt, solution_dot);
 		
 		relevant_solution_extrap = solution_extrap;
 
