@@ -2510,7 +2510,7 @@ template <int dim>
 		}
 		else
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_aS);
 		}
 		constraints.distribute(solution);
 
@@ -2596,7 +2596,7 @@ template <int dim>
 		}
 		else
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_aS);
 		}
 
 		Kup.vmult(tmp1, p);
