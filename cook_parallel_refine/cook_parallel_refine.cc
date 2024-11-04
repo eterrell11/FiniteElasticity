@@ -1678,6 +1678,7 @@ template <class PreconditionerType>
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
+		ConstitutiveModels::WVol<dim> wvol;
 
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1746,6 +1747,7 @@ template <class PreconditionerType>
 						//HH_tilde = 2. * HH - old_HH;
 					}
 
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
@@ -1756,8 +1758,11 @@ template <class PreconditionerType>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
+
+							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+								(1. - shifter) * N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								/*rho_0 * dt * dt * (1 / 3.) **/ (HH_tilde)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
