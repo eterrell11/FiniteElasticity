@@ -143,7 +143,7 @@ namespace NonlinearElasticity
 					"Density");
 				prm.declare_entry("WVol_form",
 					"0",
-					Patterns::Integer(),
+					Patterns::Integer(0),
 					"WVol_form");
 			}
 			prm.leave_subsection();
