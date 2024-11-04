@@ -995,6 +995,7 @@ template <class PreconditionerType>
 		Vector<double> displacement_error_output;
 		double velocity_error_output;
 		Vector<double> pressure_error_output;
+		Vector<double> volume_error_output;
 
 		double E;
 		double nu;
@@ -1130,6 +1131,11 @@ template <class PreconditionerType>
 			l2_p_eps_vec[ref_step] = pressure_error_output[0];
 			l1_p_eps_vec[ref_step] = pressure_error_output[1];
 			linfty_p_eps_vec[ref_step] = pressure_error_output[2];
+
+			
+			l2_v_eps_vec[ref_step] = volume_error_output[0];
+			l1_v_eps_vec[ref_step] = volume_error_output[1];
+			linfty_v_eps_vec[ref_step] = volume_error_output[2];
 
 			pcout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
 			pcout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
@@ -1458,6 +1464,8 @@ template <class PreconditionerType>
 
 		displacement_error_output.reinit(3);
 		pressure_error_output.reinit(3);
+		volume_error_output.reinit(3);
+
 
 
 		VectorTools::interpolate(*mapping_ptr,
@@ -2921,6 +2929,69 @@ template <int dim>
 			p_cell_wise_error,
 			VectorTools::Linfty_norm);
 		// present_time += dt;
+		//solution.block(1).add(pressure_mean);
+
+		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
+
+		//cout << "Max pressure error value : " << pressure_error_output << std::endl;
+		//present_time += dt;
+
+	}
+
+	template<int dim>
+	void Incompressible<dim>::calculate_volume_error()
+	{
+
+		//VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
+		//error = (true_solution - solution);
+		const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim), dim + 1);
+		const ComponentSelectFunction<dim> pressure_mask(dim, dim + 1);
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Velocity(0);
+		//solution.block(1).add(-pressure_mean);
+
+
+		present_time -= dt;
+		VectorTools::integrate_difference(*mapping_ptr,
+			dof_handler,
+			comp,
+			Functions::ConstantFunction<dim>(1.0,dim+1),
+			vol_cell_wise_error,
+			(*quad_rule_ptr),
+			VectorTools::L2_norm,
+			&pressure_mask);
+
+		volume_error_output[0] = VectorTools::compute_global_error(triangulation,
+			vol_cell_wise_error,
+			VectorTools::L2_norm);
+
+		VectorTools::integrate_difference(*mapping_ptr,
+			dof_handler,
+			comp,
+			Functions::ConstantFunction<dim>(1.0, dim + 1),
+			vol_cell_wise_error,
+			(*quad_rule_ptr),
+			VectorTools::L1_norm,
+			&pressure_mask);
+
+		volume_error_output[1] = VectorTools::compute_global_error(triangulation,
+			vol_cell_wise_error,
+			VectorTools::L1_norm);
+
+		VectorTools::integrate_difference(*mapping_ptr,
+			dof_handler,
+			comp,
+			Functions::ConstantFunction<dim>(1.0, dim + 1),
+			vol_cell_wise_error,
+			(*quad_rule_ptr),
+			VectorTools::Linfty_norm,
+			&pressure_mask);
+
+		volume_error_output[2] = VectorTools::compute_global_error(triangulation,
+			vol_cell_wise_error,
+			VectorTools::Linfty_norm);
+		present_time += dt;
 		//solution.block(1).add(pressure_mean);
 
 		//cout << "Max displacement error value : " << displacement_error_output << std::endl;
