@@ -993,8 +993,7 @@ template <class PreconditionerType>
 
 		double E;
 		double nu;
-		int 
-
+		int wvol_form;
 		double kappa;
 		double mu;
 
