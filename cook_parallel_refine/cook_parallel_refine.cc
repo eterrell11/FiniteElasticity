@@ -2009,7 +2009,7 @@ template <int dim>
 							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i,  trapezoid_toggle* (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								midpoint_toggle  * N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
-								(HH_tilde)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+								(HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 						}
 						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + (1.-trapezoid_toggle)* temp_pressure * HH_tilde) +
 							 rho_0 * N_u_i * rhs_values[q] +
