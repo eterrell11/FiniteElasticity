@@ -3034,6 +3034,13 @@ template <int dim>
 			error_table.set_scientific("dEp_l1 ", true);
 			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i]);
 			error_table.set_scientific("dEp_linf ", true);
+
+			error_table.add_value("dEvol_l2 ", l2_v_eps_vec[i]/* - l2_v_eps_vec[i - 1]*/);
+			error_table.set_scientific("dEvol_l2 ", true);
+			error_table.add_value("dEvol_l1 ", l1_v_eps_vec[i]/* - l1_v_eps_vec[i - 1]*/);
+			error_table.set_scientific("dEvol_l1 ", true);
+			error_table.add_value("dEvol_linf ", linfty_v_eps_vec[i]/* - linfty_v_eps_vec[i - 1]*/);
+			error_table.set_scientific("dEvol_linf ", true);
 		}
 		std::string boi;
 		std::string nu_str;
