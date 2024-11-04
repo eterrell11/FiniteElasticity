@@ -899,6 +899,7 @@ template <class PreconditionerType>
 		void		 create_error_table();
 		void		 do_timestep();
 		void		 measure_energy();
+		void		 measure_compression();
 		void		 solve_energy();
 		
 		
@@ -2318,6 +2319,101 @@ template <int dim>
 		energy_RHS.block(0) = 0;
 		energy_RHS.compress(VectorOperation::add);
 
+	}
+
+	template <int dim>
+	void Incompressible<dim>::measure_compression()
+	{
+
+
+		comp_RHS = 0;
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
+			*fe_ptr,
+			(*face_quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_normal_vectors |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
+		
+		Vector<double>     cell_comp(dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Scalar Pressure(dim);
+		const FEValuesExtractors::Vector Velocity(0);
+
+
+		Tensor<2, dim> FF;
+		Tensor<2, dim> HH;
+		double Jf;
+		Tensor<1, dim> vn;
+		double vol_change;
+
+		ConstitutiveModels::WVol<dim> wvol;
+
+
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
+		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1, dim>> face_sol_vec_velocity(n_face_q_points, Tensor<1, dim>());
+
+
+
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			if (cell->subdomain_id() == this_mpi_process)
+			{
+				cell_comp = 0;
+				fe_values.reinit(cell);
+
+				fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+				fe_values[Velocity].get_function_values(solution_dot, sol_vec_velocity);
+
+
+
+
+
+				for (const unsigned int q : fe_values.quadrature_point_indices())
+				{
+
+					vn = sol_vec_velocity[q];
+					FF = get_real_FF(displacement_grads[q]);
+					Jf = determinant(FF);
+					HH = Jf * invert(transpose(FF));
+
+					vol_change = wvol.W_prime(parameters.WVol_form, Jf);
+
+					for (const unsigned int i : fe_values.dof_indices())
+					{
+						cell_comp[i] +=  Jf * fe_values[Pressure].value(i, q) * fe_values.JxW(q);
+					}
+				}
+				cell->get_dof_indices(local_dof_indices);
+
+				constraints.distribute_local_to_global(cell_comp,
+					local_dof_indices,
+					comp_RHS);
+			}
+		}
+		comp_RHS.block(0) = 0;
 	}
 
 
