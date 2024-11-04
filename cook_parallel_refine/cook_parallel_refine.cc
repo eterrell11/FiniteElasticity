@@ -1015,6 +1015,11 @@ template <class PreconditionerType>
 		std::vector<double> l1_p_eps_vec;
 		std::vector<double> linfty_p_eps_vec;
 
+		
+		std::vector<double> l1_v_eps_vec;
+		std::vector<double> l2_v_eps_vec;
+		std::vector<double> linfty_v_eps_vec;
+
 
 	};
 	// Constructor for the main class
