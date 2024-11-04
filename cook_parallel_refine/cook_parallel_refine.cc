@@ -1309,7 +1309,7 @@ template <class PreconditionerType>
 			}
 			cell_measure = std::min(cell_measure, cell->measure());
 		}
-		std::cout << "minimum cell size: " << cell_measure << std::endl;
+		//std::cout << "minimum cell size: " << cell_measure << std::endl;
 		triangulation.refine_global(parameters.n_ref);
 
 	}
