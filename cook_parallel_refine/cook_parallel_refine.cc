@@ -2421,6 +2421,8 @@ template <int dim>
 			}
 		}
 		comp_RHS.block(0) = 0;
+		comp_RHS.compress(VectorOperation::add);
+
 	}
 
 
