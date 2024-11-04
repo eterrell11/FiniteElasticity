@@ -1995,7 +1995,6 @@ template <int dim>
 					}
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
-
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
 					{
@@ -2005,8 +2004,10 @@ template <int dim>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
+							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+							
 							cell_mass_matrix(i, j) += (scalar_product(Grad_u_i,  trapezoid_toggle* (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								midpoint_toggle * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+								midpoint_toggle  * N_p_i * W_prime_lin_u) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								(HH_tilde)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 						}
