@@ -155,7 +155,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-				wvol_form = prm.get_integer("WVol_form")
+				wvol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
