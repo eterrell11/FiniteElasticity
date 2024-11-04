@@ -121,7 +121,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
-			int wvol_form;
+			double WVol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -142,8 +142,8 @@ namespace NonlinearElasticity
 					Patterns::Double(),
 					"Density");
 				prm.declare_entry("WVol_form",
-					"0",
-					Patterns::Integer(0),
+					"1",
+					Patterns::Integer(),
 					"WVol_form");
 			}
 			prm.leave_subsection();
@@ -155,7 +155,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-				wvol_form = prm.get_integer("WVol_form");
+				WVol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -993,7 +993,7 @@ template <class PreconditionerType>
 
 		double E;
 		double nu;
-
+		int 
 
 		double kappa;
 		double mu;
