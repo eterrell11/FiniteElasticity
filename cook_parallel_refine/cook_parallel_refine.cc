@@ -121,6 +121,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
+			int wvol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -140,6 +141,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Double(),
 					"Density");
+				prm.declare_entry("WVol_form",
+					"0",
+					Patterns::Integer(),
+					"WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -150,7 +155,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-
+				wvol_form = prm.get_double("WVol_form")
 			}
 			prm.leave_subsection();
 		}
@@ -1902,6 +1907,7 @@ template <int dim>
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
+		ConstitutiveModels::WVol<dim> wvol;
 
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
@@ -1989,6 +1995,8 @@ template <int dim>
 						midpoint_toggle = 1.0;
 					}
 
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
+
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
 					{
@@ -2005,7 +2013,7 @@ template <int dim>
 						}
 						cell_rhs(i) += (-scalar_product(Grad_u_i, pk1_dev_tilde + (1.-trapezoid_toggle)* temp_pressure * HH_tilde) +
 							 rho_0 * N_u_i * rhs_values[q] +
-							N_p_i * (Jf - 1.0)) * fe_values.JxW(q);
+							N_p_i * w_prime) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
