@@ -2397,7 +2397,7 @@ template <int dim>
 				cell_comp = 0;
 				fe_values.reinit(cell);
 
-				fe_values[Velocity].get_function_gradients(solution, displacement_grads);
+				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
