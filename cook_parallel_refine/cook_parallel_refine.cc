@@ -1406,6 +1406,11 @@ template <class PreconditionerType>
 		energy_RHS.reinit(owned_partitioning,
 			mpi_communicator);
 
+		comp.reinit(owned_partitioning,
+			mpi_communicator);
+		comp_RHS.reinit(owned_partitioning,
+			mpi_communicator);
+
 
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
 			mpi_communicator);
@@ -2554,7 +2559,7 @@ template <int dim>
 		auto& C = comp.block(1);
 
 		SolverControl reduction_control_Kpp(1000, 1.0e-12);
-		SolverCG<Vector<double>> solver_Kpp(reduction_control_Kpp);
+		SolverCG<LA::MPI::Vector> solver_Kpp(reduction_control_Kpp);
 		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kpp;
 		preconditioner_Kpp.initialize(Kpp);
 
