@@ -1084,6 +1084,12 @@ template <class PreconditionerType>
 		l2_p_eps_vec.reserve(max_it);
 		l1_p_eps_vec.reserve(max_it);
 		linfty_p_eps_vec.reserve(max_it);
+
+
+		l2_v_eps_vec.reserve(max_it);
+		l1_v_eps_vec.reserve(max_it);
+		linfty_v_eps_vec.reserve(max_it);
+
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
 			if (ref_step == 0) {
