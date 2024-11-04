@@ -901,6 +901,7 @@ template <class PreconditionerType>
 		void		 measure_energy();
 		void		 measure_compression();
 		void		 solve_energy();
+		void 		 solve_compression();
 		
 		
 		Parameters::AllParameters parameters;
@@ -965,6 +966,9 @@ template <class PreconditionerType>
 
 		LA::MPI::BlockVector energy;
 		LA::MPI::BlockVector energy_RHS;
+
+		LA::MPI::BlockVector comp;
+		LA::MPI::BlockVector comp_RHS;
 
 		
 		LA::MPI::Vector velocity;
@@ -2337,19 +2341,9 @@ template <int dim>
 			update_quadrature_points |
 			update_JxW_values);
 
-		FEFaceValues<dim> fe_face_values(*mapping_ptr,
-			*fe_ptr,
-			(*face_quad_rule_ptr),
-			update_values |
-			update_gradients |
-			update_quadrature_points |
-			update_normal_vectors |
-			update_JxW_values);
-
 
 		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 		const unsigned int n_q_points = (*quad_rule_ptr).size();
-		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
 		
 		Vector<double>     cell_comp(dofs_per_cell);
 
@@ -2371,9 +2365,6 @@ template <int dim>
 
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
-		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
-		std::vector<Tensor<1, dim>> face_sol_vec_velocity(n_face_q_points, Tensor<1, dim>());
 
 
 
@@ -2385,21 +2376,14 @@ template <int dim>
 				fe_values.reinit(cell);
 
 				fe_values[Velocity].get_function_gradients(solution, displacement_grads);
-				fe_values[Velocity].get_function_values(solution_dot, sol_vec_velocity);
-
-
-
-
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
 
-					vn = sol_vec_velocity[q];
 					FF = get_real_FF(displacement_grads[q]);
 					Jf = determinant(FF);
 					HH = Jf * invert(transpose(FF));
 
-					vol_change = wvol.W_prime(parameters.WVol_form, Jf);
 
 					for (const unsigned int i : fe_values.dof_indices())
 					{
@@ -2558,6 +2542,28 @@ template <int dim>
 
 
 		solver_Kpp.solve(Kpp, E, R, preconditioner_Kpp);
+	}
+
+	template <int dim>
+	void Incompressible<dim>::solve_compression()
+	{
+		const auto& Kpp = K.block(1, 1);
+
+		const auto& R = comp_RHS.block(1);
+
+		auto& C = comp.block(1);
+
+		SolverControl reduction_control_Kpp(1000, 1.0e-12);
+		SolverCG<Vector<double>> solver_Kpp(reduction_control_Kpp);
+		PreconditionJacobi<SparseMatrix<double>> preconditioner_Kpp;
+		preconditioner_Kpp.initialize(Kpp);
+
+
+		solver_Kpp.solve(Kpp, C, R, preconditioner_Kpp);
+
+
+
+
 	}
 
 
