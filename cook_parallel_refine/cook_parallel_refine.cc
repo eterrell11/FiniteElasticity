@@ -896,6 +896,7 @@ template <class PreconditionerType>
 		//void		 update_motion();
 		void         output_results() const;
 		void		 calculate_error();
+		void		 calculate_volume_error();
 		void		 create_error_table();
 		void		 do_timestep();
 		void		 measure_energy();
