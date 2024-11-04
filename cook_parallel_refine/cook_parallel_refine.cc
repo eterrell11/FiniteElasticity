@@ -992,6 +992,8 @@ template <class PreconditionerType>
 
 		Vector<double> u_cell_wise_error;
 		Vector<double> p_cell_wise_error;
+		Vector<double> vol_cell_wise_error;
+
 
 		Vector<double> displacement_error_output;
 		double velocity_error_output;
@@ -1466,6 +1468,7 @@ template <class PreconditionerType>
 
 		u_cell_wise_error.reinit(triangulation.n_active_cells());
 		p_cell_wise_error.reinit(triangulation.n_active_cells());
+		vol_cell_wise_error.reinit(triangulation.n_active_cells());
 
 
 		displacement_error_output.reinit(3);
