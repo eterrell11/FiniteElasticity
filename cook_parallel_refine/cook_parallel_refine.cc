@@ -2955,6 +2955,9 @@ template <int dim>
 	template<int dim>
 	void Incompressible<dim>::calculate_volume_error()
 	{
+		LA::MPI::BlockVector relevant_comp;
+		relevant_comp.reinit(relevant_solution);
+		relevant_comp.block(1) = comp.block(1);
 
 		//VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
 		//error = (true_solution - solution);
@@ -2969,7 +2972,7 @@ template <int dim>
 		present_time -= dt;
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			comp,
+			relevant_comp,
 			Functions::ConstantFunction<dim>(1.0,dim+1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2982,7 +2985,7 @@ template <int dim>
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			comp,
+			relevant_comp,
 			Functions::ConstantFunction<dim>(1.0, dim + 1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
@@ -2995,7 +2998,7 @@ template <int dim>
 
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
-			comp,
+			relevant_comp,
 			Functions::ConstantFunction<dim>(1.0, dim + 1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
