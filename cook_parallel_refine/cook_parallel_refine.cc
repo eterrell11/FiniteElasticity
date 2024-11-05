@@ -1285,6 +1285,7 @@ template <class PreconditionerType>
 	template <int dim>
 	void Incompressible<dim>::create_grid(int& n_ref)
 	{
+		triangulation.clear();
 		Triangulation<dim> tmp_triangulation;
 		cell_measure = 1.;
 		std::vector<Point<2>> vertices = {
