@@ -1089,9 +1089,12 @@ template <class PreconditionerType>
 		l2_v_eps_vec.reserve(max_it);
 		l1_v_eps_vec.reserve(max_it);
 		linfty_v_eps_vec.reserve(max_it);
-		int n_ref = parameters.n_ref;
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
+			int n_ref = parameters.n_ref;
+			for (int i = 0; i < ref_step; ++i) {
+				n_ref += 1;
+			}
 			if (ref_step == 0) {
 				if (parameters.Simplex == true) {
 					create_simplex_grid(triangulation);
