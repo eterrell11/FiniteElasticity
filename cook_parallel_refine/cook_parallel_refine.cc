@@ -1095,15 +1095,16 @@ template <class PreconditionerType>
 			for (int i = 0; i < ref_step; ++i) {
 				n_ref += 1;
 			}
-			if (ref_step == 0) {
-				if (parameters.Simplex == true) {
-					create_simplex_grid(triangulation);
-				}
-				else {
-					create_grid(n_ref);
-				}
-				
+			pcout << "Number of spatial refinements : " << std::endl;
+			
+			if (parameters.Simplex == true) {
+				create_simplex_grid(triangulation);
 			}
+			else {
+				create_grid(n_ref);
+			}
+				
+			
 
 			set_simulation_parameters();
 			for (int i = 0; i < ref_step; ++i) {
