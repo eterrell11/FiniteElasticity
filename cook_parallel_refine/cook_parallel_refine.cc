@@ -2494,7 +2494,7 @@ template <int dim>
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 
-		calculate_error();
+		//calculate_error();
 		calculate_volume_error();
 
 	}
@@ -2558,7 +2558,7 @@ template <int dim>
 		relevant_old_solution = old_solution;
 
 
-		calculate_error();
+		//calculate_error();
 		calculate_volume_error();
 
 	}
