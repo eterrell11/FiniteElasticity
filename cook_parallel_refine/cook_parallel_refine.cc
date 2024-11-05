@@ -2402,9 +2402,9 @@ template <int dim>
 			{
 				cell_comp = 0;
 				fe_values.reinit(cell);
+				solution.update_ghost_values();
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-				solution.update_ghost_values();
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
@@ -2417,6 +2417,7 @@ template <int dim>
 					for (const unsigned int i : fe_values.dof_indices())
 					{
 						cell_comp[i] +=  Jf * fe_values[Pressure].value(i, q) * fe_values.JxW(q);
+						cout << cell_comp[i] << std::endl;
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
@@ -2979,7 +2980,7 @@ template <int dim>
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			relevant_comp,
-			Functions::ConstantFunction<dim>(0.0,dim+1),
+			Functions::ConstantFunction<dim>(1.0,dim+1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L2_norm,
@@ -2992,7 +2993,7 @@ template <int dim>
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			relevant_comp,
-			Functions::ConstantFunction<dim>(0.0, dim + 1),
+			Functions::ConstantFunction<dim>(1.0, dim + 1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::L1_norm,
@@ -3005,7 +3006,7 @@ template <int dim>
 		VectorTools::integrate_difference(*mapping_ptr,
 			dof_handler,
 			relevant_comp,
-			Functions::ConstantFunction<dim>(0.0, dim + 1),
+			Functions::ConstantFunction<dim>(1.0, dim + 1),
 			vol_cell_wise_error,
 			(*quad_rule_ptr),
 			VectorTools::Linfty_norm,
