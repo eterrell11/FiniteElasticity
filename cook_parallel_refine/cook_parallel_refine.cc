@@ -881,7 +881,7 @@ template <class PreconditionerType>
 	private:
 		void		 create_simplex_grid(parallel::shared::Triangulation<2>& triangulation);
 		void		 create_simplex_grid(parallel::shared::Triangulation<3>& triangulation);
-		void		 create_grid();
+		void		 create_grid(int& n_ref);
 		void		 set_simulation_parameters();
 		void         setup_system();
 		void         assemble_system_mass();
@@ -1097,7 +1097,7 @@ template <class PreconditionerType>
 					create_simplex_grid(triangulation);
 				}
 				else {
-					create_grid();
+					create_grid(n_ref);
 				}
 				
 			}
@@ -1279,7 +1279,7 @@ template <class PreconditionerType>
 	}
 
 	template <int dim>
-	void Incompressible<dim>::create_grid()
+	void Incompressible<dim>::create_grid(int& n_ref)
 	{
 		Triangulation<dim> tmp_triangulation;
 		cell_measure = 1.;
