@@ -2417,7 +2417,6 @@ template <int dim>
 					for (const unsigned int i : fe_values.dof_indices())
 					{
 						cell_comp[i] +=  Jf * fe_values[Pressure].value(i, q) * fe_values.JxW(q);
-						//std::cout << cell_comp[i] << std::endl;
 					}
 				}
 				cell->get_dof_indices(local_dof_indices);
