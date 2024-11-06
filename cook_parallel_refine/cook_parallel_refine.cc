@@ -3065,7 +3065,7 @@ template <int dim>
 		if(this_mpi_process == 0)
 			error_table.write_text(std::cout);
 
-		TFinal = std::string(parameters.end_time);
+		TFinal = std::to_string(parameters.end_time);
 		
 		//This part actually generates the csv file
 		std::ostringstream stream;
