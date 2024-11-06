@@ -3051,6 +3051,7 @@ template <int dim>
 		}
 		std::string boi;
 		std::string nu_str;
+		std::string TFinal;
 		if (parameters.WVol_form == 0)
 			boi = "Quad";
 		else 
@@ -3063,11 +3064,12 @@ template <int dim>
 			nu_str = "5";
 		if(this_mpi_process == 0)
 			error_table.write_text(std::cout);
-		
+
+		TFinal = string(parameters.end_time);
 		
 		//This part actually generates the csv file
 		std::ostringstream stream;
-		std::ofstream output("error_table" + boi + nu_str + ".csv");
+		std::ofstream output("error_table"+TFinal + boi + nu_str + ".csv");
 
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
 		dt = parameters.dt;
