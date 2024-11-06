@@ -3041,18 +3041,6 @@ template <int dim>
 			dt *= 0.5;
 			error_table.add_value("dt ", dt);
 			error_table.set_scientific("dt ", true);
-			error_table.add_value("dEu_l2 ", l2_u_eps_vec[i]);
-			error_table.set_scientific("dEu_l2 ", true);
-			error_table.add_value("dEu_l1 ", l1_u_eps_vec[i]);
-			error_table.set_scientific("dEu_l1 ", true);
-			error_table.add_value("dEu_linf ", linfty_u_eps_vec[i]);
-			error_table.set_scientific("dEu_linf ", true);
-			error_table.add_value("dEp_l2 ", l2_p_eps_vec[i]);
-			error_table.set_scientific("dEp_l2 ", true);
-			error_table.add_value("dEp_l1 ", l1_p_eps_vec[i]);
-			error_table.set_scientific("dEp_l1 ", true);
-			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i]);
-			error_table.set_scientific("dEp_linf ", true);
 
 			error_table.add_value("dEvol_l2 ", l2_v_eps_vec[i]/* - l2_v_eps_vec[i - 1]*/);
 			error_table.set_scientific("dEvol_l2 ", true);
@@ -3063,12 +3051,10 @@ template <int dim>
 		}
 		std::string boi;
 		std::string nu_str;
-		if (parameters.BodyForce != 0)
-			boi = "BF";
-		if (parameters.TractionMagnitude != 0)
-			boi = "TR";
-		if (parameters.InitialVelocity != 0)
-			boi = "IV";
+		if (parameters.WVol_form == 0)
+			boi = "Quad";
+		else 
+			boi = "Liu";
 		if (parameters.nu == 0.4)
 			nu_str = "4";
 		if (parameters.nu == 0.49)
@@ -3088,7 +3074,8 @@ template <int dim>
 		for (int i = 1; i < max_it; ++i) {
 			dt *= 0.5;
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
-				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i]) << '\n';
+				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i])
+				 << ',' << abs(l2_v_eps_vec[i]) << ',' << abs(l1_v_eps_vec[i]) << ',' << abs(linfty_v_eps_vec[i]) << '\n';
 		}
 		output << stream.str();
 	}
