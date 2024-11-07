@@ -2493,9 +2493,8 @@ template <int dim>
 		old_solution.block(0) = solution_save;
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
-
+		
 		//calculate_error();
-		calculate_volume_error();
 
 	}
 
@@ -3178,6 +3177,8 @@ template <int dim>
 
 			measure_compression();
 			solve_compression();
+			calculate_volume_error();
+
 			++savestep_no;
 			output_results();
 			save_counter++;
