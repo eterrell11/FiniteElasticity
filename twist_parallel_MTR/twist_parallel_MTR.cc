@@ -1748,7 +1748,7 @@ template <class PreconditionerType>
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
-								  dt * (2 / 3.) * (HH_tilde)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+								  dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
