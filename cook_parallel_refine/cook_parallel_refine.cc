@@ -3113,10 +3113,10 @@ template <int dim>
 		LA::MPI::BlockVector extra_vector = relevant_solution;
 		extra_vector.reinit(relevant_solution);
 		extra_vector.block(0) = velocity;
-		extra_vector.block(1) = energy.block(1);
+		extra_vector.block(1) = comp.block(1);
 
 		std::vector<std::string> extra_names(dim, "Velocity");
-		extra_names.emplace_back("Energy");
+		extra_names.emplace_back("J");
 		std::vector<DataComponentInterpretation::DataComponentInterpretation>
 			interpretation3(dim,
 				DataComponentInterpretation::component_is_part_of_vector);
