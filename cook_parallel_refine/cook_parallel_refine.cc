@@ -3106,7 +3106,7 @@ template <int dim>
 		data_out.add_data_vector(u_cell_wise_error,
 			"Displacement_error",
 			DataOut<dim>::type_cell_data);
-		data_out.add_data_vector(p_cell_wise_error,
+		data_out.add_data_vector(vol_cell_wise_error,
 			"Pressure_error",
 			DataOut<dim>::type_cell_data);
 
