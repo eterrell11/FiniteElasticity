@@ -633,14 +633,20 @@ template <class PreconditionerType>
 	public:
 		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time, double& end_time)
 		{	
-			double ratio = 0.25; //How much of total run time to add forcing
+			double ratio = 0.125; //How much of total run time to add forcing
 
 			Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-			if (present_time <= ratio * end_time){
+			if (present_time <= ratio * end_time/2.){
 				double progress = present_time /(ratio * end_time);
 				double ramp = -2. * (progress * progress * progress) + 3. * (progress * progress);
 				values[0] = -ramp * a * std::sin(M_PI * p[dim - 1] / 24.) * p[1];
 				values[1] = ramp * a * std::sin(M_PI * p[dim - 1] / 24.) * p[0];
+				values[2] = 0;
+			}
+			else if (present_time>ratio*end_time/2 && present_time<=ratio* end_time)
+			{
+				values[0] = - a * std::sin(M_PI * p[dim - 1] / 24.) * p[1];
+				values[1] =   a * std::sin(M_PI * p[dim - 1] / 24.) * p[0];
 				values[2] = 0;
 			}
 			else
