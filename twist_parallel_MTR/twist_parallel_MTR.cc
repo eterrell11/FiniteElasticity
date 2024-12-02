@@ -625,25 +625,28 @@ template <class PreconditionerType>
 		//stress = mu * FF + kappa * ((Jf - 1) * HH);
 		return stress;
 	}
-
-
-
-	
-
 	
 
 	template<int dim>
 	class FExt : public Function<dim>
 	{
 	public:
-		virtual void rhs_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& a, double& present_time, double& /*mu*/, double& /*kappa*/)
+		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time,, double& end_time)
+		{	
+			double ratio = 0.25; //How much of total run time to add forcing
 
-		{
-			//Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
-			Assert(dim >= 2, ExcInternalError());
-			values =0;
-			values[dim-1] = -a * present_time;
-			
+			Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
+			if (present_time <= ratio * end_time){
+				progress = present_time /(ratio * end_time);
+				ramp = -3. * (progress * progress * progress) + 2. (progress * progress);
+				values[0] = -ramp * velocity * std::sin(M_PI * p[dim - 1] / 6.) * p[1];
+				values[1] = ramp * velocity * std::sin(M_PI * p[dim - 1] / 6.) * p[0];
+				values[2] = 0;
+			}
+			else
+			{
+				values = 0;
+			}
 		}
 		virtual void
 			rhs_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& BodyForce, double& present_time, double& mu, double& kappa)
@@ -651,7 +654,7 @@ template <class PreconditionerType>
 			const unsigned int n_points = points.size();
 			Assert(value_list.size() == n_points, ExcDimensionMismatch(value_list.size(), n_points));
 			for (unsigned int p = 0; p < n_points; ++p)
-				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, mu, kappa);
+				FExt<dim>::rhs_vector_value(points[p], value_list[p], BodyForce, present_time, end_time);
 		}
 	};
 
@@ -1692,7 +1695,7 @@ template <class PreconditionerType>
 
 
 
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time,parameters.end_time);
 
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
@@ -1921,13 +1924,13 @@ template <int dim>
 				if (MTR_counter==0)
 				{
 				present_time -= dt;
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, parameters.end_time);
 				present_time += dt;
 				}
 				else
 				{
 					present_time -= 0.5 * dt;
-					right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+					right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, parameters.end_time);
 					present_time += 0.5 * dt;
 				}
 
@@ -2155,7 +2158,7 @@ template <int dim>
 
 
 				//present_time -= 0.5 * dt;
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, parameters.end_time);
 				//present_time += 0.5 * dt;
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
