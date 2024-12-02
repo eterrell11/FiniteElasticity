@@ -631,14 +631,14 @@ template <class PreconditionerType>
 	class FExt : public Function<dim>
 	{
 	public:
-		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time,, double& end_time)
+		virtual void rhs_vector_value(const Point<dim>& p, Tensor<1, dim>& values, double& a, double& present_time, double& end_time)
 		{	
 			double ratio = 0.25; //How much of total run time to add forcing
 
 			Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 			if (present_time <= ratio * end_time){
-				progress = present_time /(ratio * end_time);
-				ramp = -3. * (progress * progress * progress) + 2. (progress * progress);
+				double progress = present_time /(ratio * end_time);
+				double ramp = -2. * (progress * progress * progress) + 3. * (progress * progress);
 				values[0] = -ramp * velocity * std::sin(M_PI * p[dim - 1] / 6.) * p[1];
 				values[1] = ramp * velocity * std::sin(M_PI * p[dim - 1] / 6.) * p[0];
 				values[2] = 0;
