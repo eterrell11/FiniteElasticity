@@ -639,8 +639,8 @@ template <class PreconditionerType>
 			if (present_time <= ratio * end_time){
 				double progress = present_time /(ratio * end_time);
 				double ramp = -2. * (progress * progress * progress) + 3. * (progress * progress);
-				values[0] = -ramp * a * std::sin(M_PI * p[dim - 1] / 6.) * p[1];
-				values[1] = ramp * a * std::sin(M_PI * p[dim - 1] / 6.) * p[0];
+				values[0] = -ramp * a * std::sin(M_PI * p[dim - 1] / 24.) * p[1];
+				values[1] = ramp * a * std::sin(M_PI * p[dim - 1] / 24.) * p[0];
 				values[2] = 0;
 			}
 			else
