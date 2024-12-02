@@ -3072,7 +3072,7 @@ template <int dim>
 
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
 		dt = parameters.dt;
-		for (int i = 1; i < max_it; ++i) {
+		for (int i = 0; i < max_it; ++i) {
 			dt *= 0.25;
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
 				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i])
