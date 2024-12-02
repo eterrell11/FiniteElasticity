@@ -2889,7 +2889,10 @@ template <int dim>
 		
 		int total_counter =  save_counter ;//std::min(save_counter,int(parameters.end_time/parameters.save_time+1));
 		for (int i = 0; i <total_counter; ++i) {
-			energy_stream << time << ',' << (total_energy_vector[i]/total_energy_vector[0]) << '\n';
+			if (parameters.InitialVelocity!=0)
+				energy_stream << time << ',' << (total_energy_vector[i]/total_energy_vector[0]) << '\n';
+			else
+				energy_stream << time << ',' << (total_energy_vector[i]) << '\n';
 			time += parameters.save_time;
 		}
 		energy_output << energy_stream.str();
