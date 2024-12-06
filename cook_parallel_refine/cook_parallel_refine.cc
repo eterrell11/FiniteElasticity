@@ -1108,7 +1108,7 @@ template <class PreconditionerType>
 
 			set_simulation_parameters();
 			for (int i = 0; i < ref_step; ++i) {
-				//dt *= 0.25;
+				dt *= 0.5;
 			}
 			setup_system();
 			if (ref_step == 0)
