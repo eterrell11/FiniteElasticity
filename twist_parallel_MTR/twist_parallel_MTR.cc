@@ -42,7 +42,6 @@
 
 
 
-//Enables Petsc for distributing work across my whopping 4 cores
 #include <deal.II/lac/petsc_vector.h>
 #include <deal.II/lac/petsc_sparse_matrix.h>
 #include <deal.II/lac/petsc_solver.h>
