@@ -1807,7 +1807,7 @@ template <class PreconditionerType>
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 							rho_0 * scale * N_u_i * rhs_values[q] +
-							N_p_i * (Jf - 1.0) - shifter * Grad_p_i * transpose(HH) * (un - old_un)) * fe_values.JxW(q);
+							N_p_i * w_prime - shifter * Grad_p_i * transpose(HH) * (un - old_un)) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
