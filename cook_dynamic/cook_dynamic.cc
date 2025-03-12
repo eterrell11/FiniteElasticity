@@ -1690,6 +1690,8 @@ template <class PreconditionerType>
 		Tensor<2, dim> old_HH;
 		Tensor<2, dim> HH_tilde;
 		double Jf;
+		double pn;
+		double old_pn;
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
 		Tensor<2, dim> old_pk1_dev;
@@ -1714,6 +1716,7 @@ template <class PreconditionerType>
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
+		std::vector<double> old_sol_vec_pressure(n_q_points);
 		std::vector<Tensor<1,dim>> sol_vec_displacement(n_q_points, Tensor<1,dim>());
 		std::vector<Tensor<1,dim>> old_sol_vec_displacement(n_q_points, Tensor<1,dim>());
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
@@ -1739,6 +1742,8 @@ template <class PreconditionerType>
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
+				fe_values[Pressure].get_function_values(relevant_solution, old_sol_vec_pressure);
+
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
@@ -1750,7 +1755,8 @@ template <class PreconditionerType>
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					//temp_pressure = sol_vec_pressure[q];
+					pn = sol_vec_pressure[q];
+					old_pn = old_sol_vec_pressure[q]
 					un = sol_vec_displacement[q];
 					old_un = old_sol_vec_displacement[q];
 					FF = get_real_FF(old_displacement_grads[q]);
@@ -1805,12 +1811,20 @@ template <class PreconditionerType>
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								(1. - shifter) * N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
-							dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+							dt * (2. / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
-						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
-							rho_0 * scale * N_u_i * rhs_values[q] +
-							N_p_i * w_prime /*- shifter * Grad_p_i * transpose(HH) * (un - old_un)*/) * fe_values.JxW(q);
+						if (parameters.dynamic_p){
+							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+								rho_0 * scale * N_u_i * rhs_values[q] +
+								N_p_i / kappa * dt * (4. / 3. * pn - 1. / 3. * old_pn) ) * fe_values.JxW(q);
+						}
+						else
+						{
+							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+								rho_0 * scale * N_u_i * rhs_values[q] +
+								N_p_i * w_prime ) * fe_values.JxW(q);
+						}
 					}
 				}
 				for (const auto& face : cell->face_iterators())
