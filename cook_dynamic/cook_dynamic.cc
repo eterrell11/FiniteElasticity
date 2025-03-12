@@ -1809,7 +1809,7 @@ template <class PreconditionerType>
 							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1. - shifter) * N_p_i * w_prime_lin) * fe_values.JxW(q);
+								 N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 							dt * (2. / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
@@ -1818,7 +1818,7 @@ template <class PreconditionerType>
 							if (present_time < 1.1 * dt){
 								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 									rho_0 * scale * N_u_i * rhs_values[q] +
-									N_p_i / kappa * (3. * pn) ) * fe_values.JxW(q);
+									N_p_i / kappa * (pn) ) * fe_values.JxW(q);
 							}
 							else{
 								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
