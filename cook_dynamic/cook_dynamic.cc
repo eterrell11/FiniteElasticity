@@ -1788,8 +1788,8 @@ template <class PreconditionerType>
 					else 
 					{
 						FF = get_real_FF(tmp_displacement_grads[q]);
-						Jf = get_Jf(FF);
-						HH_tilde = get_HH(FF, Jf);
+						double tmp_Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF, tmp_Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf, HH_tilde);
 						//HH_tilde = 2. * HH - old_HH;
 					}
@@ -1806,7 +1806,7 @@ template <class PreconditionerType>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 
-							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
