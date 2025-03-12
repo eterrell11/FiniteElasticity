@@ -1690,6 +1690,7 @@ template <class PreconditionerType>
 		Tensor<2, dim> old_HH;
 		Tensor<2, dim> HH_tilde;
 		double Jf;
+		double Jf_tilde;
 		double pn;
 		double old_pn;
 		Tensor<2, dim> pk1;
@@ -1788,9 +1789,9 @@ template <class PreconditionerType>
 					else 
 					{
 						FF = get_real_FF(tmp_displacement_grads[q]);
-						double tmp_Jf = get_Jf(FF);
+						Jf_tilde = get_Jf(FF);
 						HH_tilde = get_HH(FF, tmp_Jf);
-						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
 						//HH_tilde = 2. * HH - old_HH;
 					}
 
@@ -1806,7 +1807,7 @@ template <class PreconditionerType>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 
-							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+							double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
 
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
@@ -1848,14 +1849,8 @@ template <class PreconditionerType>
 
 						for (const unsigned int q : fe_face_values.quadrature_point_indices())
 						{
-							un = face_sol_vec_displacement[q];
-							old_un = old_face_sol_vec_displacement[q];
-							FF = get_real_FF(face_displacement_grads[q]);
-							Jf = get_Jf(FF);
-							HH = get_HH(FF, Jf);
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
-								// cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
 								if (face->boundary_id() == 2) {
 									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
