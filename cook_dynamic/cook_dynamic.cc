@@ -1815,9 +1815,16 @@ template <class PreconditionerType>
 
 						}
 						if (parameters.dynamic_p){
-							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+							if (present_time < 1.1 * dt){
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+									rho_0 * scale * N_u_i * rhs_values[q] +
+									N_p_i / kappa * (3. * pn) ) * fe_values.JxW(q);
+							}
+							else{
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 								rho_0 * scale * N_u_i * rhs_values[q] +
-								N_p_i / kappa * dt * (4. / 3. * pn - 1. / 3. * old_pn) ) * fe_values.JxW(q);
+								N_p_i / kappa * (4. / 3. * pn - 1. / 3. * old_pn) ) * fe_values.JxW(q);
+							}
 						}
 						else
 						{
