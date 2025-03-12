@@ -1756,7 +1756,7 @@ template <class PreconditionerType>
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
 					pn = sol_vec_pressure[q];
-					old_pn = old_sol_vec_pressure[q]
+					old_pn = old_sol_vec_pressure[q];
 					un = sol_vec_displacement[q];
 					old_un = old_sol_vec_displacement[q];
 					FF = get_real_FF(old_displacement_grads[q]);
@@ -1789,7 +1789,7 @@ template <class PreconditionerType>
 					{
 						FF = get_real_FF(tmp_displacement_grads[q]);
 						Jf = get_Jf(FF);
-						HH_tilde = get_HH(FF, tmp_Jf);
+						HH_tilde = get_HH(FF, Jf);
 						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf, HH_tilde);
 						//HH_tilde = 2. * HH - old_HH;
 					}
