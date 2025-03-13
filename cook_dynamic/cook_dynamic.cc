@@ -1885,6 +1885,265 @@ template <class PreconditionerType>
 		P.compress(VectorOperation::add);
 	}
 
+	template <int dim>
+	void Incompressible<dim>::assemble_system_implicit()
+	{
+
+		P = 0;
+		R = 0;
+		K.block(0, 1) = 0;
+		K.block(1, 0) = 0;
+
+
+
+		FEValues<dim> fe_values(*mapping_ptr,
+			*fe_ptr,
+			(*quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_quadrature_points |
+			update_JxW_values);
+
+		FEFaceValues<dim> fe_face_values(*mapping_ptr,
+			*fe_ptr,
+			(*face_quad_rule_ptr),
+			update_values |
+			update_gradients |
+			update_normal_vectors |
+			update_quadrature_points |
+			update_JxW_values);
+
+
+		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
+		const unsigned int n_q_points = (*quad_rule_ptr).size();
+		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
+
+
+
+		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_preconditioner_matrix(dofs_per_cell, dofs_per_cell);
+
+		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+		const FEValuesExtractors::Vector Velocity(0);
+		const FEValuesExtractors::Scalar Pressure(dim);
+
+
+
+		Vector<double>     cell_rhs(dofs_per_cell);
+
+		
+
+		FExt<dim> right_hand_side;
+		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
+
+
+		TractionVector<dim> traction_vector;
+		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
+
+
+		Tensor<2, dim> FF;
+		Tensor<2, dim> HH;
+		Tensor<2, dim> old_HH;
+		Tensor<2, dim> HH_tilde;
+		double Jf;
+		double Jf_tilde;
+		double pn;
+		double old_pn;
+		Tensor<2, dim> pk1;
+		Tensor<2, dim> pk1_dev;
+		Tensor<2, dim> old_pk1_dev;
+		Tensor<2, dim> pk1_dev_tilde;
+		double w_prime_lin;
+
+		double scale;
+		double shifter;
+		if (present_time >  dt) {
+			scale = 2. / 3.;
+			shifter = 0 /*1./3.*/;
+		}
+		else {
+			scale = 1.;
+			shifter = 0.;
+		}
+		//double temp_pressure;
+		Tensor<1,dim> un;
+		Tensor<1,dim> old_un;
+
+		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<double> sol_vec_pressure(n_q_points);
+		std::vector<double> old_sol_vec_pressure(n_q_points);
+		std::vector<Tensor<1,dim>> sol_vec_displacement(n_q_points, Tensor<1,dim>());
+		std::vector<Tensor<1,dim>> old_sol_vec_displacement(n_q_points, Tensor<1,dim>());
+		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+
+		ConstitutiveModels::WVol<dim> wvol;
+
+		
+		for (const auto& cell : dof_handler.active_cell_iterators())
+		{
+			if (cell->subdomain_id() == this_mpi_process)
+			{
+				cell_rhs = 0;
+				cell_mass_matrix = 0;
+				cell_preconditioner_matrix = 0;
+				fe_values.reinit(cell);
+
+				solution.update_ghost_values();
+				old_solution.update_ghost_values();
+
+				
+
+				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
+				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
+				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
+				fe_values[Pressure].get_function_values(relevant_solution, old_sol_vec_pressure);
+
+				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
+				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
+				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
+
+
+
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
+
+
+				for (const unsigned int q : fe_values.quadrature_point_indices())
+				{
+					pn = sol_vec_pressure[q];
+					old_pn = old_sol_vec_pressure[q];
+					un = sol_vec_displacement[q];
+					old_un = old_sol_vec_displacement[q];
+					FF = get_real_FF(old_displacement_grads[q]);
+					Jf = get_Jf(FF);
+					old_HH = get_HH(FF, Jf);
+					old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
+
+					FF = get_real_FF(displacement_grads[q]);
+					Jf = get_Jf(FF);
+					HH = get_HH(FF, Jf);
+					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
+
+				
+					if (parameters.AB2_extrap){
+						if (present_time < dt*1.1)
+						{
+							FF = get_real_FF(tmp_displacement_grads[q]);
+							double tmp_Jf = get_Jf(FF);
+							HH_tilde = get_HH(FF, tmp_Jf);
+							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+							//HH_tilde = 2. * HH - old_HH;
+						}
+						else 
+						{
+							HH_tilde = 2. * HH - old_HH;
+							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+						}
+					}
+					else 
+					{
+						FF = get_real_FF(tmp_displacement_grads[q]);
+						Jf_tilde = get_Jf(FF);
+						HH_tilde = get_HH(FF, Jf_tilde);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
+						//HH_tilde = 2. * HH - old_HH;
+					}
+
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
+
+					//temp_pressure -= pressure_mean;
+					for (const unsigned int i : fe_values.dof_indices())
+					{
+						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
+						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
+						double N_p_i = fe_values[Pressure].value(i, q);
+						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
+						for (const unsigned int j : fe_values.dof_indices())
+						{
+							if (parameters.dynamic_p){
+								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+							}
+							else
+							{
+								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+							}
+
+							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+								 N_p_i * w_prime_lin) * fe_values.JxW(q);
+							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
+							dt * (2. / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+
+						}
+						if (parameters.dynamic_p){
+							if (present_time < 1.1 * dt){
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+									rho_0 * scale * N_u_i * rhs_values[q] +
+									N_p_i / kappa * (pn) ) * fe_values.JxW(q);
+							}
+							else{
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+								rho_0 * scale * N_u_i * rhs_values[q] +
+								N_p_i / kappa * (4. / 3. * pn - 1. / 3. * old_pn) ) * fe_values.JxW(q);
+							}
+						}
+						else
+						{
+							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+								rho_0 * scale * N_u_i * rhs_values[q] +
+								N_p_i * w_prime ) * fe_values.JxW(q);
+						}
+					}
+				}
+				for (const auto& face : cell->face_iterators())
+				{
+					if (face->at_boundary())
+					{
+
+						fe_face_values.reinit(cell, face);
+						fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
+						fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
+						fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
+
+						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+
+						for (const unsigned int q : fe_face_values.quadrature_point_indices())
+						{
+							for (const unsigned int i : fe_face_values.dof_indices())
+							{
+								if (face->boundary_id() == 2) {
+									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+
+								}
+							}
+						}
+					}
+
+				}
+				//cout << cell_rhs<< std::endl;
+
+
+
+				cell->get_dof_indices(local_dof_indices);
+				constraints.distribute_local_to_global(cell_mass_matrix,
+					cell_rhs,
+					local_dof_indices,
+					K,
+					R);
+				constraints.distribute_local_to_global(cell_preconditioner_matrix,
+					local_dof_indices,
+					P);
+			}
+		}
+		K.compress(VectorOperation::add);
+		R.compress(VectorOperation::add);
+		P.compress(VectorOperation::add);
+	}
+
 
 
 
