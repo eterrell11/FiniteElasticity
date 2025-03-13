@@ -893,11 +893,8 @@ template <class PreconditionerType>
 		void         assemble_system_mass();
 		void         assemble_system_SBDF2();
 		void         assemble_system_implicit();
-		void		 assemble_Rv();
 		void         solve_SBDF2();
-		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
 		void		 solve_SBDF2_system();
-		//void		 update_motion();
 		void         output_results() const;
 		void		 calculate_error();
 		void		 calculate_volume_error();
@@ -2149,169 +2146,7 @@ template <class PreconditionerType>
 
 
 
-	template <int dim>
-	void Incompressible<dim>::assemble_Rv()
-	{
-
-		P = 0;
-		R = 0;
-		K.block(0, 1) = 0;
-		K.block(1, 0) = 0;
-
-
-
-		FEValues<dim> fe_values(*mapping_ptr,
-			*fe_ptr,
-			(*quad_rule_ptr),
-			update_values |
-			update_gradients |
-			update_quadrature_points |
-			update_JxW_values);
-
-		FEFaceValues<dim> fe_face_values(*mapping_ptr,
-			*fe_ptr,
-			(*face_quad_rule_ptr),
-			update_values |
-			update_gradients |
-			update_normal_vectors |
-			update_quadrature_points |
-			update_JxW_values);
-
-
-		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
-		const unsigned int n_q_points = (*quad_rule_ptr).size();
-		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
-
-
-
-		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
-		FullMatrix<double> cell_preconditioner_matrix(dofs_per_cell, dofs_per_cell);
-
-		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
-
-
-		const FEValuesExtractors::Vector Velocity(0);
-		const FEValuesExtractors::Scalar Pressure(dim);
-
-
-
-		Vector<double>     cell_rhs(dofs_per_cell);
-
-		
-
-		FExt<dim> right_hand_side;
-		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
-
-
-		TractionVector<dim> traction_vector;
-		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
-
-
-		Tensor<2, dim> FF;
-		Tensor<2, dim> HH;
-		double Jf;
-		Tensor<2, dim> pk1;
-		Tensor<2, dim> pk1_dev;
-
-		Tensor<1,dim> vn;
-
-		double temp_pressure;
-		LA::MPI::BlockVector extra_solution;
-		extra_solution.reinit(relevant_solution);
-		if(present_time == 2*dt)
-			extra_solution.block(1) = 2. * solution.block(1);
-		if (present_time > 2*dt)
-			extra_solution.block(1) = 1.5*solution.block(1) - 0.5 * old_solution.block(1);
-
-		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<double> sol_vec_pressure(n_q_points);
-		std::vector<Tensor<1,dim>> sol_vec_velocity(n_q_points, Tensor<1,dim>());
-
-
-
-
-		for (const auto& cell : dof_handler.active_cell_iterators())
-		{
-			if (cell->subdomain_id() == this_mpi_process)
-			{
-				cell_rhs = 0;
-				cell_mass_matrix = 0;
-				cell_preconditioner_matrix = 0;
-				fe_values.reinit(cell);
-
-				solution.update_ghost_values();
-
-				
-
-				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-				fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
-				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
-
-
-				//present_time -= 0.5 * dt;
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-				//present_time += 0.5 * dt;
-
-				for (const unsigned int q : fe_values.quadrature_point_indices())
-				{
-					temp_pressure = sol_vec_pressure[q];
-					vn = sol_vec_velocity[q];
-					FF = get_real_FF(displacement_grads[q]);
-					Jf = get_Jf(FF);
-					HH = get_HH(FF, Jf);
-					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
-
-
-
-					//temp_pressure -= pressure_mean;
-					for (const unsigned int i : fe_values.dof_indices())
-					{
-						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
-						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-						cell_rhs(i) += 0.5*(scalar_product(Grad_u_i, pk1_dev + temp_pressure * HH) +
-							rho_0 * N_u_i * rhs_values[q]) * fe_values.JxW(q);
-					}
-				}
-				for (const auto& face : cell->face_iterators())
-				{
-					if (face->at_boundary())
-					{
-
-						fe_face_values.reinit(cell, face);
-						// present_time -= 0.5 * dt;
-						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
-						// present_time += 0.5 * dt;
-						for (const unsigned int q : fe_face_values.quadrature_point_indices())
-						{
-							for (const unsigned int i : fe_face_values.dof_indices())
-							{
-								if (face->boundary_id() == 2) {
-									cell_rhs(i) += 0.5 *fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
-
-								}
-							}
-						}
-					}
-
-				}
-
-
-
-				cell->get_dof_indices(local_dof_indices);
-				constraints.distribute_local_to_global(cell_mass_matrix,
-					cell_rhs,
-					local_dof_indices,
-					K,
-					R);
-				constraints.distribute_local_to_global(cell_preconditioner_matrix,
-					local_dof_indices,
-					P);
-			}
-		}
-		K.compress(VectorOperation::add);
-		R.compress(VectorOperation::add);
-		P.compress(VectorOperation::add);
-	}
+	
 
 	template <int dim>
 	void Incompressible<dim>::measure_energy()
@@ -2504,10 +2339,6 @@ template <class PreconditionerType>
 		relevant_solution_extrap = solution_extrap;
 
 
-		// assemble_Rv();
-		// solve_FE(solution_dot_extrap, relevant_solution_dot_extrap);
-		// solution_extrap = solution + dt *(solution_dot_extrap);
-		// relevant_solution_extrap = solution_extrap;
 
 		{
 			assemble_system_SBDF2();
@@ -2535,6 +2366,62 @@ template <class PreconditionerType>
 		//calculate_error();
 
 	}
+
+	template<int dim>
+	void Incompressible<dim>::solve_implicit()
+	{
+		{
+			constraints.clear();
+			constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));
+			//present_time -= dt;
+			const FEValuesExtractors::Vector Velocity(0);
+			const FEValuesExtractors::Scalar Pressure(dim);
+			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
+			VectorTools::interpolate_boundary_values(*mapping_ptr,
+				dof_handler,
+				1,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Velocity));
+			//present_time += dt;
+
+		}
+		constraints.close();
+
+
+		solution_extrap = solution;
+		solution_extrap.add(dt, solution_dot);
+		relevant_solution_extrap = solution_extrap;
+
+
+
+		{
+			assemble_system_implicit();
+		}
+		{
+			solve_implicit_system();
+		}
+
+
+		old_velocity = velocity;
+		velocity = solution_dot.block(0);
+
+		auto solution_save = solution.block(0);
+		if (present_time > dt) {
+			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
+		}
+		else {
+			solution.block(0).add(dt, solution_dot.block(0));
+		}
+		//solution.block(0) += 0.5 * dt * (old_velocity + velocity);
+		old_solution.block(0) = solution_save;
+		relevant_solution = solution;
+		relevant_old_solution = old_solution;
+		
+		//calculate_error();
+
+	}
+
 
 
 	template <int dim> 
@@ -2671,17 +2558,22 @@ template <class PreconditionerType>
 
 	}
 
-	
-
-
 	template <int dim>
-	void Incompressible<dim>::solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol)
+	void Incompressible<dim>::solve_implicit_system()
 	{
 
+		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
 
 		const auto& Kuu = K.block(0, 0);
+		const auto& Kup = K.block(0, 1);
+		const auto& Kpu = K.block(1, 0);
 
-		auto& Rv = R.block(0);
+		//Kpp /= kappa;
+
+		auto& Ru = R.block(0);
+		auto& Rp = R.block(1);
+
+		auto& Pp = P.block(1,1);
 
 
 		SolverControl reduction_control_Kuu(1000, 1.0e-12);
@@ -2689,25 +2581,80 @@ template <class PreconditionerType>
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
+		LA::MPI::PreconditionAMG::AdditionalData data;
+		LA::MPI::PreconditionAMG preconditioner_S_comp;
+		preconditioner_S_comp.initialize(Pp, data);
+
+		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
+		preconditioner_S_in.initialize(Pp);
+
+		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
+			M_inverse(Kuu, preconditioner_Kuu);
+
+		SolverControl solver_control_S(2000, 1.0e-12);
+		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
+
+		IterationNumberControl iteration_number_control_aS(30, 1.e-18);
+		//SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
+		PreconditionIdentity preconditioner_aS;
+		
+
+		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
+			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
-		LA::MPI::Vector tmp1(Rv);
+		LA::MPI::Vector tmp1(Ru);
 		tmp1 = 0;
+		//LA::MPI::Vector tmp2(Rp);
 
-		un_motion.add(1.0, velocity);
-		
-		K.block(0,0).vmult_add(Rv, un_motion);
-		auto& v = sol.block(0);
-		solver_Kuu.solve(Kuu, v, Rv, preconditioner_Kuu);
+		if (present_time < 1.1*dt) {
+			un_motion.add(1.0, velocity);
+		}
+		else
+		{
+			un_motion.add(4./3., velocity, -1./3., old_velocity);
+		}
+		K.block(0,0).vmult_add(Ru, un_motion);
 
+		M_inverse.vmult(tmp1, Ru);
+		tmp1 *= -1.0;
+		Kpu.vmult_add(Rp, tmp1);
 
-		
-		constraints.distribute(sol);
+		auto& v = solution_dot.block(0);
 
-		rel_sol = sol;
+		auto& p = solution.block(1);
+		auto fake_solution = solution;
+		constraints.set_zero(solution);
+		constraints.set_zero(solution_dot);
+
+		if (parameters.nu == 0.5)
+		{
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_in);
+		}
+		else
+		{
+			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+		}
+		constraints.distribute(solution);
+
+		Kup.vmult(tmp1, p);
+		Ru.add(-1.0, tmp1);
+		solver_Kuu.solve(Kuu, v, Ru, preconditioner_Kuu);
+		//Solve for velocity
+
+		constraints.distribute(solution_dot);
+
+		relevant_solution = solution;
+		relevant_solution_dot = solution_dot;
 
 	}
+
+
+	
+
+
+	
 	
 	// template<int dim>
 	// void Incompressible<dim>::update_motion()
