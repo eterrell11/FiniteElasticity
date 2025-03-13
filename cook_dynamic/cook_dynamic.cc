@@ -892,6 +892,7 @@ template <class PreconditionerType>
 		void         setup_system();
 		void         assemble_system_mass();
 		void         assemble_system_SBDF2();
+		void         assemble_system_implicit();
 		void		 assemble_Rv();
 		void         solve_SBDF2();
 		void		 solve_FE(LA::MPI::BlockVector& sol, LA::MPI::BlockVector& rel_sol);
@@ -1693,6 +1694,7 @@ template <class PreconditionerType>
 		double Jf_tilde;
 		double pn;
 		double old_pn;
+		double w_prime_lin;
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
 		Tensor<2, dim> old_pk1_dev;
@@ -1807,11 +1809,11 @@ template <class PreconditionerType>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 							if (parameters.dynamic_p){
-								double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
 							}
 							else
 							{
-								double w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 							}
 
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
