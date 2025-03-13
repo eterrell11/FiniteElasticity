@@ -894,7 +894,9 @@ template <class PreconditionerType>
 		void         assemble_system_SBDF2();
 		void         assemble_system_implicit();
 		void         solve_SBDF2();
+		void         solve_implicit();
 		void		 solve_SBDF2_system();
+		void		 solve_implicit_system();
 		void         output_results() const;
 		void		 calculate_error();
 		void		 calculate_volume_error();
