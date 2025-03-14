@@ -2427,7 +2427,7 @@ namespace NonlinearElasticity
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 		relevant_solution_dot = solution_dot;
-		
+
 		//calculate_error();
 
 	}
@@ -2637,8 +2637,7 @@ namespace NonlinearElasticity
 
 		auto& dp = increment.block(1);
 		auto fake_solution = solution;
-		constraints.set_zero(solution);
-		constraints.set_zero(solution_dot);
+		constraints.set_zero(increment);
 
 		if (parameters.nu == 0.5)
 		{
@@ -2648,17 +2647,14 @@ namespace NonlinearElasticity
 		{
 			solver_S.solve(schur_complement, dp, R.block(1), preconditioner_S_comp);
 		}
-		constraints.distribute(solution);
 
 		Kup.vmult(tmp1, dp);
 		Rv.add(-1.0, tmp1);
 		solver_Kuu.solve(Kuu, dv, Rv, preconditioner_Kuu);
 		//Solve for velocity
 
-		constraints.distribute(solution_dot);
+		constraints.distribute(increment);
 
-		relevant_solution = solution;
-		relevant_solution_dot = solution_dot;
 
 	}
 
