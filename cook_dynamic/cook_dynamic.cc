@@ -1990,7 +1990,6 @@ namespace NonlinearElasticity
 		ConstitutiveModels::WVol<dim> wvol;
 
 		auto tmp_solution = 4./3. * solution -1./3. * old_solution + 2./3. * dt * new_solution;
-		relevant_new_solution = tmp_solution; 
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -2004,7 +2003,8 @@ namespace NonlinearElasticity
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
 
-				
+				relevant_new_solution = tmp_solution; 
+
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
@@ -2028,40 +2028,19 @@ namespace NonlinearElasticity
 					old_pn = old_sol_vec_pressure[q];
 					un = sol_vec_displacement[q];
 					old_un = old_sol_vec_displacement[q];
-					FF = get_real_FF(old_displacement_grads[q]);
-					Jf = get_Jf(FF);
-					old_HH = get_HH(FF, Jf);
-					old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
-
-					FF = get_real_FF(displacement_grads[q]);
-					Jf = get_Jf(FF);
-					HH = get_HH(FF, Jf);
-					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
-
+					
 				
-					if (parameters.AB2_extrap){
-						if (present_time < dt*1.1)
-						{
-							FF = get_real_FF(tmp_displacement_grads[q]);
-							double tmp_Jf = get_Jf(FF);
-							HH_tilde = get_HH(FF, tmp_Jf);
-							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-							//HH_tilde = 2. * HH - old_HH;
-						}
-						else 
-						{
-							HH_tilde = 2. * HH - old_HH;
-							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
-						}
-					}
-					else 
-					{
-						FF = get_real_FF(tmp_displacement_grads[q]);
-						Jf_tilde = get_Jf(FF);
-						HH_tilde = get_HH(FF, Jf_tilde);
-						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
-						//HH_tilde = 2. * HH - old_HH;
-					}
+					
+					FF = get_real_FF(tmp_displacement_grads[q]);
+					Jf_tilde = get_Jf(FF);
+					HH_tilde = get_HH(FF, Jf_tilde);
+					pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
+					//HH_tilde = 2. * HH - old_HH;
+				
+					FF = get_real_FF(new_displacement_grads[q]);
+					Jf = get_Jf(FF);
+					HH = get_HH(FF,JF);
+
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
@@ -2074,7 +2053,7 @@ namespace NonlinearElasticity
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 							
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
