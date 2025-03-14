@@ -2039,7 +2039,7 @@ namespace NonlinearElasticity
 				
 					FF = get_real_FF(new_displacement_grads[q]);
 					Jf = get_Jf(FF);
-					HH = get_HH(FF,JF);
+					HH = get_HH(FF,Jf);
 
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
