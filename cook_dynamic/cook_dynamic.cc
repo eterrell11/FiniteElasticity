@@ -2402,6 +2402,7 @@ namespace NonlinearElasticity
 			new_solution += increment;
 			relevant_new_solution = new_solution;
 			epsilon = R.block(1).l2_norm();
+			pcout << "NK error: " << epsilon << std::endl;
 		}
 
 		old_velocity = velocity;
