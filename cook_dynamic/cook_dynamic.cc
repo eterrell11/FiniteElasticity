@@ -2397,9 +2397,10 @@ namespace NonlinearElasticity
 		relevant_new_solution = new_solution;
 		
 		double epsilon = 1;
-		while (epsilon > 1.0e-8)
+		int counter = 0;
+		while (epsilon > 1.0e-8 && counter<10)
 		{
-			
+			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
 
 			solve_implicit_system(increment, new_solution);
@@ -2407,6 +2408,7 @@ namespace NonlinearElasticity
 			relevant_new_solution = new_solution;
 			epsilon = increment.block(1).l2_norm();
 			pcout << "NK error: " << epsilon << std::endl;
+			
 		}
 
 		old_velocity = velocity;
