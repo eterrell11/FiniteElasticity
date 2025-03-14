@@ -2406,7 +2406,7 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = increment.block(1).l2_norm();
+			epsilon = increment.block(0).l2_norm();
 			pcout << "NK error: " << epsilon << std::endl;
 			
 		}
