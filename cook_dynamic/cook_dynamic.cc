@@ -2620,6 +2620,8 @@ namespace NonlinearElasticity
 
 		if (present_time < 1.1*dt) {
 			un_motion.add(1.0, velocity); 
+			un_motion.add(-1.0, new_solution.block(0));
+
 		}
 		else
 		{
@@ -2636,7 +2638,6 @@ namespace NonlinearElasticity
 		auto& dv = increment.block(0);
 
 		auto& dp = increment.block(1);
-		auto fake_solution = solution;
 		constraints.set_zero(increment);
 
 		if (parameters.nu == 0.5)
