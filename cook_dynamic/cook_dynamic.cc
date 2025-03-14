@@ -2012,7 +2012,7 @@ namespace NonlinearElasticity
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Pressure].get_function_values(relevant_solution, old_sol_vec_pressure);
-				fe_values[Pressure].get_function_values(relevant_newsolution, new_sol_vec_pressure);
+				fe_values[Pressure].get_function_values(relevant_new_solution, new_sol_vec_pressure);
 
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
@@ -2081,7 +2081,7 @@ namespace NonlinearElasticity
 						{
 							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 								rho_0 * scale * N_u_i * rhs_values[q] +
-								N_p_i * (w_prime) * fe_values.JxW(q);
+								N_p_i * (w_prime)) * fe_values.JxW(q);
 						}
 					}
 				}
@@ -2405,7 +2405,7 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = increment.block(1);
+			epsilon = increment.block(1).l2_norm();
 			pcout << "NK error: " << epsilon << std::endl;
 		}
 
