@@ -2398,7 +2398,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1;
 		int counter = 0;
-		while (epsilon > 1.0e-8 && counter<1)
+		while (epsilon > 1.0e-8 && counter<10)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
@@ -2413,7 +2413,7 @@ namespace NonlinearElasticity
 
 		old_velocity = velocity;
 		velocity = new_solution.block(0);
-
+		solution_dot.block(0) = new_solution.block(0);
 		solution.block(1) = new_solution.block(1);
 		auto solution_save = solution.block(0);
 		if (present_time > dt) {
@@ -2426,6 +2426,7 @@ namespace NonlinearElasticity
 		old_solution.block(0) = solution_save;
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
+		relevant_solution_dot = solution_dot;
 		
 		//calculate_error();
 
