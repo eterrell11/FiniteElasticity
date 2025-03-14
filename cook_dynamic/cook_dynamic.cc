@@ -1991,8 +1991,7 @@ namespace NonlinearElasticity
 
 		ConstitutiveModels::WVol<dim> wvol;
 
-		auto tmp_solution = 4./3. * solution -1./3. * old_solution + 2./3. * dt * new_solution;
-		
+		auto tmp_solution;
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
@@ -2004,6 +2003,7 @@ namespace NonlinearElasticity
 
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
+				tmp_solution = 4./3. * solution -1./3. * old_solution + 2./3. * dt * new_solution;
 
 				relevant_new_solution = tmp_solution; 
 
