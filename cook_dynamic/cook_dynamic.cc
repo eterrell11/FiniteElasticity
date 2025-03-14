@@ -1951,6 +1951,7 @@ namespace NonlinearElasticity
 		double Jf;
 		double Jf_tilde;
 		double pn;
+		double new_pn;
 		double old_pn;
 		Tensor<2, dim> pk1;
 		Tensor<2, dim> pk1_dev;
@@ -1978,6 +1979,7 @@ namespace NonlinearElasticity
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
+		std::vector<double> new_sol_vec_pressure(n_q_points);
 		std::vector<double> old_sol_vec_pressure(n_q_points);
 		std::vector<Tensor<1,dim>> sol_vec_displacement(n_q_points, Tensor<1,dim>());
 		std::vector<Tensor<1,dim>> old_sol_vec_displacement(n_q_points, Tensor<1,dim>());
@@ -2010,6 +2012,7 @@ namespace NonlinearElasticity
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Pressure].get_function_values(relevant_solution, old_sol_vec_pressure);
+				fe_values[Pressure].get_function_values(relevant_newsolution, new_sol_vec_pressure);
 
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
@@ -2024,6 +2027,7 @@ namespace NonlinearElasticity
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
+					new_pn = new_sol_vec_pressure[q];
 					pn = sol_vec_pressure[q];
 					old_pn = old_sol_vec_pressure[q];
 					un = sol_vec_displacement[q];
@@ -2077,7 +2081,7 @@ namespace NonlinearElasticity
 						{
 							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 								rho_0 * scale * N_u_i * rhs_values[q] +
-								N_p_i * w_prime ) * fe_values.JxW(q);
+								N_p_i * (w_prime) * fe_values.JxW(q);
 						}
 					}
 				}
@@ -2401,7 +2405,7 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = R.block(1).l2_norm();
+			epsilon = increment.block(1);
 			pcout << "NK error: " << epsilon << std::endl;
 		}
 
