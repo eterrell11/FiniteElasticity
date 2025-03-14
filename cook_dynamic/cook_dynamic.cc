@@ -2057,7 +2057,7 @@ namespace NonlinearElasticity
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
+							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
 							
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
