@@ -2046,7 +2046,7 @@ namespace NonlinearElasticity
 					HH = get_HH(FF,Jf);
 
 
-					double w_prime = wvol.W_prime(parameters.WVol_form, Jf_tilde);
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
