@@ -2012,7 +2012,6 @@ namespace NonlinearElasticity
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Pressure].get_function_values(relevant_solution, old_sol_vec_pressure);
-				fe_values[Pressure].get_function_values(relevant_new_solution, new_sol_vec_pressure);
 
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
@@ -2020,7 +2019,8 @@ namespace NonlinearElasticity
 				fe_values[Velocity].get_function_gradients(relevant_new_solution, new_displacement_grads);
 				relevant_new_solution = new_solution;
 				fe_values[Velocity].get_function_values(relevant_new_solution, new_sol_vec_velocity);
-				
+				fe_values[Pressure].get_function_values(relevant_new_solution, new_sol_vec_pressure);
+
 
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
 
