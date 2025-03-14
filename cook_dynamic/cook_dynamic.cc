@@ -1981,8 +1981,11 @@ namespace NonlinearElasticity
 		std::vector<double> old_sol_vec_pressure(n_q_points);
 		std::vector<Tensor<1,dim>> sol_vec_displacement(n_q_points, Tensor<1,dim>());
 		std::vector<Tensor<1,dim>> old_sol_vec_displacement(n_q_points, Tensor<1,dim>());
+		std::vector<Tensor<1,dim>> new_sol_vec_velocity(n_q_points, Tensor<1,dim>());
+
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
+		
 
 		ConstitutiveModels::WVol<dim> wvol;
 
@@ -2635,7 +2638,7 @@ namespace NonlinearElasticity
 		{
 			un_motion.add(4./3., velocity, -1./3., old_velocity);
 			un_motion.add(4./3., velocity, -1./3., old_velocity);
-			un_motion.add(-1.0, new_velocity);
+			un_motion.add(-1.0, new_solution.block(0));
 		}
 		K.block(0,0).vmult_add(Rv, un_motion);
 
@@ -2652,17 +2655,17 @@ namespace NonlinearElasticity
 
 		if (parameters.nu == 0.5)
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_in);
+			solver_S.solve(schur_complement, dp, R.block(1), preconditioner_S_in);
 		}
 		else
 		{
-			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
+			solver_S.solve(schur_complement, dp, R.block(1), preconditioner_S_comp);
 		}
 		constraints.distribute(solution);
 
-		Kup.vmult(tmp1, p);
-		Ru.add(-1.0, tmp1);
-		solver_Kuu.solve(Kuu, v, Ru, preconditioner_Kuu);
+		Kup.vmult(tmp1, dp);
+		Rv.add(-1.0, tmp1);
+		solver_Kuu.solve(Kuu, dv, Rv, preconditioner_Kuu);
 		//Solve for velocity
 
 		constraints.distribute(solution_dot);
