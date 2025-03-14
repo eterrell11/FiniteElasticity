@@ -437,7 +437,7 @@ namespace NonlinearElasticity
 	} //namespace ConstitutiveModels
 
 
-template <class PreconditionerType>
+	template <class PreconditionerType>
 	class SchurComplement : public Subscriptor
 	{
 	public:
@@ -892,11 +892,11 @@ template <class PreconditionerType>
 		void         setup_system();
 		void         assemble_system_mass();
 		void         assemble_system_SBDF2();
-		void         assemble_system_implicit();
+		void         assemble_system_implicit(LA::MPI::BlockVector& new_solution, LA::MPI::BlockVector& relevant_new_solution);
 		void         solve_SBDF2();
 		void         solve_implicit();
 		void		 solve_SBDF2_system();
-		void		 solve_implicit_system();
+		void		 solve_implicit_system(LA::MPI::BlockVector& increment, LA::MPI::BlockVector& new_solution);
 		void         output_results() const;
 		void		 calculate_error();
 		void		 calculate_volume_error();
@@ -1887,7 +1887,7 @@ template <class PreconditionerType>
 	}
 
 	template <int dim>
-	void Incompressible<dim>::assemble_system_implicit()
+	void Incompressible<dim>::assemble_system_implicit(LA::MPI::BlockVector& new_solution, LA::MPI::BlockVector& relevant_new_solution)
 	{
 
 		P = 0;
@@ -1974,6 +1974,7 @@ template <class PreconditionerType>
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> new_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
@@ -1985,6 +1986,8 @@ template <class PreconditionerType>
 
 		ConstitutiveModels::WVol<dim> wvol;
 
+		auto tmp_solution = 4./3. * solution -1./3. * old_solution + 2./3. * dt * new_solution;
+		relevant_new_solution = tmp_solution; 
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -2008,8 +2011,10 @@ template <class PreconditionerType>
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
-
-
+				fe_values[Velocity].get_function_gradients(relevant_new_solution, new_displacement_grads);
+				relevant_new_solution = new_solution;
+				fe_values[Velocity].get_function_values(relevant_new_solution, new_sol_vec_velocity);
+				
 
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
 
@@ -2066,14 +2071,8 @@ template <class PreconditionerType>
 						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
 						for (const unsigned int j : fe_values.dof_indices())
 						{
-							if (parameters.dynamic_p){
-								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
-							}
-							else
-							{
-								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
-							}
-
+							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf_tilde, HH_tilde, fe_values[Velocity].gradient(j, q), dt);
+							
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
@@ -2396,18 +2395,37 @@ template <class PreconditionerType>
 		relevant_solution_extrap = solution_extrap;
 
 
-
+		LA::MPI::BlockVector increment;
+		LA::MPI::BlockVector relevant_increment;
+		increment.reinit(owned_partitioning,
+			mpi_communicator);
+		LA::MPI::BlockVector new_solution;
+		new_solution.reinit(owned_partitioning,
+			mpi_communicator);
+		LA::MPI::BlockVector relevant_new_solution;
+		relevant_new_solution.reinit(owned_partitioning,
+			relevant_partitioning,
+			mpi_communicator);
+		new_solution.block(0) = velocity;
+		new_solution.block(1) = solution.block(1);
+		relevant_new_solution = new_solution;
+		
+		double epsilon = 1;
+		while (epsilon > 1.0e-8)
 		{
-			assemble_system_implicit();
-		}
-		{
-			solve_implicit_system();
-		}
+			
+			assemble_system_implicit(new_solution, relevant_new_solution);
 
+			solve_implicit_system(increment, new_solution);
+			new_solution += increment;
+			relevant_new_solution = new_solution;
+			epsilon = R.block(1).l2_norm();
+		}
 
 		old_velocity = velocity;
-		velocity = solution_dot.block(0);
+		velocity = new_solution.block(0);
 
+		solution.block(1) = new_solution.block(1);
 		auto solution_save = solution.block(0);
 		if (present_time > dt) {
 			solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
@@ -2561,7 +2579,7 @@ template <class PreconditionerType>
 	}
 
 	template <int dim>
-	void Incompressible<dim>::solve_implicit_system()
+	void Incompressible<dim>::solve_implicit_system(LA::MPI::BlockVector& increment, LA::MPI::BlockVector& new_solution)
 	{
 
 		//std::unique_ptr<PackagedOperation<Vector<double>>>  linear_operator_ptr;
@@ -2572,7 +2590,7 @@ template <class PreconditionerType>
 
 		//Kpp /= kappa;
 
-		auto& Ru = R.block(0);
+		auto& Rv = R.block(0);
 		auto& Rp = R.block(1);
 
 		auto& Pp = P.block(1,1);
@@ -2606,26 +2624,28 @@ template <class PreconditionerType>
 
 		LA::MPI::Vector un_motion(velocity);		
 		un_motion = 0;
-		LA::MPI::Vector tmp1(Ru);
+		LA::MPI::Vector tmp1(Rv);
 		tmp1 = 0;
 		//LA::MPI::Vector tmp2(Rp);
 
 		if (present_time < 1.1*dt) {
-			un_motion.add(1.0, velocity);
+			un_motion.add(1.0, velocity); 
 		}
 		else
 		{
 			un_motion.add(4./3., velocity, -1./3., old_velocity);
+			un_motion.add(4./3., velocity, -1./3., old_velocity);
+			un_motion.add(-1.0, new_velocity);
 		}
-		K.block(0,0).vmult_add(Ru, un_motion);
+		K.block(0,0).vmult_add(Rv, un_motion);
 
-		M_inverse.vmult(tmp1, Ru);
+		M_inverse.vmult(tmp1, Rv);
 		tmp1 *= -1.0;
 		Kpu.vmult_add(Rp, tmp1);
 
-		auto& v = solution_dot.block(0);
+		auto& dv = increment.block(0);
 
-		auto& p = solution.block(1);
+		auto& dp = increment.block(1);
 		auto fake_solution = solution;
 		constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
@@ -3000,6 +3020,10 @@ template <class PreconditionerType>
 		if (parameters.integrator == 1)
 		{
 			solve_SBDF2();
+		}
+		if (parameters.integrator ==2)
+		{
+			solve_implicit();
 		}
 
 
