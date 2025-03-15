@@ -2038,7 +2038,7 @@ namespace NonlinearElasticity
 					FF = get_real_FF(tmp_displacement_grads[q]);
 					Jf_tilde = get_Jf(FF);
 					HH_tilde = get_HH(FF, Jf_tilde);
-					pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
+					pk1_dev_tilde = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
 					//HH_tilde = 2. * HH - old_HH;
 				
 					FF = get_real_FF(new_displacement_grads[q]);
