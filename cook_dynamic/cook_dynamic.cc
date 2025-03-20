@@ -2398,7 +2398,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1;
 		int counter = 0;
-		while (epsilon > 1.0e-6 && counter<100)
+		while (epsilon > 1.0e-8 && counter<100)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
