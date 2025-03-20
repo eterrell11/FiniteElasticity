@@ -2060,7 +2060,7 @@ namespace NonlinearElasticity
 						{
 							w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 							
-							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
+							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 							dt * (2. / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
@@ -2408,7 +2408,7 @@ namespace NonlinearElasticity
 			new_solution += increment;
 			relevant_new_solution = new_solution;
 			epsilon = R.block(0).linfty_norm()+R.block(1).linfty_norm();
-			
+			pcout << epsilon << std::endl;
 			
 		}
 		pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
