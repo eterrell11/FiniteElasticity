@@ -2398,7 +2398,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1;
 		int counter = 0;
-		while (epsilon > 1.0e-8 && counter<100)
+		while (epsilon > 1.0e-10 && counter<100)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
@@ -2953,7 +2953,7 @@ namespace NonlinearElasticity
 			"Displacement_error",
 			DataOut<dim>::type_cell_data);
 		data_out.add_data_vector(vol_cell_wise_error,
-			"Pressure_error",
+			"Volumetric_error",
 			DataOut<dim>::type_cell_data);
 
 		LA::MPI::BlockVector extra_vector = relevant_solution;
