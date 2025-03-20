@@ -2396,7 +2396,7 @@ namespace NonlinearElasticity
 		new_solution.block(1) = solution.block(1);
 		relevant_new_solution = new_solution;
 		
-		double epsilon = 1;
+		double epsilon = 1.;
 		int counter = 0;
 		while (epsilon > 1.0e-10 && counter<100)
 		{
@@ -2406,7 +2406,7 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = R.block(0).l2_norm()+R.block(1).l2_norm();
+			epsilon = R.block(0).linfty_norm()+R.block(1).linfty_norm();
 			
 			
 		}
