@@ -2406,7 +2406,7 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = increment.block(0).l2_norm()+increment.block(1).l2_norm();
+			epsilon = R.block(0).l2_norm()+R.block(1).l2_norm();
 			
 			
 		}
