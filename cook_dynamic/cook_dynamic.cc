@@ -2398,7 +2398,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1;
 		int counter = 0;
-		while (epsilon > 1.0e-8 && counter<10)
+		while (epsilon > 1.0e-6 && counter<100)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
@@ -2406,11 +2406,11 @@ namespace NonlinearElasticity
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = increment.block(0).l2_norm();
-			pcout << "NK error: " << epsilon << std::endl;
+			epsilon = increment.block(0).l2_norm()+increment.block(1).l2_norm();
+			
 			
 		}
-
+		pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
 		old_velocity = velocity;
 		velocity = new_solution.block(0);
 		solution_dot.block(0) = new_solution.block(0);
