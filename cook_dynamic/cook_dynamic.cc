@@ -2038,7 +2038,7 @@ namespace NonlinearElasticity
 					FF = get_real_FF(tmp_displacement_grads[q]);
 					Jf_tilde = get_Jf(FF);
 					HH_tilde = get_HH(FF, Jf_tilde);
-					pk1_tilde = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
+					pk1 = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
 					//HH_tilde = 2. * HH - old_HH;
 				
 					FF = get_real_FF(new_displacement_grads[q]);
@@ -2067,19 +2067,19 @@ namespace NonlinearElasticity
 						}
 						if (parameters.dynamic_p){
 							if (present_time < 1.1 * dt){
-								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_tilde) +
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1) +
 									rho_0 * scale * N_u_i * rhs_values[q] +
 									N_p_i / kappa * (pn) ) * fe_values.JxW(q);
 							}
 							else{
-								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_tilde) +
+								cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1) +
 								rho_0 * scale * N_u_i * rhs_values[q] +
 								N_p_i / kappa * (4. / 3. * pn - 1. / 3. * old_pn) ) * fe_values.JxW(q);
 							}
 						}
 						else
 						{
-							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_tilde) +
+							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1) +
 								rho_0 * scale * N_u_i * rhs_values[q] +
 								N_p_i * (w_prime)) * fe_values.JxW(q);
 						}
