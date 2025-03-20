@@ -2399,7 +2399,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1.;
 		int counter = 0;
-		while (epsilon > 1.0e-10 && counter<1000)
+		while (epsilon > 1.0e-9 && counter<1000)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
@@ -2408,7 +2408,6 @@ namespace NonlinearElasticity
 			new_solution += increment;
 			relevant_new_solution = new_solution;
 			epsilon = R.block(0).linfty_norm()+R.block(1).linfty_norm();
-			pcout << epsilon << std::endl;
 			
 		}
 		pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
