@@ -2035,15 +2035,16 @@ namespace NonlinearElasticity
 					
 				
 					
-					FF = get_real_FF(tmp_displacement_grads[q]);
-					Jf_tilde = get_Jf(FF);
-					HH_tilde = get_HH(FF, Jf_tilde);
-					pk1 = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
+					// FF = get_real_FF(tmp_displacement_grads[q]);
+					// Jf_tilde = get_Jf(FF);
+					// HH_tilde = get_HH(FF, Jf_tilde);
+					// pk1 = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
 					//HH_tilde = 2. * HH - old_HH;
 				
 					FF = get_real_FF(new_displacement_grads[q]);
 					Jf = get_Jf(FF);
 					HH = get_HH(FF,Jf);
+					pk1 = get_pk1(FF, mu, Jf,new_pn, HH);
 
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
@@ -2398,7 +2399,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1.;
 		int counter = 0;
-		while (epsilon > 1.0e-10 && counter<100)
+		while (epsilon > 1.0e-10 && counter<1000)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
