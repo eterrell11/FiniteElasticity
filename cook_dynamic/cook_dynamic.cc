@@ -2003,6 +2003,7 @@ namespace NonlinearElasticity
 
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
+				new_solution.update_ghost_values();
 				tmp_solution = 4./3. * solution -1./3. * old_solution + 2./3. * dt * new_solution;
 
 				relevant_new_solution = tmp_solution; 
@@ -2399,15 +2400,14 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1.;
 		int counter = 0;
-		while (epsilon > 1.0e-9 && counter<1000)
+		while (epsilon > 1.0e-10 && counter<1000)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
-
+			epsilon = R.block(1).linfty_norm();
 			solve_implicit_system(increment, new_solution);
 			new_solution += increment;
 			relevant_new_solution = new_solution;
-			epsilon = R.block(0).linfty_norm()+R.block(1).linfty_norm();
 			
 		}
 		pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
@@ -2659,33 +2659,6 @@ namespace NonlinearElasticity
 	}
 
 
-	
-
-
-	
-	
-	// template<int dim>
-	// void Incompressible<dim>::update_motion()
-	// {
-	// 	old_velocity = velocity;
-	// 	velocity = solution_dot.block(0);
-
-	// 	auto solution_save = solution.block(0);
-
-	// 	if (present_time > dt) {
-	// 		solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-	// 	}
-	// 	else {
-	// 		solution.block(0).add(dt, solution_dot.block(0));
-	// 	}
-	// 	old_solution.block(0) = solution_save;
-			
-	// 	pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
-	// 	//solution.block(1).add(-mean);
-		
-	// 	relevant_solution = solution;
-	// 	relevant_old_solution = old_solution;
-	// }
 
 
 
