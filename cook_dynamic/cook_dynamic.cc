@@ -2035,12 +2035,6 @@ namespace NonlinearElasticity
 					old_un = old_sol_vec_displacement[q];
 					
 				
-					
-					// FF = get_real_FF(tmp_displacement_grads[q]);
-					// Jf_tilde = get_Jf(FF);
-					// HH_tilde = get_HH(FF, Jf_tilde);
-					// pk1 = get_pk1(FF, mu, Jf_tilde,new_pn, HH_tilde);
-					//HH_tilde = 2. * HH - old_HH;
 				
 					FF = get_real_FF(new_displacement_grads[q]);
 					Jf = get_Jf(FF);
