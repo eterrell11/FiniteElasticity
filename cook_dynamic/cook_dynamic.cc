@@ -873,8 +873,33 @@ namespace NonlinearElasticity
 			DirichletValues<dim>::vector_value(points[p], value_list[p]);
 	}
 
-	
-
+	template <int dim>
+	class JPostprocessor : public DataPostprocessorTensor<dim>
+	{
+	public:
+	JPostprocessor() : DataPostprocessorScalar<dim>("J", update_gradients)
+		{}
+		virtual
+			void
+			evaluate_vector_field
+			(const DataPostprocessorInputs::Vector<dim>& input_data,
+				std::vector<Vector<double> >& computed_quantities) const override
+		{
+			AssertDimension(input_data.solution_gradients.size(),
+				computed_quantities.size());
+			Tensor<2, dim> I = unit_symmetric_tensor<dim>();
+			Tensor<2, dim> FF;
+			for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
+			{
+				AssertDimension(computed_quantities[p].size(),
+					(Tensor<2, dim>::n_independent_components));
+				for (unsigned int d = 0; d < dim; ++d)
+					for (unsigned int e = 0; e < dim; ++e)
+						FF = I[d][e] + input_data.solution_gradients[p][d][e];
+				computed_quantities[p](0) = determinant(FF);
+			}
+		}
+	};
 
 	template <int dim>
 	class Incompressible
@@ -2922,6 +2947,7 @@ namespace NonlinearElasticity
 				DataComponentInterpretation::component_is_part_of_vector);
 		interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
+		JPostprocessor J_out;
 
 		DataOut<dim> data_out;
 		data_out.attach_dof_handler(dof_handler);
@@ -2930,6 +2956,7 @@ namespace NonlinearElasticity
 			solution_names,
 			interpretation);
 
+		data_out.add_data_vector(relevant_solution.block(0), FF_out);
 
 		data_out.add_data_vector(u_cell_wise_error,
 			"Displacement_error",
