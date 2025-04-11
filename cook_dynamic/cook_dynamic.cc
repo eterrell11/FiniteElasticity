@@ -1011,6 +1011,8 @@ namespace NonlinearElasticity
 
 		unsigned int height;
 
+		double total_volume;
+		double total_volume_0;
 		double tau;
 		int max_it;
 		std::vector<double> l1_u_eps_vec;
@@ -1725,7 +1727,7 @@ namespace NonlinearElasticity
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
 		ConstitutiveModels::WVol<dim> wvol;
-
+		total_volume = 0;
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
@@ -1771,6 +1773,9 @@ namespace NonlinearElasticity
 					HH = get_HH(FF, Jf);
 					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
+					// Compute volume
+					total_volume += Jf * fe_values.JxW(q);
+
 				
 					if (parameters.AB2_extrap){
 						if (present_time < dt*1.1)
@@ -1814,7 +1819,6 @@ namespace NonlinearElasticity
 							{
 								w_prime_lin = wvol.W_prime_lin(parameters.WVol_form, Jf, HH, fe_values[Velocity].gradient(j, q), dt);
 							}
-
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
 								 N_p_i * w_prime_lin) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
@@ -2329,7 +2333,9 @@ namespace NonlinearElasticity
 		{
 			solve_SBDF2_system();
 		}
-
+		if (present_time == 0){
+			total_volume_0 = total_volume;
+		}
 
 		old_velocity = velocity;
 		velocity = solution_dot.block(0);
@@ -2883,12 +2889,13 @@ namespace NonlinearElasticity
 		std::ostringstream stream;
 		std::ofstream output("error_table"+TFinal + boi + nu_str + ".csv");
 
-		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
+		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << "E_vol" << ',' << '\n';
 		dt = parameters.dt;
 		for (int i = 0; i < max_it; ++i) {
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
 				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i])
-				 << ',' << abs(l2_v_eps_vec[i]) << ',' << abs(l1_v_eps_vec[i]) << ',' << abs(linfty_v_eps_vec[i]) << '\n';
+				 << ',' << abs(l2_v_eps_vec[i]) << ',' << abs(l1_v_eps_vec[i]) << ',' << abs(linfty_v_eps_vec[i])
+				 << ',' << total_volume/total_volume_0 << '\n';
 			dt *= 0.25;
 		}
 		output << stream.str();
