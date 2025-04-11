@@ -1012,7 +1012,7 @@ namespace NonlinearElasticity
 		unsigned int height;
 
 		double total_volume;
-		double total_volume_0;
+		double total_volume_0 =0;
 		double tau;
 		int max_it;
 		std::vector<double> l1_u_eps_vec;
@@ -2326,14 +2326,14 @@ namespace NonlinearElasticity
 		relevant_solution_extrap = solution_extrap;
 
 
-
+		
 		{
 			assemble_system_SBDF2();
 		}
 		{
 			solve_SBDF2_system();
 		}
-		if (present_time == 0){
+		if (total_volume_0 != 0){
 			total_volume_0 = total_volume;
 		}
 
