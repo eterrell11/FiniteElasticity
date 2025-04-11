@@ -874,7 +874,7 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	class JPostprocessor : public DataPostprocessorTensor<dim>
+	class JPostprocessor : public DataPostprocessorScalar<dim>
 	{
 	public:
 	JPostprocessor() : DataPostprocessorScalar<dim>("J", update_gradients)
