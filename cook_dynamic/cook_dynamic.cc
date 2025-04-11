@@ -2333,7 +2333,7 @@ namespace NonlinearElasticity
 		{
 			solve_SBDF2_system();
 		}
-		if (total_volume_0 != 0){
+		if (total_volume_0 == 0){
 			total_volume_0 = total_volume;
 			pcout << total_volume_0 << " " << total_volume << std::endl;
 		}
