@@ -1027,6 +1027,8 @@ namespace NonlinearElasticity
 		std::vector<double> l2_v_eps_vec;
 		std::vector<double> linfty_v_eps_vec;
 
+		std::vector<double> vol_eps_vec;
+
 
 	};
 	// Constructor for the main class
@@ -1094,6 +1096,9 @@ namespace NonlinearElasticity
 		l2_v_eps_vec.reserve(max_it);
 		l1_v_eps_vec.reserve(max_it);
 		linfty_v_eps_vec.reserve(max_it);
+
+		vol_eps_vec.reserve(max_it);
+
 		height = 6;
 		for ( int ref_step = 0; ref_step < max_it; ++ref_step) {
 			int n_ref = parameters.n_ref;
@@ -1159,6 +1164,8 @@ namespace NonlinearElasticity
 			l2_v_eps_vec[ref_step] = volume_error_output[0];
 			l1_v_eps_vec[ref_step] = volume_error_output[1];
 			linfty_v_eps_vec[ref_step] = volume_error_output[2];
+
+			vol_eps_vec[ref_step] = (total_volume/ total_volume_0 -1);
 
 			pcout << "Chopping time step in half after iteration " << ref_step << " : " << std::endl;
 			pcout << "Number of steps taken after this iteration : " << timestep_no << std::endl;
@@ -2896,7 +2903,7 @@ namespace NonlinearElasticity
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
 				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i])
 				 << ',' << abs(l2_v_eps_vec[i]) << ',' << abs(l1_v_eps_vec[i]) << ',' << abs(linfty_v_eps_vec[i])
-				 << ',' << (total_volume/total_volume_0-1) << '\n';
+				 << ',' << vol_eps_vec[i] << '\n';
 			dt *= 0.25;
 		}
 		output << stream.str();
