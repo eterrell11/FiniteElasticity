@@ -883,7 +883,7 @@ namespace NonlinearElasticity
 			void
 			evaluate_vector_field
 			(const DataPostprocessorInputs::Vector<dim>& input_data,
-				scalar& computed_quantities) const override
+				double& computed_quantities) const override
 		{
 			AssertDimension(input_data.solution_gradients.size(),
 				computed_quantities.size());
