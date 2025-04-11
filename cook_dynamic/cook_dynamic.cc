@@ -2335,7 +2335,7 @@ namespace NonlinearElasticity
 		}
 		if (total_volume_0 != 0){
 			total_volume_0 = total_volume;
-			cout << total_volume_0 << " " << total_volume << endl;
+			pcout << total_volume_0 << " " << total_volume << std::endl;
 		}
 
 		old_velocity = velocity;
