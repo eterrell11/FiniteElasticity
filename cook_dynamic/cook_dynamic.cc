@@ -2956,7 +2956,7 @@ namespace NonlinearElasticity
 			solution_names,
 			interpretation);
 
-		data_out.add_data_vector(relevant_solution.block(0), FF_out);
+		data_out.add_data_vector(relevant_solution.block(0), J_out);
 
 		data_out.add_data_vector(u_cell_wise_error,
 			"Displacement_error",
