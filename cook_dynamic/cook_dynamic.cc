@@ -2896,7 +2896,7 @@ namespace NonlinearElasticity
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
 				<< ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i])
 				 << ',' << abs(l2_v_eps_vec[i]) << ',' << abs(l1_v_eps_vec[i]) << ',' << abs(linfty_v_eps_vec[i])
-				 << ',' << total_volume/total_volume_0 << '\n';
+				 << ',' << (total_volume/total_volume_0-1) << '\n';
 			dt *= 0.25;
 		}
 		output << stream.str();
