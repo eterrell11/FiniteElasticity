@@ -880,7 +880,7 @@ namespace NonlinearElasticity
 		JPostprocessor() : DataPostprocessorScalar<dim>("J_pp", update_gradients)
 		{}
 		virtual void evaluate_vector_field(const DataPostprocessorInputs::Vector<dim>& input_data,
-				std::vector<double>& computed_quantities) const override
+				std::vector<Vector<double>>& computed_quantities) const override
 		{
 			AssertDimension(input_data.solution_gradients.size(),
 				computed_quantities.size());
@@ -892,7 +892,7 @@ namespace NonlinearElasticity
 				for (unsigned int d = 0; d < dim; ++d)
 					for (unsigned int e = 0; e < dim; ++e)
 						FF = I[d][e] + input_data.solution_gradients[p][d][e];
-				computed_quantities[p] = determinant(FF);
+				computed_quantities[p](0) = determinant(FF);
 			}
 		}
 	};
