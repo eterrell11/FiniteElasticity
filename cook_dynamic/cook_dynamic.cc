@@ -412,6 +412,9 @@ namespace NonlinearElasticity
 			else if (wvol_form == 1) {
 				return std::log(Jf);
 			}
+			else if (wvol_form==2){
+				return 0.5 * (Jf-1 + std::log(Jf)/Jf);
+			}
 		}
 		template<int dim>
 		double WVol<dim>::W_prime_lin(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<2, dim>& grad_v, const double& dt)
@@ -422,6 +425,9 @@ namespace NonlinearElasticity
 			else if (wvol_form == 1) {
 				return dt / Jf * scalar_product(HH, grad_v);
 			}
+			else if (wvol_form == 2 ) {
+				return 0.5 * dt * (1.+1./Jf/Jf-std::log(Jf)/Jf/Jf) * scalar_product(HH, grad_v);
+			}
 		}
 		template<int dim>
 		Tensor<1, dim>  WVol<dim>::W_prime_lin_u(const int& wvol_form, const double& Jf, const Tensor<2, dim>& HH, const Tensor<1, dim>& v)
@@ -431,6 +437,10 @@ namespace NonlinearElasticity
 			}
 			else if (wvol_form == 1) {
 				return transpose(HH) * v / Jf;
+			}
+			else if (wvol_form == 2)
+			{
+				return 0.5 * transpose(HH) & v * (1.+1./Jf/Jf-std::log(Jf)/Jf/Jf);
 			}
 		}
 
