@@ -2943,7 +2943,7 @@ namespace NonlinearElasticity
 				DataComponentInterpretation::component_is_part_of_vector);
 		interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
-		JPostprocessor J_out;
+		JPostprocessor<dim> J_out;
 
 		DataOut<dim> data_out;
 		data_out.attach_dof_handler(dof_handler);
