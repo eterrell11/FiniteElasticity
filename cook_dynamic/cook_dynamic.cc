@@ -888,8 +888,7 @@ namespace NonlinearElasticity
 			Tensor<2, dim> FF;
 			for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
 			{
-				AssertDimension(computed_quantities[p].size(),
-					(Tensor<2, dim>::n_independent_components));
+				AssertDimension(computed_quantities[p].size(), 1);
 				for (unsigned int d = 0; d < dim; ++d)
 					for (unsigned int e = 0; e < dim; ++e)
 						FF = I[d][e] + input_data.solution_gradients[p][d][e];
