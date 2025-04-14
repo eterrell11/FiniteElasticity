@@ -411,7 +411,7 @@ namespace NonlinearElasticity
 			}
 			else if (wvol_form == 1) {
 				//return std::log(Jf); Turn into Taylor expansion due to high condition number
-				(Jf-1) - (Jf-1)*(Jf-1) / 2. + (Jf-1)*(Jf-1)*(Jf-1) / 3.;
+				return (Jf-1) - (Jf-1)*(Jf-1) / 2. + (Jf-1)*(Jf-1)*(Jf-1) / 3.;
 			}
 			else if (wvol_form==2){
 				return 0.5 * (Jf-1 + std::log(Jf)/Jf);
