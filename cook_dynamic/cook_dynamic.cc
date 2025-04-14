@@ -410,7 +410,8 @@ namespace NonlinearElasticity
 				return (Jf - 1.);
 			}
 			else if (wvol_form == 1) {
-				return std::log(Jf);
+				//return std::log(Jf); Turn into Taylor expansion due to high condition number
+				(Jf-1) - (Jf-1)*(Jf-1) / 2. + (Jf-1)*(Jf-1)*(Jf-1) / 3.;
 			}
 			else if (wvol_form==2){
 				return 0.5 * (Jf-1 + std::log(Jf)/Jf);
@@ -2913,7 +2914,7 @@ namespace NonlinearElasticity
 		else if (parameters.WVol_form == 1)
 			vol_energy = "Liu";
 		else if (parameters.WVol_form == 2)
-			vol_energy = "ST82";
+			vol_energy = "ST";
 		if (parameters.nu == 0.4)
 			nu_str = "4";
 		if (parameters.nu == 0.49)
