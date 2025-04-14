@@ -2905,13 +2905,15 @@ namespace NonlinearElasticity
 			error_table.add_value("dEvol_linf ", linfty_v_eps_vec[i]/* - linfty_v_eps_vec[i - 1]*/);
 			error_table.set_scientific("dEvol_linf ", true);
 		}
-		std::string boi;
+		std::string vol_energy;
 		std::string nu_str;
 		std::string TFinal;
 		if (parameters.WVol_form == 0)
-			boi = "Quad";
-		else 
-			boi = "Liu";
+			vol_energy = "Quad";
+		else if (parameters.WVol_form == 1)
+			vol_energy = "Liu";
+		else if (parameters.WVol_form == 2)
+			vol_energy = "ST82";
 		if (parameters.nu == 0.4)
 			nu_str = "4";
 		if (parameters.nu == 0.49)
@@ -2925,7 +2927,7 @@ namespace NonlinearElasticity
 		
 		//This part actually generates the csv file
 		std::ostringstream stream;
-		std::ofstream output("error_table"+TFinal + boi + nu_str + ".csv");
+		std::ofstream output("error_table"+TFinal + vol_energy + nu_str + ".csv");
 
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << "E_vol" << ',' << '\n';
 		dt = parameters.dt;
