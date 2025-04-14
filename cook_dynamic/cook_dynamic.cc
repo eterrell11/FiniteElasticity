@@ -877,12 +877,9 @@ namespace NonlinearElasticity
 	class JPostprocessor : public DataPostprocessorScalar<dim>
 	{
 	public:
-	JPostprocessor() : DataPostprocessorScalar<dim>("J_pp", update_gradients)
+		JPostprocessor() : DataPostprocessorScalar<dim>("J_pp", update_gradients)
 		{}
-		virtual
-			void
-			evaluate_vector_field
-			(const DataPostprocessorInputs::Vector<dim>& input_data,
+		virtual void evaluate_vector_field(const DataPostprocessorInputs::Vector<dim>& input_data,
 				std::vector<double>& computed_quantities) const override
 		{
 			AssertDimension(input_data.solution_gradients.size(),
