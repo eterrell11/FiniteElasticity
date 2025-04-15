@@ -427,7 +427,7 @@ namespace NonlinearElasticity
 				return dt / Jf * scalar_product(HH, grad_v);
 			}
 			else if (wvol_form == 2 ) {
-				return 0.5 * dt * (1.+1./Jf/Jf-std::log(Jf)/Jf/Jf) * scalar_product(HH, grad_v);
+				return 0.5 * dt * (1.+(1.-std::log(Jf))/Jf/Jf) * scalar_product(HH, grad_v);
 			}
 		}
 		template<int dim>
