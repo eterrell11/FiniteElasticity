@@ -2439,7 +2439,7 @@ namespace NonlinearElasticity
 		
 		double epsilon = 1.;
 		int counter = 0;
-		while (epsilon > 1.0e-10 && counter<1000)
+		while (epsilon > 1.0e-8 && counter<1000)
 		{
 			++counter;
 			assemble_system_implicit(new_solution, relevant_new_solution);
@@ -2449,7 +2449,7 @@ namespace NonlinearElasticity
 			relevant_new_solution = new_solution;
 			
 		}
-		pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
+		//pcout << "Newton solver resolved after " << counter << " iterations" << std::endl;
 		old_velocity = velocity;
 		velocity = new_solution.block(0);
 		solution_dot.block(0) = new_solution.block(0);
