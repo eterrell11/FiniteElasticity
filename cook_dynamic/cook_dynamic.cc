@@ -917,7 +917,7 @@ namespace NonlinearElasticity
 		void run();
 
 	private:
-		void		 create_simplex_grid(parallel::shared::Triangulation<2>& triangulation);
+		void		 create_simplex_grid(parallel::shared::Triangulation<2>& triangulation, int& n_ref);
 		void		 create_simplex_grid(parallel::shared::Triangulation<3>& triangulation);
 		void		 create_grid(int& n_ref);
 		void		 set_simulation_parameters();
@@ -1140,7 +1140,7 @@ namespace NonlinearElasticity
 			pcout << "Number of spatial refinements : " << n_ref << std::endl;
 			
 			if (parameters.Simplex == true) {
-				create_simplex_grid(triangulation);
+				create_simplex_grid(triangulation, n_ref);
 			}
 			else {
 				create_grid(n_ref);
@@ -1238,7 +1238,7 @@ namespace NonlinearElasticity
 
 
 	template <int dim>
-	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<2>& triangulation)
+	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<2>& triangulation, int& n_ref)
 	{
 		Triangulation<dim> quad_triangulation;
 
@@ -1272,7 +1272,7 @@ namespace NonlinearElasticity
 					}
 				}
 		GridGenerator::convert_hypercube_to_simplex_mesh(quad_triangulation, triangulation);
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 
 	}
 
