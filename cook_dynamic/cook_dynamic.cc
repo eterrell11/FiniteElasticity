@@ -1078,15 +1078,15 @@ namespace NonlinearElasticity
 		, savestep_no(0)
 	{
 		if (parameters.Simplex == false) {
-			quad_rule_ptr = std::make_unique<QGauss<dim>>(3);
-			face_quad_rule_ptr = std::make_unique<QGauss<dim - 1>>(3);
+			quad_rule_ptr = std::make_unique<QGauss<dim>>(2);
+			face_quad_rule_ptr = std::make_unique<QGauss<dim - 1>>(2);
 			v_base_fe = std::make_unique<FE_Q<dim>>(parameters.velocity_order);
 			p_base_fe = std::make_unique<FE_Q<dim>>(parameters.pressure_order);
 
 		}
 		else {
-			quad_rule_ptr = std::make_unique<QGaussSimplex<dim>>(3 + 1);
-			face_quad_rule_ptr = std::make_unique<QGaussSimplex<dim - 1>>(3);
+			quad_rule_ptr = std::make_unique<QGaussSimplex<dim>>(2 + 1);
+			face_quad_rule_ptr = std::make_unique<QGaussSimplex<dim - 1>>(2);
 			if (parameters.LumpMass == true) // Makes simplex space have bubbles so mass lumping can occur
 			{
 				v_base_fe = std::make_unique<FE_SimplexP_Bubbles<dim>>(parameters.velocity_order);
