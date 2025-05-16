@@ -1652,14 +1652,11 @@ template <class PreconditionerType>
 		Tensor<2, dim> pk1_dev_tilde;
 
 		double scale;
-		double shifter;
 		if (present_time >  dt) {
 			scale = 2. / 3.;
-			shifter = 0 /*1./3.*/;
 		}
 		else {
 			scale = 1.;
-			shifter = 0.;
 		}
 		//double temp_pressure;
 		Tensor<1,dim> un;
@@ -1743,6 +1740,7 @@ template <class PreconditionerType>
 						//HH_tilde = 2. * HH - old_HH;
 					}
 
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
@@ -1754,14 +1752,14 @@ template <class PreconditionerType>
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+								dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
 							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
 								  dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 							rho_0 * scale * N_u_i * rhs_values[q] +
-							N_p_i * (Jf - 1.0) - shifter * Grad_p_i * transpose(HH) * (un - old_un)) * fe_values.JxW(q);
+							N_p_i * w_prime) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
@@ -1785,7 +1783,6 @@ template <class PreconditionerType>
 							HH = get_HH(FF, Jf);
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
-								cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
 								if (face->boundary_id() == 2) {
 									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
