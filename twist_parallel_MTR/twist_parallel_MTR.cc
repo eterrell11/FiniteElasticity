@@ -2663,28 +2663,7 @@ template <int dim>
 
 	}
 	
-	// template<int dim>
-	// void Incompressible<dim>::update_motion()
-	// {
-	// 	old_velocity = velocity;
-	// 	velocity = solution_dot.block(0);
-
-	// 	auto solution_save = solution.block(0);
-
-	// 	if (present_time > dt) {
-	// 		solution.block(0) = 1. / 3. * (2. * dt * velocity + 4. * solution_save - old_solution.block(0));
-	// 	}
-	// 	else {
-	// 		solution.block(0).add(dt, solution_dot.block(0));
-	// 	}
-	// 	old_solution.block(0) = solution_save;
-			
-	// 	pressure_mean = solution.block(1).mean_value(); //Subtract off average of pressure
-	// 	//solution.block(1).add(-mean);
-		
-	// 	relevant_solution = solution;
-	// 	relevant_old_solution = old_solution;
-	// }
+	
 
 
 
