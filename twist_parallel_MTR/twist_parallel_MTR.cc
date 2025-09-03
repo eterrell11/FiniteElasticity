@@ -122,6 +122,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
+			double WVol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -141,6 +142,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Double(),
 					"Density");
+				prm.declare_entry("WVol_form",
+					"0",
+					Patterns::Integer(),
+					"WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -151,7 +156,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-
+				WVol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -209,6 +214,7 @@ namespace NonlinearElasticity
 			unsigned int max_ref;
 			bool AB2_extrap;
 			double epsilon;
+			bool dynamic_p;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -252,6 +258,10 @@ namespace NonlinearElasticity
 					"0.0",
 					Patterns::Double(),
 					"epsilon");
+				prm.declare_entry("Dynamic_p",
+					"false",
+					Patterns::Bool(),
+					"Dynamic_p");
 			}
 			prm.leave_subsection();
 		}
@@ -268,6 +278,7 @@ namespace NonlinearElasticity
 				max_ref = prm.get_integer("max_ref");
 				AB2_extrap = prm.get_bool("AB2_extrap");
 				epsilon = prm.get_double("epsilon");
+				dynamic_p= prm.get_bool("Dynamic_p");
 			}
 			prm.leave_subsection();
 		}
@@ -1672,6 +1683,7 @@ template <class PreconditionerType>
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
+		ConstitutiveModels::WVol<dim> wvol;
 
 		
 		for (const auto& cell : dof_handler.active_cell_iterators())
