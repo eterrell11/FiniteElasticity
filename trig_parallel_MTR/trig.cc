@@ -650,7 +650,7 @@ namespace NonlinearElasticity
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> u;
 
-			for (unsigned int j = 0; j < 20; j++)
+			for (unsigned int j = 0; j < 2; j++)
 			{
 				u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 				u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
@@ -660,10 +660,10 @@ namespace NonlinearElasticity
 			values[0] = a * (2.0 * mu - 1.) * M_PI * M_PI * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 			values[1] = -a * (2.0 * mu - 1.) * M_PI * M_PI * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 			// Acceleration contributions:
-			//  values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
-			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
-			//  values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
-			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			 values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+			 	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			 values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+			 	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
 		}
 		virtual void
 		rhs_vector_value_list(const std::vector<Point<dim>> &points, std::vector<Tensor<1, dim>> &value_list, double &BodyForce, double &present_time, double &mu)
