@@ -768,7 +768,7 @@ namespace NonlinearElasticity
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 		// values[0] = velocity * M_PI * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]);
 		// values[1] = -velocity * M_PI * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]);
-		values [0] = a * M_PI * p[1];
+		values [0] = velocity * M_PI * p[1];
 		values [1] = 0;
 		if (dim == 3) {
 			values[2] = 0;
