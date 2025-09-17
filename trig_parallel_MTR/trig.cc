@@ -1339,12 +1339,12 @@ namespace NonlinearElasticity
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Velocity));
-			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-			// 	dof_handler,
-			// 	2,
-			// 	Functions::ZeroFunction<dim>(dim + 1),
-			// 	constraints,
-			// 	(*fe_ptr).component_mask(Velocityy));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+				dof_handler,
+				2,
+				Functions::ZeroFunction<dim>(dim + 1),
+				constraints,
+				(*fe_ptr).component_mask(Velocityy));
 			constraints.close();
 		}
 
@@ -2155,12 +2155,12 @@ namespace NonlinearElasticity
 												 Functions::ZeroFunction<dim>(dim + 1),
 												 constraints,
 												 (*fe_ptr).component_mask(Velocity));
-		// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-		// 										 dof_handler,
-		// 										 2,
-		// 										 Functions::ZeroFunction<dim>(dim + 1),
-		// 										 constraints,
-		// 										 (*fe_ptr).component_mask(Velocityy));
+		VectorTools::interpolate_boundary_values(*(mapping_ptr),
+												 dof_handler,
+												 2,
+												 Functions::ZeroFunction<dim>(dim + 1),
+												 constraints,
+												 (*fe_ptr).component_mask(Velocityy));
 		constraints.close();
 
 		solution_extrap = solution;
