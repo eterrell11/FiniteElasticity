@@ -914,10 +914,7 @@ namespace NonlinearElasticity
 		void output_results() const;
 		void calculate_error();
 		void create_error_table();
-		void create_energy_table();
 		void do_timestep();
-		void measure_energy();
-		void solve_energy();
 
 		Parameters::AllParameters parameters;
 
@@ -967,8 +964,6 @@ namespace NonlinearElasticity
 		LA::MPI::BlockVector solution_dot_extrap;
 		LA::MPI::BlockVector relevant_solution_dot_extrap;
 
-		LA::MPI::BlockVector energy;
-		LA::MPI::BlockVector energy_RHS;
 
 		LA::MPI::Vector velocity;
 		LA::MPI::Vector old_velocity;
@@ -986,8 +981,6 @@ namespace NonlinearElasticity
 		unsigned int savestep_no;
 		double pressure_mean;
 
-		double total_energy;
-		Vector<double> total_energy_vector;
 
 		Vector<double> u_cell_wise_error;
 		Vector<double> p_cell_wise_error;
@@ -1080,11 +1073,6 @@ namespace NonlinearElasticity
 				triangulation.clear();
 				create_grid();
 			}
-
-			for (int i = 0; i < ref_step; ++i)
-			{
-				dt *= 0.5;
-			}
 			setup_system();
 			if (ref_step == 0)
 			{
@@ -1099,16 +1087,9 @@ namespace NonlinearElasticity
 			assemble_system_mass();
 			pcout << "Mass matrix assembled" << std::endl;
 
-			// if(parameters.nu == 0.5)
-			// {
-			measure_energy();
-			solve_energy();
-			save_counter = 0;
-			total_energy_vector[save_counter] = total_energy;
+			
 
 			save_counter = 1;
-			if (this_mpi_process == 0)
-				create_energy_table();
 
 			output_results();
 
@@ -1148,7 +1129,6 @@ namespace NonlinearElasticity
 		if (this_mpi_process == 0)
 		{
 			create_error_table();
-			create_energy_table();
 		}
 	}
 
@@ -1390,10 +1370,6 @@ namespace NonlinearElasticity
 							mpi_communicator);
 		old_solution.reinit(owned_partitioning,
 							mpi_communicator);
-		energy.reinit(owned_partitioning,
-					  mpi_communicator);
-		energy_RHS.reinit(owned_partitioning,
-						  mpi_communicator);
 
 		relevant_solution.reinit(owned_partitioning, relevant_partitioning,
 								 mpi_communicator);
@@ -1448,7 +1424,6 @@ namespace NonlinearElasticity
 		relevant_old_solution = solution;
 		pressure_mean = solution.block(1).mean_value();
 
-		total_energy_vector.reinit(int(parameters.end_time / parameters.save_time) + 1);
 	}
 
 	template <int dim>
@@ -2146,83 +2121,6 @@ namespace NonlinearElasticity
 	}
 
 	template <int dim>
-	void Incompressible<dim>::measure_energy()
-	{
-
-		total_energy = 0;
-		energy_RHS = 0;
-
-		FEValues<dim> fe_values(*mapping_ptr,
-								*fe_ptr,
-								(*quad_rule_ptr),
-								update_values |
-									update_gradients |
-									update_quadrature_points |
-									update_JxW_values);
-
-		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
-		const unsigned int n_q_points = (*quad_rule_ptr).size();
-
-		Vector<double> cell_energy(dofs_per_cell);
-
-		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
-
-		const FEValuesExtractors::Scalar Pressure(dim);
-		const FEValuesExtractors::Vector Velocity(0);
-
-		Tensor<2, dim> FF;
-		double Jf;
-		Tensor<1, dim> vn;
-		double pn;
-
-		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<Tensor<1, dim>> sol_vec_velocity(n_q_points, Tensor<1, dim>());
-		std::vector<double> sol_vec_pressure(n_q_points);
-
-		for (const auto &cell : dof_handler.active_cell_iterators())
-		{
-
-			cell_energy = 0;
-			fe_values.reinit(cell);
-
-			fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
-			fe_values[Velocity].get_function_values(relevant_solution_dot, sol_vec_velocity);
-			fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
-
-			solution.update_ghost_values();
-			solution_dot.update_ghost_values();
-			for (const unsigned int q : fe_values.quadrature_point_indices())
-			{
-				FF = get_real_FF(displacement_grads[q]);
-				Jf = get_Jf(FF);
-				vn = sol_vec_velocity[q];
-				pn = sol_vec_pressure[q];
-				total_energy += (0.5 * vn * vn																	 // Kinetic energy
-								 + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) // Deviatoric energy
-								 + 0.5 * (Jf - 1.) * pn) *
-								fe_values.JxW(q);
-				if (cell->subdomain_id() == this_mpi_process)
-				{
-					for (const unsigned int i : fe_values.dof_indices())
-					{
-						cell_energy(i) += fe_values[Pressure].value(i, q) * (0.5 * vn * vn																	 // Kinetic energy
-																			 + 0.5 * mu * (std::cbrt(1. / (Jf * Jf)) * scalar_product(FF, FF) - double(dim)) // Deviatoric energy
-																			 + 0.5 * (Jf - 1.) * pn) *
-										  fe_values.JxW(q); // Volumetric energy
-					}
-				}
-			}
-			cell->get_dof_indices(local_dof_indices);
-
-			constraints.distribute_local_to_global(cell_energy,
-												   local_dof_indices,
-												   energy_RHS);
-		}
-		energy_RHS.block(0) = 0;
-		energy_RHS.compress(VectorOperation::add);
-	}
-
-	template <int dim>
 	void Incompressible<dim>::solve_SBDF2()
 	{
 		constraints.clear();
@@ -2349,24 +2247,6 @@ namespace NonlinearElasticity
 		relevant_old_solution = old_solution;
 
 		calculate_error();
-	}
-
-	template <int dim>
-	void Incompressible<dim>::solve_energy()
-	{
-		energy.update_ghost_values();
-		const auto &Kpp = K.block(1, 1);
-
-		const auto &R = energy_RHS.block(1);
-
-		auto &E = energy.block(1);
-
-		SolverControl reduction_control_Kpp(1000, 1.0e-12);
-		SolverCG<LA::MPI::Vector> solver_Kpp(reduction_control_Kpp);
-		PETScWrappers::PreconditionBlockJacobi preconditioner_Kpp;
-		preconditioner_Kpp.initialize(Kpp);
-
-		solver_Kpp.solve(Kpp, E, R, preconditioner_Kpp);
 	}
 
 	template <int dim>
@@ -2726,44 +2606,6 @@ namespace NonlinearElasticity
 		output << stream.str();
 	}
 
-	template <int dim>
-	void Incompressible<dim>::create_energy_table()
-	{
-
-		std::string boi;
-		std::string nu_str;
-		if (parameters.BodyForce != 0)
-			boi = "BF";
-		if (parameters.TractionMagnitude != 0)
-			boi = "TR";
-		if (parameters.InitialVelocity != 0)
-			boi = "IV";
-		if (parameters.nu == 0.4)
-			nu_str = "4";
-		if (parameters.nu == 0.49)
-			nu_str = "49";
-		if (parameters.nu == 0.5)
-			nu_str = "5";
-
-		// This part actually generates the csv file
-		std::ostringstream energy_stream;
-		std::ofstream energy_output("energy_table" + boi + nu_str + "dt" + std::to_string(dt) + ".csv");
-
-		energy_stream << "Time" << ',' << "E(t)/E(0)" << '\n';
-		double time = 0;
-
-		int total_counter = save_counter; // std::min(save_counter,int(parameters.end_time/parameters.save_time+1));
-		for (int i = 0; i < total_counter; ++i)
-		{
-			if (parameters.InitialVelocity != 0)
-				energy_stream << time << ',' << (total_energy_vector[i] / total_energy_vector[0]) << '\n';
-			else
-				energy_stream << time << ',' << (total_energy_vector[i]) << '\n';
-			time += parameters.save_time;
-		}
-		energy_output << energy_stream.str();
-	}
-
 	// Spits out solution into vectors then into .vtks
 	template <int dim>
 	void Incompressible<dim>::output_results() const
@@ -2794,7 +2636,6 @@ namespace NonlinearElasticity
 		LA::MPI::BlockVector extra_vector = relevant_solution;
 		extra_vector.reinit(relevant_solution);
 		extra_vector.block(0) = velocity;
-		extra_vector.block(1) = energy.block(1);
 
 		std::vector<std::string> extra_names(dim, "Velocity");
 		extra_names.emplace_back("Energy");
@@ -2844,14 +2685,9 @@ namespace NonlinearElasticity
 		{
 			// cout << "Saving results at time : " << present_time << std::endl;
 			//  if (parameters.nu== 0.5) {
-			measure_energy();
-			solve_energy();
 			++savestep_no;
 			output_results();
-			total_energy_vector[save_counter] = total_energy;
 			save_counter++;
-			if (this_mpi_process == 0)
-				create_energy_table();
 		}
 	}
 
