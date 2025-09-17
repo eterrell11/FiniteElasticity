@@ -1162,7 +1162,7 @@ namespace NonlinearElasticity
 		rho_0 = parameters.rho_0;
 		present_time = parameters.start_time;
 		dt = parameters.dt;
-		// unsigned int height = 6;
+		n_ref = parameters.n_ref;
 		end_time = parameters.end_time;
 		save_time = parameters.save_time;
 	}
