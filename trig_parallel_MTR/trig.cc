@@ -1267,21 +1267,30 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::create_grid()
 	{
 		cell_measure = 1;
-		GridGenerator::subdivided_hyper_rectangle(triangulation, {1, 1, (height)}, {-1, -1, 0}, {1., 1., 2. * height});
-		triangulation.refine_global(parameters.n_ref);
-		for (const auto &cell : triangulation.active_cell_iterators())
+		GridGenerator::hyper_cube(triangulation,0, 1.);
+		triangulation.refine_global(n_ref);
+		for (const auto& cell : triangulation.active_cell_iterators())
 		{
-			for (const auto &face : cell->face_iterators())
+			for (const auto& face : cell->face_iterators())
 				if (face->at_boundary())
 				{
 					const Point<dim> face_center = face->center();
-					if (abs(face_center[2] - 0.0) < 0.00001)
-					{
+					if (abs(face_center[1] - 0.0) < 0.00001) {
+						face->set_boundary_id(0);
+					}
+					if (abs(face_center[0] - 0.0) < 0.00001) {
 						face->set_boundary_id(1);
+					}
+					if (abs(face_center[1] - 1.0) < 0.00001) {
+						face->set_boundary_id(2);
+					}
+					if (abs(face_center[0] - 1.0) < 0.00001) {
+						face->set_boundary_id(3);
 					}
 				}
 			cell_measure = std::min(cell_measure, cell->measure());
 		}
+
 	}
 
 	template <int dim>
