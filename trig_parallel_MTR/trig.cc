@@ -2133,34 +2133,34 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::solve_SBDF2()
 	{
 		constraints.clear();
-		const FEValuesExtractors::Scalar Velocityx(0);
+		const FEValuesExtractors::Vector Velocity(0);
 		const FEValuesExtractors::Scalar Velocityy(1);
 		const FEValuesExtractors::Scalar Pressure(dim);
 		DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 1,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityx));
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 3,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityx));
+		// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+		// 										 dof_handler,
+		// 										 1,
+		// 										 Functions::ZeroFunction<dim>(dim + 1),
+		// 										 constraints,
+		// 										 (*fe_ptr).component_mask(Velocityx));
+		// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+		// 										 dof_handler,
+		// 										 3,
+		// 										 Functions::ZeroFunction<dim>(dim + 1),
+		// 										 constraints,
+		// 										 (*fe_ptr).component_mask(Velocityx));
 		VectorTools::interpolate_boundary_values(*(mapping_ptr),
 												 dof_handler,
 												 0,
 												 Functions::ZeroFunction<dim>(dim + 1),
 												 constraints,
-												 (*fe_ptr).component_mask(Velocityy));
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 2,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityy));
+												 (*fe_ptr).component_mask(Velocity));
+		// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+		// 										 dof_handler,
+		// 										 2,
+		// 										 Functions::ZeroFunction<dim>(dim + 1),
+		// 										 constraints,
+		// 										 (*fe_ptr).component_mask(Velocityy));
 		constraints.close();
 
 		solution_extrap = solution;
