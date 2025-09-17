@@ -1066,19 +1066,20 @@ namespace NonlinearElasticity
 		height = 6;
 		for (int ref_step = 0; ref_step < max_it; ++ref_step)
 		{
-			if (ref_step == 0)
-			{
-				if (parameters.Simplex == true)
-				{
-					create_simplex_grid(triangulation);
-				}
-				else
-				{
-					create_grid();
-				}
-			}
-
 			set_simulation_parameters();
+			for (int i = 0; i < ref_step; ++i) {
+				dt *= 0.5;
+				n_ref += 1;
+			}
+			if (parameters.Simplex == true) {
+				triangulation.clear();
+				create_simplex_grid(triangulation);
+			}
+			else {
+				triangulation.clear();
+				create_grid();
+			}
+			
 			for (int i = 0; i < ref_step; ++i)
 			{
 				dt *= 0.5;
