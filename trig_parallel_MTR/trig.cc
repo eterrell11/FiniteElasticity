@@ -591,8 +591,8 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
-
+		//full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
+		full_pk1_stress = mu * full_FF;
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
@@ -2124,35 +2124,35 @@ namespace NonlinearElasticity
 	void Incompressible<dim>::solve_SBDF2()
 	{
 		constraints.clear();
-			const FEValuesExtractors::Scalar Velocityx(0);
-			const FEValuesExtractors::Scalar Velocityy(1);
-			const FEValuesExtractors::Scalar Pressure(dim);
-			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				1,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityx));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				3,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityx));	
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				0,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				2,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityy));
-			constraints.close();
+		const FEValuesExtractors::Scalar Velocityx(0);
+		const FEValuesExtractors::Scalar Velocityy(1);
+		const FEValuesExtractors::Scalar Pressure(dim);
+		DoFTools::make_hanging_node_constraints(dof_handler, constraints);
+		VectorTools::interpolate_boundary_values(*(mapping_ptr),
+												 dof_handler,
+												 1,
+												 Functions::ZeroFunction<dim>(dim + 1),
+												 constraints,
+												 (*fe_ptr).component_mask(Velocityx));
+		VectorTools::interpolate_boundary_values(*(mapping_ptr),
+												 dof_handler,
+												 3,
+												 Functions::ZeroFunction<dim>(dim + 1),
+												 constraints,
+												 (*fe_ptr).component_mask(Velocityx));
+		VectorTools::interpolate_boundary_values(*(mapping_ptr),
+												 dof_handler,
+												 0,
+												 Functions::ZeroFunction<dim>(dim + 1),
+												 constraints,
+												 (*fe_ptr).component_mask(Velocityy));
+		VectorTools::interpolate_boundary_values(*(mapping_ptr),
+												 dof_handler,
+												 2,
+												 Functions::ZeroFunction<dim>(dim + 1),
+												 constraints,
+												 (*fe_ptr).component_mask(Velocityy));
+		constraints.close();
 
 		solution_extrap = solution;
 		solution_extrap.add(dt, solution_dot);
