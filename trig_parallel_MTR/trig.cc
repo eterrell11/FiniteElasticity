@@ -646,24 +646,26 @@ namespace NonlinearElasticity
 		virtual void rhs_vector_value(const Point<dim> &p, Tensor<1, dim> &values, double &a, double &present_time, double &mu)
 
 		{
-			// Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
-			Assert(dim >= 2, ExcInternalError());
-			Point<dim> u;
+			// // Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
+			// Assert(dim >= 2, ExcInternalError());
+			// Point<dim> u;
 
-			for (unsigned int j = 0; j < 2; j++)
-			{
-				u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-				u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-			}
+			// for (unsigned int j = 0; j < 2; j++)
+			// {
+			// 	u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			// 	u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			// }
 
-			// PK1 contributions: (make it 2mu-1 for the original, potentially wrong, version)
-			values[0] = a * (2.0 * mu - 1.) * M_PI * M_PI * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-			values[1] = -a * (2.0 * mu - 1.) * M_PI * M_PI * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
-			// Acceleration contributions:
-			 values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
-			 	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
-			 values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
-			 	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			// // PK1 contributions: (make it 2mu-1 for the original, potentially wrong, version)
+			// values[0] = a * (2.0 * mu - 1.) * M_PI * M_PI * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			// values[1] = -a * (2.0 * mu - 1.) * M_PI * M_PI * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
+			// // Acceleration contributions:
+			//  values[0] += a * M_PI * M_PI * (-std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			//  values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
+			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
+			values[0] = -M_PI * M_PI * a * std::sin(M_PI * present_time) * p[1];
+			values[1] = 0;
 		}
 		virtual void
 		rhs_vector_value_list(const std::vector<Point<dim>> &points, std::vector<Tensor<1, dim>> &value_list, double &BodyForce, double &present_time, double &mu)
@@ -764,8 +766,10 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = velocity * M_PI * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]);
-		values[1] = -velocity * M_PI * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]);
+		// values[0] = velocity * M_PI * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]);
+		// values[1] = -velocity * M_PI * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]);
+		values [0] = a * M_PI * p[1];
+		values [1] = 0;
 		if (dim == 3) {
 			values[2] = 0;
 		}
@@ -810,16 +814,20 @@ namespace NonlinearElasticity
 	{
 		Point<dim> u;
 
-		for (unsigned int j = 0; j < 2; j++)
-		{
-			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-		}
-		values[0] = a * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::sin(M_PI * time);
-		values[1] = -a * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::sin(M_PI * time);
-		if (dim == 3)
+		// for (unsigned int j = 0; j < 2; j++)
+		// {
+		// 	u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
+		// 	u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
+		// }
+		// values[0] = a * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::sin(M_PI * time);
+		// values[1] = -a * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::sin(M_PI * time);
+		// if (dim == 3)
+		// 	values[2] = 0;
+		// values[dim] = 0;
+		values[0] = a * std::sin(M_PI * time) * p[1];
+		values[1] = 0;
+		if (dim == 3 )
 			values[2] = 0;
-		values[dim] = 0;
 	}
 	template <int dim>
 	void Solution<dim>::vector_value_list(
@@ -1308,34 +1316,35 @@ namespace NonlinearElasticity
 		// HOMOGENEOUS CONSTRAINTS
 		{
 			constraints.clear();
+			const FEValuesExtractors::Vector Velocity(0);
 			const FEValuesExtractors::Scalar Velocityx(0);
 			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				1,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityx));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				3,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityx));	
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 	dof_handler,
+			// 	1,
+			// 	Functions::ZeroFunction<dim>(dim + 1),
+			// 	constraints,
+			// 	(*fe_ptr).component_mask(Velocityx));
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 	dof_handler,
+			// 	3,
+			// 	Functions::ZeroFunction<dim>(dim + 1),
+			// 	constraints,
+			// 	(*fe_ptr).component_mask(Velocityx));	
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
-				(*fe_ptr).component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				2,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityy));
+				(*fe_ptr).component_mask(Velocity));
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 	dof_handler,
+			// 	2,
+			// 	Functions::ZeroFunction<dim>(dim + 1),
+			// 	constraints,
+			// 	(*fe_ptr).component_mask(Velocityy));
 			constraints.close();
 		}
 
