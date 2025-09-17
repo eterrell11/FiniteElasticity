@@ -810,7 +810,7 @@ namespace NonlinearElasticity
 	{
 		Point<dim> u;
 
-		for (unsigned int j = 0; j < 20; j++)
+		for (unsigned int j = 0; j < 2; j++)
 		{
 			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
 			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
