@@ -1268,7 +1268,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1;
 		GridGenerator::hyper_cube(triangulation,0, 1.);
-		triangulation.refine_global(n_ref);
+		triangulation.refine_global(parameters.n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
 			for (const auto& face : cell->face_iterators())
