@@ -1003,6 +1003,7 @@ namespace NonlinearElasticity
 		double mu;
 
 		unsigned int height;
+		unsigned int n_ref;
 
 		double tau;
 		int max_it;
@@ -1079,7 +1080,7 @@ namespace NonlinearElasticity
 				triangulation.clear();
 				create_grid();
 			}
-			
+
 			for (int i = 0; i < ref_step; ++i)
 			{
 				dt *= 0.5;
@@ -1269,7 +1270,7 @@ namespace NonlinearElasticity
 	{
 		cell_measure = 1;
 		GridGenerator::hyper_cube(triangulation,0, 1.);
-		triangulation.refine_global(parameters.n_ref);
+		triangulation.refine_global(n_ref);
 		for (const auto& cell : triangulation.active_cell_iterators())
 		{
 			for (const auto& face : cell->face_iterators())
