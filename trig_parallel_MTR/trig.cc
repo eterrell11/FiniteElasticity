@@ -664,7 +664,7 @@ namespace NonlinearElasticity
 			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
 			//  values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
 			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
-			values[0] = -M_PI * M_PI * a * std::sin(M_PI * present_time) * p[1];
+			values[0] = - mu * M_PI * M_PI * a * std::sin(M_PI * present_time) * p[1];
 			values[1] = 0;
 		}
 		virtual void
