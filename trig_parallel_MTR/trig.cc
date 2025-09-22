@@ -2317,7 +2317,7 @@ namespace NonlinearElasticity
 
 		auto &p = solution.block(1);
 		auto fake_solution = solution;
-		// constraints.set_zero(solution);
+		constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
 
 		if (parameters.nu == 0.5)
@@ -2328,7 +2328,7 @@ namespace NonlinearElasticity
 		{
 			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
 		}
-		//constraints.distribute(solution);
+		constraints.distribute(solution);
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
