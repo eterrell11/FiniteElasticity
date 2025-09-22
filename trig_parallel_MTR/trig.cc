@@ -664,7 +664,7 @@ namespace NonlinearElasticity
 			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[0] + p[0])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
 			//  values[1] += a * M_PI * M_PI * (std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time)
 			//  	+ a * 0.5 * M_PI * std::sin(M_PI * 2.0 * (u[1] + p[1])) * std::cos(M_PI * present_time) * std::cos(M_PI * present_time));
-			values[0] = - (M_PI * M_PI * a - a * mu) * std::sin(M_PI * present_time) * p[1];
+			values[0] = - 0 * (M_PI * M_PI * a - a * mu) * std::sin(M_PI * present_time) * p[1];
 			values[1] = 0;
 		}
 		virtual void
@@ -874,15 +874,8 @@ namespace NonlinearElasticity
 									   Vector<double> &values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = 0;
+		values[0] = a * M_PI * std::cos(M_PI * time);
 		values[1] = 0;
-
-		// if (abs(p[0] - 1.0) < 0.001) {
-		//	values[dim] = -a * dt;// a* dt* std::cos(M_PI * p[0]);
-		// }
-		// else {
-		//	values[dim] = 0;
-		// }
 	}
 	template <int dim>
 	void DirichletValues<dim>::vector_value_list(
@@ -1342,7 +1335,7 @@ namespace NonlinearElasticity
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				2,
-				Functions::ZeroFunction<dim>(dim + 1),
+				DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 				constraints,
 				(*fe_ptr).component_mask(Velocityy));
 			constraints.close();
@@ -2158,7 +2151,7 @@ namespace NonlinearElasticity
 		VectorTools::interpolate_boundary_values(*(mapping_ptr),
 												 dof_handler,
 												 2,
-												 Functions::ZeroFunction<dim>(dim + 1),
+												 DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 												 constraints,
 												 (*fe_ptr).component_mask(Velocityy));
 		constraints.close();
@@ -2324,7 +2317,7 @@ namespace NonlinearElasticity
 
 		auto &p = solution.block(1);
 		auto fake_solution = solution;
-		constraints.set_zero(solution);
+		// constraints.set_zero(solution);
 		constraints.set_zero(solution_dot);
 
 		if (parameters.nu == 0.5)
@@ -2335,7 +2328,7 @@ namespace NonlinearElasticity
 		{
 			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
 		}
-		constraints.distribute(solution);
+		//constraints.distribute(solution);
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
