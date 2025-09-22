@@ -2127,6 +2127,7 @@ namespace NonlinearElasticity
 	{
 		constraints.clear();
 		const FEValuesExtractors::Vector Velocity(0);
+		const FEValuesExtractors::Scalar Velocityx(0);
 		const FEValuesExtractors::Scalar Velocityy(1);
 		const FEValuesExtractors::Scalar Pressure(dim);
 		DoFTools::make_hanging_node_constraints(dof_handler, constraints);
