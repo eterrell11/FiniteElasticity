@@ -1337,7 +1337,7 @@ namespace NonlinearElasticity
 				2,
 				DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 				constraints,
-				(*fe_ptr).component_mask(Velocityy));
+				(*fe_ptr).component_mask(Velocityx));
 			constraints.close();
 		}
 
@@ -2153,7 +2153,7 @@ namespace NonlinearElasticity
 												 2,
 												 DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 												 constraints,
-												 (*fe_ptr).component_mask(Velocityy));
+												 (*fe_ptr).component_mask(Velocityx));
 		constraints.close();
 
 		solution_extrap = solution;
