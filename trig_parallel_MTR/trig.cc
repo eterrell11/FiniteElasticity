@@ -2301,7 +2301,7 @@ namespace NonlinearElasticity
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp, data);
 
-		PETScWrappers::PreconditionBlockJacobi preconditioner_S_in;
+		PETScWrappers::PreconditionParaSails preconditioner_S_in;
 		preconditioner_S_in.initialize(Pp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
@@ -2314,7 +2314,7 @@ namespace NonlinearElasticity
 		// SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 
-		SchurComplement<PETScWrappers::PreconditionParasails> schur_complement(
+		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
 			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);
