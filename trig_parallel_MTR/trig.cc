@@ -1007,6 +1007,8 @@ namespace NonlinearElasticity
 		std::vector<double> l2_p_eps_vec;
 		std::vector<double> l1_p_eps_vec;
 		std::vector<double> linfty_p_eps_vec;
+		TimerOutput timer(pcout, TimerOutput::summary,
+						  TimerOutput::wall_times);
 	};
 	// Constructor for the main class
 	template <int dim>
@@ -1051,8 +1053,7 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::run()
 	{
-		TimerOutput timer(pcout, TimerOutput::summary,
-						  TimerOutput::wall_times);
+
 
 		max_it = parameters.max_ref;
 		l1_u_eps_vec.reserve(max_it);
