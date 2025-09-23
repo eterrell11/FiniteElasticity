@@ -1117,7 +1117,10 @@ namespace NonlinearElasticity
 			{
 				do_timestep();
 			}
-
+			{
+				TimerOutput::Scope timer_section(timer, "Error calculation");
+				calculate_error();
+			}
 			l2_u_eps_vec[ref_step] = displacement_error_output[0];
 			l1_u_eps_vec[ref_step] = displacement_error_output[1];
 			linfty_u_eps_vec[ref_step] = displacement_error_output[2];
@@ -2211,10 +2214,6 @@ namespace NonlinearElasticity
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 
-		{
-			TimerOutput::Scope timer_section(timer, "Error calculation");
-			calculate_error();
-		}
 	}
 
 	template <int dim>
