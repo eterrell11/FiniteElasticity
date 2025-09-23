@@ -1728,24 +1728,23 @@ namespace NonlinearElasticity
 				{
 					if (face->at_boundary())
 					{
-
-						fe_face_values.reinit(cell, face);
-						fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
-						fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
-						fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
-
-						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
-
-						for (const unsigned int q : fe_face_values.quadrature_point_indices())
+						if (face->boundary_id() == 2 && parameters.TractionMagnitude!=0.)
 						{
-							un = face_sol_vec_displacement[q];
-							old_un = old_face_sol_vec_displacement[q];
-							FF = get_real_FF(face_displacement_grads[q]);
-							Jf = get_Jf(FF);
-							HH = get_HH(FF, Jf);
-							for (const unsigned int i : fe_face_values.dof_indices())
+							fe_face_values.reinit(cell, face);
+							fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
+							fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
+							fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
+
+							traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+
+							for (const unsigned int q : fe_face_values.quadrature_point_indices())
 							{
-								if (face->boundary_id() == 2)
+								un = face_sol_vec_displacement[q];
+								old_un = old_face_sol_vec_displacement[q];
+								FF = get_real_FF(face_displacement_grads[q]);
+								Jf = get_Jf(FF);
+								HH = get_HH(FF, Jf);
+								for (const unsigned int i : fe_face_values.dof_indices())
 								{
 									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 								}
@@ -2301,7 +2300,7 @@ namespace NonlinearElasticity
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp, data);
 
-		PETScWrappers::PreconditionParaSails preconditioner_S_in;
+		PETScWrappers::PreconditionAMG preconditioner_S_in;
 		preconditioner_S_in.initialize(Pp);
 
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
