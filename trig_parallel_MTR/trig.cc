@@ -2299,7 +2299,7 @@ namespace NonlinearElasticity
 		LA::MPI::PreconditionAMG::AdditionalData data;
 		data.symmetric_operator = true;
 		data.strong_threshold = 0.5;
-		data.aggresive_coarsening_num_levels = 1;
+		data.aggressive_coarsening_num_levels = 1;
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp, data);
 
