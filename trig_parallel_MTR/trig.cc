@@ -1051,6 +1051,9 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::run()
 	{
+		TimerOutput timer(pcout, TimerOutput::summary,
+						  TimerOutput::wall_times);
+
 		max_it = parameters.max_ref;
 		l1_u_eps_vec.reserve(max_it);
 		l2_u_eps_vec.reserve(max_it);
@@ -2167,9 +2170,11 @@ namespace NonlinearElasticity
 		// relevant_solution_extrap = solution_extrap;
 
 		{
+			TimerOutput::Scope timer_section(timer, "Assemble LHS matrix");
 			assemble_system_SBDF2();
 		}
 		{
+			TimerOutput::Scope timer_section(timer, "Linear solve(s)");
 			solve_SBDF2_system();
 		}
 
@@ -2190,7 +2195,10 @@ namespace NonlinearElasticity
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 
-		calculate_error();
+		{
+			TimerOutput::Scope timer_section(timer, "Error calculation");
+			calculate_error();
+		}
 	}
 
 	template <int dim>
