@@ -925,6 +925,7 @@ namespace NonlinearElasticity
 		const unsigned int n_mpi_processes;
 		const unsigned int this_mpi_process;
 		ConditionalOStream pcout;
+		
 
 		parallel::shared::Triangulation<dim> triangulation;
 		double cell_measure;
@@ -1007,13 +1008,22 @@ namespace NonlinearElasticity
 		std::vector<double> l2_p_eps_vec;
 		std::vector<double> l1_p_eps_vec;
 		std::vector<double> linfty_p_eps_vec;
-		TimerOutput timer(pcout, TimerOutput::summary,
-						  TimerOutput::wall_times);
+
+		TimerOutput timer;
 	};
 	// Constructor for the main class
 	template <int dim>
 	Incompressible<dim>::Incompressible(const std::string &input_file)
-		: parameters(input_file), mpi_communicator(MPI_COMM_WORLD), integrator(parameters.integrator), n_mpi_processes(Utilities::MPI::n_mpi_processes(mpi_communicator)), this_mpi_process(Utilities::MPI::this_mpi_process(mpi_communicator)), pcout(std::cout, (this_mpi_process == 0)), triangulation(mpi_communicator), dof_handler(triangulation), timestep_no(0), savestep_no(0)
+		: parameters(input_file),
+		  mpi_communicator(MPI_COMM_WORLD),
+		  integrator(parameters.integrator),
+		  n_mpi_processes(Utilities::MPI::n_mpi_processes(mpi_communicator)),
+		  this_mpi_process(Utilities::MPI::this_mpi_process(mpi_communicator)),
+		  pcout(std::cout, (this_mpi_process == 0)), triangulation(mpi_communicator),
+		  dof_handler(triangulation),
+		  timestep_no(0),
+		  savestep_no(0),
+		  timer(pcout, TimerOutput::summary, TimerOutput::wall_times)
 	{
 		if (parameters.Simplex == false)
 		{
@@ -1135,6 +1145,7 @@ namespace NonlinearElasticity
 		{
 			create_error_table();
 		}
+		timer.print_summary();
 	}
 
 	template <int dim>
