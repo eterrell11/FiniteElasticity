@@ -1631,11 +1631,6 @@ namespace NonlinearElasticity
 		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
-		std::vector<double> sol_vec_pressure(n_q_points);
-		std::vector<Tensor<1, dim>> sol_vec_displacement(n_q_points, Tensor<1, dim>());
-		std::vector<Tensor<1, dim>> old_sol_vec_displacement(n_q_points, Tensor<1, dim>());
-		std::vector<Tensor<1, dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
-		std::vector<Tensor<1, dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
 		ConstitutiveModels::WVol<dim> wvol;
 
@@ -1653,9 +1648,6 @@ namespace NonlinearElasticity
 
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
-				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
-				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
-				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu);
@@ -1665,9 +1657,6 @@ namespace NonlinearElasticity
 					{ 
 						TimerOutput::Scope timer_section(timer, "All the FF stuff");
 
-						// temp_pressure = sol_vec_pressure[q];
-						un = sol_vec_displacement[q];
-						old_un = old_sol_vec_displacement[q];
 						FF = get_real_FF(old_displacement_grads[q]);
 						Jf = get_Jf(FF);
 						old_HH = get_HH(FF, Jf);
@@ -1738,15 +1727,11 @@ namespace NonlinearElasticity
 						{
 							fe_face_values.reinit(cell, face);
 							fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
-							fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
-							fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
 
 							traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
 
 							for (const unsigned int q : fe_face_values.quadrature_point_indices())
 							{
-								un = face_sol_vec_displacement[q];
-								old_un = old_face_sol_vec_displacement[q];
 								FF = get_real_FF(face_displacement_grads[q]);
 								Jf = get_Jf(FF);
 								HH = get_HH(FF, Jf);
