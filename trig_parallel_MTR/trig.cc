@@ -1098,8 +1098,10 @@ namespace NonlinearElasticity
 			}
 			savestep_no = 0;
 
-			// TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
-			assemble_system_mass();
+			{
+				TimerOutput::Scope timer_section(timer, "Assemble Kuu & Kpp");
+				assemble_system_mass();
+			}
 			pcout << "Mass matrix assembled" << std::endl;
 
 			
@@ -1145,7 +1147,6 @@ namespace NonlinearElasticity
 		{
 			create_error_table();
 		}
-		timer.print_summary();
 	}
 
 	template <int dim>
@@ -2140,37 +2141,40 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::solve_SBDF2()
 	{
-		constraints.clear();
-		const FEValuesExtractors::Vector Velocity(0);
-		const FEValuesExtractors::Scalar Velocityx(0);
-		const FEValuesExtractors::Scalar Velocityy(1);
-		const FEValuesExtractors::Scalar Pressure(dim);
-		DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 1,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityy));
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 3,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityy));
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 0,
-												 Functions::ZeroFunction<dim>(dim + 1),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocity));
-		VectorTools::interpolate_boundary_values(*(mapping_ptr),
-												 dof_handler,
-												 2,
-												 DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
-												 constraints,
-												 (*fe_ptr).component_mask(Velocityx));
-		constraints.close();
+		{
+			TimerOutput::Scope timer_section(timer, "Determining constraints");
+			constraints.clear();
+			const FEValuesExtractors::Vector Velocity(0);
+			const FEValuesExtractors::Scalar Velocityx(0);
+			const FEValuesExtractors::Scalar Velocityy(1);
+			const FEValuesExtractors::Scalar Pressure(dim);
+			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+													 dof_handler,
+													 1,
+													 Functions::ZeroFunction<dim>(dim + 1),
+													 constraints,
+													 (*fe_ptr).component_mask(Velocityy));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+													 dof_handler,
+													 3,
+													 Functions::ZeroFunction<dim>(dim + 1),
+													 constraints,
+													 (*fe_ptr).component_mask(Velocityy));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+													 dof_handler,
+													 0,
+													 Functions::ZeroFunction<dim>(dim + 1),
+													 constraints,
+													 (*fe_ptr).component_mask(Velocity));
+			VectorTools::interpolate_boundary_values(*(mapping_ptr),
+													 dof_handler,
+													 2,
+													 DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
+													 constraints,
+													 (*fe_ptr).component_mask(Velocityx));
+			constraints.close();
+		}
 
 		solution_extrap = solution;
 		solution_extrap.add(dt, solution_dot);
@@ -2706,6 +2710,7 @@ namespace NonlinearElasticity
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt)
 		{
+			TimerOutput::Scope timer_section(timer, "Output results");
 			// cout << "Saving results at time : " << present_time << std::endl;
 			//  if (parameters.nu== 0.5) {
 			++savestep_no;
