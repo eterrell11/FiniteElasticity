@@ -2296,18 +2296,10 @@ namespace NonlinearElasticity
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
 
-		LA::MPI::PreconditionAMG::AdditionalData data(const bool symmetric_operator = false,
-													  const double strong_threshold = 0.25,
-													  const double max_row_sum = 0.9,
-													  const unsigned int aggressive_coarsening_num_levels = 0,
-													  const bool output_details = false,
-													  const RelaxationType relaxation_type_up = RelaxationType::SORJacobi,
-													  const RelaxationType relaxation_type_down = RelaxationType::SORJacobi,
-													  const RelaxationType relaxation_type_coarse = RelaxationType::GaussianElimination,
-													  const unsigned int n_sweeps_coarse = 1,
-													  const double tol = 0.0,
-													  const unsigned int max_iter = 1,
-													  const bool w_cycle = false);
+		LA::MPI::PreconditionAMG::AdditionalData data;
+		data.symmetric_operator = true;
+		data.strong_threshold = 0.5;
+		data.aggresive_coarsening_num_levels = 1;
 		LA::MPI::PreconditionAMG preconditioner_S_comp;
 		preconditioner_S_comp.initialize(Pp, data);
 
