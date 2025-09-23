@@ -2314,7 +2314,7 @@ namespace NonlinearElasticity
 		// SolverMinRes<Vector<double>> solver_aS(iteration_number_control_aS);
 		PreconditionIdentity preconditioner_aS;
 
-		SchurComplement<PETScWrappers::PreconditionBlockJacobi> schur_complement(
+		SchurComplement<PETScWrappers::PreconditionParasails> schur_complement(
 			K, M_inverse, R, kappa);
 
 		LA::MPI::Vector un_motion(velocity);
