@@ -1654,36 +1654,19 @@ namespace NonlinearElasticity
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
-					{ 
-						TimerOutput::Scope timer_section(timer, "All the FF stuff");
+					FF = get_real_FF(old_displacement_grads[q]);
+					Jf = get_Jf(FF);
+					old_HH = get_HH(FF, Jf);
+					old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
 
-						FF = get_real_FF(old_displacement_grads[q]);
-						Jf = get_Jf(FF);
-						old_HH = get_HH(FF, Jf);
-						old_pk1_dev = get_pk1_dev(FF, mu, Jf, old_HH);
+					FF = get_real_FF(displacement_grads[q]);
+					Jf = get_Jf(FF);
+					HH = get_HH(FF, Jf);
+					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
-						FF = get_real_FF(displacement_grads[q]);
-						Jf = get_Jf(FF);
-						HH = get_HH(FF, Jf);
-						pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
-
-						if (parameters.AB2_extrap)
-						{
-							if (present_time < dt * 1.1)
-							{
-								FF = get_real_FF(tmp_displacement_grads[q]);
-								double tmp_Jf = get_Jf(FF);
-								HH_tilde = get_HH(FF, tmp_Jf);
-								pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-								// HH_tilde = 2. * HH - old_HH;
-							}
-							else
-							{
-								HH_tilde = 2. * HH - old_HH;
-								pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
-							}
-						}
-						else
+					if (parameters.AB2_extrap)
+					{
+						if (present_time < dt * 1.1)
 						{
 							FF = get_real_FF(tmp_displacement_grads[q]);
 							double tmp_Jf = get_Jf(FF);
@@ -1691,32 +1674,42 @@ namespace NonlinearElasticity
 							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
 							// HH_tilde = 2. * HH - old_HH;
 						}
+						else
+						{
+							HH_tilde = 2. * HH - old_HH;
+							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+						}
+					}
+					else
+					{
+						FF = get_real_FF(tmp_displacement_grads[q]);
+						double tmp_Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF, tmp_Jf);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+						// HH_tilde = 2. * HH - old_HH;
 					}
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
+					for (const unsigned int i : fe_values.dof_indices())
 					{
-						TimerOutput::Scope timer_section(timer, "Actually assembling the system");
-						for (const unsigned int i : fe_values.dof_indices())
+						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
+						Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
+						double N_p_i = fe_values[Pressure].value(i, q);
+						auto Grad_p_i = fe_values[Pressure].gradient(i, q);
+						for (const unsigned int j : fe_values.dof_indices())
 						{
-							auto Grad_u_i = fe_values[Velocity].gradient(i, q);
-							Tensor<1, dim> N_u_i = fe_values[Velocity].value(i, q);
-							double N_p_i = fe_values[Pressure].value(i, q);
-							auto Grad_p_i = fe_values[Pressure].gradient(i, q);
-							for (const unsigned int j : fe_values.dof_indices())
-							{
-								cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - // Kup
-														   dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) *
-														  fe_values.JxW(q);
-								cell_preconditioner_matrix(i, j) += (1. / kappa * N_p_i * fe_values[Pressure].value(j, q) +
-																	 dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j, q))) *
-																	fe_values.JxW(q);
-							}
-							cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
-											rho_0 * scale * N_u_i * rhs_values[q] +
-											N_p_i * w_prime) *
-										   fe_values.JxW(q);
+							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - // Kup
+													   dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) *
+													  fe_values.JxW(q);
+							cell_preconditioner_matrix(i, j) += (1. / kappa * N_p_i * fe_values[Pressure].value(j, q) +
+																 dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j, q))) *
+																fe_values.JxW(q);
 						}
+						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
+										rho_0 * scale * N_u_i * rhs_values[q] +
+										N_p_i * w_prime) *
+									   fe_values.JxW(q);
 					}
 				}
 				for (const auto &face : cell->face_iterators())
