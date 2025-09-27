@@ -49,15 +49,11 @@
 
 // Enables the usage of a SymmetricTensor "class" and rotation matrices
 #include <deal.II/base/symmetric_tensor.h>
-#include <deal.II/physics/transformations.h>
-#include <deal.II/physics/elasticity/kinematics.h>
-#include <deal.II/physics/elasticity/standard_tensors.h>
 #include <iomanip>
 
 #include <deal.II/lac/linear_operator.h>
 #include <deal.II/lac/linear_operator_tools.h>
 #include <deal.II/lac/packaged_operation.h>
-#include <deal.II/physics/elasticity/standard_tensors.h>
 
 // for dealing with constraints for time dependent problems
 #include <deal.II/lac/constrained_linear_operator.h>
@@ -74,9 +70,6 @@
 
 // For allowing an input file to be read
 #include <deal.II/base/parameter_handler.h>
-
-// For discontinuous galerkin elements
-#include <deal.II/fe/fe_dgq.h>
 
 // For simplices
 #include <deal.II/fe/fe_simplex_p.h>
@@ -768,7 +761,7 @@ namespace NonlinearElasticity
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 		// values[0] = velocity * M_PI * std::sin(M_PI * p[0]) * std::cos(M_PI * p[1]);
 		// values[1] = -velocity * M_PI * std::sin(M_PI * p[1]) * std::cos(M_PI * p[0]);
-		values [0] = velocity * M_PI * p[1];
+		values [0] = velocity * p[1];
 		values [1] = 0;
 		if (dim == 3) {
 			values[2] = 0;
@@ -812,7 +805,7 @@ namespace NonlinearElasticity
 		Solution<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
-		Point<dim> u;
+		// Point<dim> u;
 
 		// for (unsigned int j = 0; j < 2; j++)
 		// {
@@ -824,7 +817,7 @@ namespace NonlinearElasticity
 		// if (dim == 3)
 		// 	values[2] = 0;
 		// values[dim] = 0;
-		values[0] = a * std::sin(M_PI * time) * p[1];
+		values[0] = a * p[1]; //* std::sin(M_PI * time);
 		values[1] = 0;
 		if (dim == 3 )
 			values[2] = 0;
@@ -874,7 +867,7 @@ namespace NonlinearElasticity
 									   Vector<double> &values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = a * M_PI * std::cos(M_PI * time);
+		values[0] = a; // * M_PI * std::cos(M_PI * time);
 		values[1] = 0;
 	}
 	template <int dim>
@@ -1333,18 +1326,18 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				1,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-				dof_handler,
-				3,
-				Functions::ZeroFunction<dim>(dim + 1),
-				constraints,
-				(*fe_ptr).component_mask(Velocityy));	
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 	dof_handler,
+			// 	1,
+			// 	Functions::ZeroFunction<dim>(dim + 1),
+			// 	constraints,
+			// 	(*fe_ptr).component_mask(Velocityy));
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 	dof_handler,
+			// 	3,
+			// 	Functions::ZeroFunction<dim>(dim + 1),
+			// 	constraints,
+			// 	(*fe_ptr).component_mask(Velocityy));	
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
@@ -1356,7 +1349,7 @@ namespace NonlinearElasticity
 				2,
 				DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 				constraints,
-				(*fe_ptr).component_mask(Velocityx));
+				(*fe_ptr).component_mask(Velocity));
 			constraints.close();
 		}
 
@@ -2135,18 +2128,18 @@ namespace NonlinearElasticity
 			const FEValuesExtractors::Scalar Velocityy(1);
 			const FEValuesExtractors::Scalar Pressure(dim);
 			DoFTools::make_hanging_node_constraints(dof_handler, constraints);
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-													 dof_handler,
-													 1,
-													 Functions::ZeroFunction<dim>(dim + 1),
-													 constraints,
-													 (*fe_ptr).component_mask(Velocityy));
-			VectorTools::interpolate_boundary_values(*(mapping_ptr),
-													 dof_handler,
-													 3,
-													 Functions::ZeroFunction<dim>(dim + 1),
-													 constraints,
-													 (*fe_ptr).component_mask(Velocityy));
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 										 dof_handler,
+			// 										 1,
+			// 										 Functions::ZeroFunction<dim>(dim + 1),
+			// 										 constraints,
+			// 										 (*fe_ptr).component_mask(Velocityy));
+			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
+			// 										 dof_handler,
+			// 										 3,
+			// 										 Functions::ZeroFunction<dim>(dim + 1),
+			// 										 constraints,
+			// 										 (*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 													 dof_handler,
 													 0,
@@ -2158,7 +2151,7 @@ namespace NonlinearElasticity
 													 2,
 													 DirichletValues<dim>(present_time, parameters.InitialVelocity, dt, mu),
 													 constraints,
-													 (*fe_ptr).component_mask(Velocityx));
+													 (*fe_ptr).component_mask(Velocity));
 			constraints.close();
 		}
 
@@ -2282,7 +2275,7 @@ namespace NonlinearElasticity
 
 		PETScWrappers::PreconditionBoomerAMG::AdditionalData data;
 		data.symmetric_operator = true;
-		data.strong_threshold = 0.5;
+		data.strong_threshold = 0.3;
 		data.aggressive_coarsening_num_levels = 1;
 
 		PETScWrappers::PreconditionBoomerAMG preconditioner_S_comp;
@@ -2569,9 +2562,8 @@ namespace NonlinearElasticity
 	{
 		TableHandler error_table;
 		dt = parameters.dt;
-		for (int i = 1; i < max_it; ++i)
+		for (int i = 0; i < max_it; ++i)
 		{
-			dt *= 0.5;
 			error_table.add_value("dt ", dt);
 			error_table.set_scientific("dt ", true);
 			error_table.add_value("dEu_l2 ", l2_u_eps_vec[i]);
@@ -2586,6 +2578,7 @@ namespace NonlinearElasticity
 			error_table.set_scientific("dEp_l1 ", true);
 			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i]);
 			error_table.set_scientific("dEp_linf ", true);
+			dt *= 0.5;
 		}
 		std::string boi;
 		std::string nu_str;
