@@ -121,6 +121,7 @@ namespace NonlinearElasticity
 			double nu;
 			double E;
 			double rho_0;
+			double WVol_form;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -140,6 +141,10 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Double(),
 					"Density");
+				prm.declare_entry("WVol_form",
+					"0",
+					Patterns::Integer(),
+					"WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -150,7 +155,7 @@ namespace NonlinearElasticity
 				nu = prm.get_double("Poisson's ratio");
 				E = prm.get_double("Young's modulus");
 				rho_0 = prm.get_double("Density");
-
+				WVol_form = prm.get_integer("WVol_form");
 			}
 			prm.leave_subsection();
 		}
@@ -203,11 +208,12 @@ namespace NonlinearElasticity
 			int n_ref;
 			unsigned int velocity_order;
 			unsigned int pressure_order;
-			int max_NS_it;
 			bool LumpMass;
 			bool Simplex;
-			double e_tol;
 			unsigned int max_ref;
+			bool AB2_extrap;
+			double epsilon;
+			bool dynamic_p;
 			static void declare_parameters(ParameterHandler& prm);
 			void parse_parameters(ParameterHandler& prm);
 		};
@@ -231,10 +237,6 @@ namespace NonlinearElasticity
 					"1",
 					Patterns::Integer(0),
 					"Pressure order");
-				prm.declare_entry("max_it",
-					"100",
-					Patterns::Integer(0),
-					"max_it");
 				prm.declare_entry("LumpMass",
 					"false",
 					Patterns::Bool(),
@@ -243,14 +245,22 @@ namespace NonlinearElasticity
 					"false",
 					Patterns::Bool(),
 					"Simplex");
-				prm.declare_entry("e_tol",
-					"0.000001",
-					Patterns::Double(),
-					"e_tol");
 				prm.declare_entry("max_ref",
 					"5",
 					Patterns::Integer(0),
 					"max_ref");
+				prm.declare_entry("AB2_extrap",
+					"true",
+					Patterns::Bool(),
+					"AB2_extrap");
+				prm.declare_entry("epsilon",
+					"0.0",
+					Patterns::Double(),
+					"epsilon");
+				prm.declare_entry("Dynamic_p",
+					"false",
+					Patterns::Bool(),
+					"Dynamic_p");
 			}
 			prm.leave_subsection();
 		}
@@ -262,11 +272,12 @@ namespace NonlinearElasticity
 				n_ref = prm.get_integer("n_ref");
 				velocity_order = prm.get_integer("Velocity order");
 				pressure_order = prm.get_integer("Pressure order");
-				max_NS_it = prm.get_double("max_it");
 				LumpMass = prm.get_bool("LumpMass");
 				Simplex = prm.get_bool("Simplex");
-				e_tol = prm.get_double("e_tol");
 				max_ref = prm.get_integer("max_ref");
+				AB2_extrap = prm.get_bool("AB2_extrap");
+				epsilon = prm.get_double("epsilon");
+				dynamic_p= prm.get_bool("Dynamic_p");
 			}
 			prm.leave_subsection();
 		}
@@ -947,13 +958,6 @@ namespace NonlinearElasticity
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
 		values[0] = 0;
 		values[1] = 0;
-
-		//if (abs(p[0] - 1.0) < 0.001) {
-		//	values[dim] = -a * dt;// a* dt* std::cos(M_PI * p[0]);
-		//}
-		//else {
-		//	values[dim] = 0;
-		//}
 	}
 	template <int dim>
 	void DirichletValues<dim>::vector_value_list(
@@ -1326,8 +1330,6 @@ namespace NonlinearElasticity
 	}
 
 	
-
-
 	template <int dim>
 	void Incompressible<dim>::create_simplex_grid(parallel::shared::Triangulation<2>& triangulation)
 	{
@@ -1453,28 +1455,17 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::setup_system()
 	{
-
-
-
 		K.clear();
 		P.clear();
 		dof_handler.distribute_dofs(*fe_ptr);
-
-
-
 
 		std::vector<unsigned int> block_component(dim + 1, 0);
 		block_component[dim] = 1;
 		DoFRenumbering::component_wise(dof_handler, block_component);
 
-
-		
-
-
 		const std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
 		const types::global_dof_index n_u = dofs_per_block[0];
 		const types::global_dof_index n_p = dofs_per_block[1];
-
 
 		const FEValuesExtractors::Vector Velocity(0);
 		// const FEValuesExtractors::Scalar Pressure(dim); 
@@ -1522,30 +1513,6 @@ namespace NonlinearElasticity
 				Functions::ZeroFunction<dim>(dim + 1),
 				constraints,
 				(*fe_ptr).component_mask(Velocityy));
-			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-			// 	dof_handler,
-			// 	0,
-			// 	Functions::ZeroFunction<dim>(dim + 1),
-			// 	constraints,
-			// 	(*fe_ptr).component_mask(Pressure));
-			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-			// 	dof_handler,
-			// 	1,
-			// 	Functions::ZeroFunction<dim>(dim + 1),
-			// 	constraints,
-			// 	(*fe_ptr).component_mask(Pressure));
-			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-			// 	dof_handler,
-			// 	2,
-			// 	Functions::ZeroFunction<dim>(dim + 1),
-			// 	constraints,
-			// 	(*fe_ptr).component_mask(Pressure));
-			// VectorTools::interpolate_boundary_values(*(mapping_ptr),
-			// 	dof_handler,
-			// 	3,
-			// 	Functions::ZeroFunction<dim>(dim + 1),
-			// 	constraints,
-			// 	(*fe_ptr).component_mask(Pressure));
 			constraints.close();
 
 
@@ -1779,7 +1746,7 @@ namespace NonlinearElasticity
 
 
 	template <int dim>
-	void Incompressible<dim>::assemble_system_SI()
+	void Incompressible<dim>::assemble_system_SBDF2()
 	{
 
 		P = 0;
@@ -1847,20 +1814,18 @@ namespace NonlinearElasticity
 		Tensor<2, dim> pk1_dev_tilde;
 
 		double scale;
-		double shifter;
 		if (present_time >  dt) {
 			scale = 2. / 3.;
-			shifter = 0 /*1./3.*/;
 		}
 		else {
 			scale = 1.;
-			shifter = 0.;
 		}
 		//double temp_pressure;
 		Tensor<1,dim> un;
 		Tensor<1,dim> old_un;
 
 		std::vector<Tensor<2, dim>> displacement_grads(n_q_points, Tensor<2, dim>());
+		std::vector<Tensor<2, dim>> tmp_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> face_displacement_grads(n_face_q_points, Tensor<2, dim>());
 		std::vector<Tensor<2, dim>> old_displacement_grads(n_q_points, Tensor<2, dim>());
 		std::vector<double> sol_vec_pressure(n_q_points);
@@ -1869,6 +1834,9 @@ namespace NonlinearElasticity
 		std::vector<Tensor<1,dim>> face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 		std::vector<Tensor<1,dim>> old_face_sol_vec_displacement(n_face_q_points, Tensor<1, dim>());
 
+		ConstitutiveModels::WVol<dim> wvol;
+
+		
 		for (const auto& cell : dof_handler.active_cell_iterators())
 		{
 			if (cell->subdomain_id() == this_mpi_process)
@@ -1881,15 +1849,18 @@ namespace NonlinearElasticity
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
 
+				
+
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
 				fe_values[Velocity].get_function_values(relevant_solution, sol_vec_displacement);
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
+				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
 
 
-				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu);
+				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time,parameters.end_time);
 
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
@@ -1907,24 +1878,32 @@ namespace NonlinearElasticity
 					HH = get_HH(FF, Jf);
 					pk1_dev = get_pk1_dev(FF, mu, Jf, HH);
 
-					HH_tilde = 2. * HH - old_HH;
-					pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+				
+					if (parameters.AB2_extrap){
+						if (present_time < dt*1.1)
+						{
+							FF = get_real_FF(tmp_displacement_grads[q]);
+							double tmp_Jf = get_Jf(FF);
+							HH_tilde = get_HH(FF, tmp_Jf);
+							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+							//HH_tilde = 2. * HH - old_HH;
+						}
+						else 
+						{
+							HH_tilde = 2. * HH - old_HH;
+							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
+						}
+					}
+					else 
+					{
+						FF = get_real_FF(tmp_displacement_grads[q]);
+						double tmp_Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF, tmp_Jf);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
+						//HH_tilde = 2. * HH - old_HH;
+					}
 
-					// if (present_time < dt*1.1)
-					// {
-					// 	LA::MPI::BlockVector solution_extrap;
-					// 	solution_extrap.reinit(solution);
-					// 	solution_extrap = solution + dt * solution_dot;
-					// 	auto tmp_relevant_solution(relevant_solution);
-						
-					// 	tmp_relevant_solution = solution_extrap;
-					// 	fe_values[Velocity].get_function_gradients(tmp_relevant_solution, displacement_grads);
-					// 	FF = get_real_FF(displacement_grads[q]);
-					// 	double tmp_Jf = get_Jf(FF);
-					// 	HH_tilde = get_HH(FF,tmp_Jf);
-					// 	pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-					// }
-					
+					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
 					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
@@ -1936,13 +1915,14 @@ namespace NonlinearElasticity
 						for (const unsigned int j : fe_values.dof_indices())
 						{
 							cell_mass_matrix(i, j) += (scale * scalar_product(Grad_u_i, (HH_tilde)*fe_values[Pressure].value(j, q)) - //Kup
-								(1. - shifter) * dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
-							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) - (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
+								dt * N_p_i * scalar_product(HH, fe_values[Velocity].gradient(j, q))) * fe_values.JxW(q);
+							cell_preconditioner_matrix(i,j) += (1./kappa * N_p_i * fe_values[Pressure].value(j,q) +
+								  dt * (2 / 3.) * (HH)*Grad_p_i * (HH * fe_values[Pressure].gradient(j,q) )) * fe_values.JxW(q);
 
 						}
 						cell_rhs(i) += (-scale * scalar_product(Grad_u_i, pk1_dev_tilde) +
 							rho_0 * scale * N_u_i * rhs_values[q] +
-							N_p_i * (Jf - 1.0) - shifter * Grad_p_i * transpose(HH) * (un - old_un)) * fe_values.JxW(q);
+							N_p_i * w_prime) * fe_values.JxW(q);
 					}
 				}
 				for (const auto& face : cell->face_iterators())
@@ -1966,8 +1946,7 @@ namespace NonlinearElasticity
 							HH = get_HH(FF, Jf);
 							for (const unsigned int i : fe_face_values.dof_indices())
 							{
-								cell_rhs(i) += shifter * fe_face_values[Pressure].value(i, q) * (transpose(HH) * (un - old_un)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
-								if (face->boundary_id() == 1) {
+								if (face->boundary_id() == 2) {
 									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 
 								}

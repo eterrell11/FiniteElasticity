@@ -1143,7 +1143,8 @@ template <class PreconditionerType>
 			while (present_time < end_time - 1e-10) {
 				do_timestep();
 			}
-
+			
+			calculate_error();
 			l2_u_eps_vec[ref_step] = displacement_error_output[0];
 			l1_u_eps_vec[ref_step] = displacement_error_output[1];
 			linfty_u_eps_vec[ref_step] = displacement_error_output[2];
@@ -2374,7 +2375,6 @@ template <int dim>
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
 
-		calculate_error();
 
 	}
 
