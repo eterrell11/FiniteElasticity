@@ -623,11 +623,6 @@ template <class PreconditionerType>
 		//stress = mu * FF + kappa * ((Jf - 1) * HH);
 		return stress;
 	}
-
-
-
-	
-
 	
 
 	template<int dim>
@@ -662,7 +657,13 @@ template <class PreconditionerType>
 		virtual void traction_vector_value(const Point<dim>& /*p*/, Tensor<1, dim>& values, double& TractionMagnitude, double& time)
 		{
 			Assert(dim >= 2, ExcInternalError());
-			values[dim-1] = -TractionMagnitude;
+			double ramp;
+			double ramp_time = 0.1;
+			if (time < ramp_time)
+				ramp = -2. * time * time * time / (ramp_time * ramp_time * ramp_time) + 3 * time * time / (ramp_time * ramp_time);
+			else 
+				ramp = 1;
+			values[dim-1] = -ramp * TractionMagnitude;
 		}
 		virtual void traction_vector_value_list(const std::vector<Point<dim>>& points, std::vector<Tensor<1, dim>>& value_list, double& TractionMagnitude, double& time)
 		{
@@ -1102,8 +1103,8 @@ template <class PreconditionerType>
 
 			// if(parameters.nu == 0.5)
 			// {
-			measure_energy();
-			solve_energy();
+			// measure_energy();
+			// solve_energy();
 			// }
 			output_results();
 
@@ -2346,9 +2347,6 @@ template <int dim>
 		old_solution.block(0) = solution_save;
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
-
-		calculate_error();
-
 	}
 
 	template<int dim>
@@ -2801,7 +2799,6 @@ template <int dim>
 		for (int i = 1; i < max_it; ++i) {
 			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
 			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
-			dt *= 0.5;
 			error_table.add_value("dt ", dt);
 			error_table.set_scientific("dt ", true);
 			error_table.add_value("dEu_l2 ", l2_u_eps_vec[i]);
@@ -2816,6 +2813,7 @@ template <int dim>
 			error_table.set_scientific("dEp_l1 ", true);
 			error_table.add_value("dEp_linf ", linfty_p_eps_vec[i]);
 			error_table.set_scientific("dEp_linf ", true);
+			dt *= 0.5;
 		}
 		std::string boi;
 		std::string nu_str;
@@ -2940,9 +2938,9 @@ template <int dim>
 		}
 		if (abs(present_time - save_counter * save_time) < 0.1 * dt) {
 			//cout << "Saving results at time : " << present_time << std::endl;
-			// if (parameters.nu== 0.5) {
-			measure_energy();
-			solve_energy();
+			calculate_error();
+			//measure_energy();
+			//solve_energy();
 			// }
 			++savestep_no;
 			output_results();

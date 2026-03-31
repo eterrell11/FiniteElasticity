@@ -549,6 +549,9 @@ namespace NonlinearElasticity
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
 
+		// stress = mu * FF + (pressure * HH);
+		// stress = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 2.0 * HH / Jf) + (pressure *HH);
+
 		return stress;
 	}
 	template <int dim>
@@ -581,7 +584,8 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * full_FF;
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
+		// full_pk1_stress = mu * full_FF;
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
@@ -617,11 +621,14 @@ namespace NonlinearElasticity
 
 		Tensor<2, 3> full_pk1_stress;
 		Tensor<2, dim> stress;
-		full_pk1_stress =  mu*full_FF + kappa * ((Jf - 1) * full_HH);
+		// stress = mu * (std::cbrt(Jf) / Jf) * (FF - scalar_product(FF, FF) / 2.0 * HH / Jf) + kappa*((Jf-1) * HH);
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3.0 * full_HH / Jf) + kappa * ((Jf - 1) * full_HH);
+		// full_pk1_stress =  mu*full_FF + kappa * ((Jf - 1) * full_HH);
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
 
+		// stress = mu * FF + kappa * ((Jf - 1) * HH);
 		return stress;
 	}
 
@@ -629,32 +636,15 @@ namespace NonlinearElasticity
 	class FExt : public Function<dim>
 	{
 	public:
-		virtual void rhs_vector_value(const Point<dim> &p, Tensor<1, dim> &values, double &a, double /*&present_time*/, double /*&mu*/)
+		virtual void rhs_vector_value(const Point<dim> &p, Tensor<1, dim> &values, double &a, double &present_time, double /*&mu*/)
 
 		{
 			// Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 			// Assert(dim >= 2, ExcInternalError());
-			double x = p[0];
-			double y = p[1];
+		
 
-			double sx = std::sin(M_PI * x);
-			double sy = std::sin(M_PI * y);
-			double s2x = std::sin(2. * M_PI * x);
-			double s2y = std::sin(2. * M_PI * y);
-			double cx = std::cos(M_PI * x);
-			double cy = std::cos(M_PI * y);
-			double c2x = std::cos(2. * M_PI * x);
-			double c2y = std::cos(2. * M_PI * y);
-			double st = std::sin(M_PI * present_time);
-			double ct = std::cos(M_PI * present_time);
-			double c2t = std::cos(2. * M_PI *present_time);
-
-			values[0] = a * M_PI * M_PI * (2. * mu - 1.) * st * cy * sx - a * a * M_PI * M_PI * M_PI * st * st * s2x;
-			values[1] = a * M_PI * M_PI * (1. - 2. * mu) * st * cx * sy - a * a * M_PI * M_PI * M_PI * st * st * s2y;
-			if (dim == 3)
-			{
-				values[2] = 0;
-			}
+			values[0] = - a * M_PI * M_PI * p[1]* std::sin(M_PI * present_time);
+			values[1] = 0;
 		}
 		virtual void
 		rhs_vector_value_list(const std::vector<Point<dim>> &points, std::vector<Tensor<1, dim>> &value_list, double &BodyForce, double &present_time, double &mu)
@@ -677,13 +667,17 @@ namespace NonlinearElasticity
 			Assert(dim >= 2, ExcInternalError());
 			Point<dim> u;
 
-			for (unsigned int j = 0; j < 0; j++)
+			for (unsigned int j = 0; j < 10; j++)
 			{
 				u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 				u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * present_time);
 			}
 
-			value = 0;
+			// u[0] = 0;
+			// u[1] = 0;
+			value = 0 *  0.5 * a * a * M_PI * M_PI *
+				(std::cos(2. * M_PI * (u[0] + p[0])) + std::cos(2. * M_PI * (u[1] + p[1])) ) *
+				std::sin(M_PI * present_time) * std::sin(M_PI * present_time);
 
 		}
 		virtual void
@@ -700,7 +694,7 @@ namespace NonlinearElasticity
 	class TractionVector : public Function<dim>
 	{
 	public:
-		virtual void traction_vector_value(const Point<dim> & /*p*/, Tensor<1, dim> &values, double &TractionMagnitude, double &time)
+		virtual void traction_vector_value(const Point<dim> & /*p*/, Tensor<1, dim> &values, double &TractionMagnitude, double /*&time*/)
 		{
 			Assert(dim >= 2, ExcInternalError());
 			values[dim - 1] = -TractionMagnitude;
@@ -787,18 +781,10 @@ namespace NonlinearElasticity
 			Vector<double>& values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		Point<dim> u;
 
-		for (unsigned int j = 0; j < 0; j++)
-		{
-			u[0] = velocity * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-			u[1] = -velocity * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-		}
+		values[0] = velocity * M_PI * p[1] * std::cos(M_PI * time);
+		values[1] = 0;
 		
-		values[0] = velocity * M_PI * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::cos(M_PI * time);
-		values[1] = -velocity * M_PI * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::cos(M_PI * time);
-		if (dim == 3)
-			values[2] = 0;
 		if (dim == 3 )
 			values[2] = 0;
 	}
@@ -840,17 +826,9 @@ namespace NonlinearElasticity
 		Solution<dim>::vector_value(const Point<dim>& p,
 			Vector<double>& values) const
 	{
-		Point<dim> u;
-
-		for (unsigned int j = 0; j < 0; j++)
-		{
-			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-		}
-		
-		values[0] = a * std::sin(M_PI *( p[0]+u[0])) * std::cos(M_PI * (p[1]+u[1])) * std::sin(M_PI * time);
-		values[1] = -a * std::sin(M_PI *( p[1] + u[1])) * std::cos(M_PI * (p[0]+u[0])) * std::sin(M_PI * time);
-		if (dim == 3)
+		values[0] = a * p[1] * std::sin(M_PI * time);
+		values[1] = 0;
+		if (dim == 3 )
 			values[2] = 0;
 	}
 	template <int dim>
@@ -889,17 +867,10 @@ namespace NonlinearElasticity
 
 	template <int dim>
 	void
-	PressureValues<dim>::vector_value(const Point<dim> & p,
+	PressureValues<dim>::vector_value(const Point<dim> & /*p*/,
 									Vector<double> &values) const
 	{
-		Point<dim> u;
-		for (unsigned int j = 0; j < 0; j++)
-		{
-			u[0] = a * std::sin(M_PI * (u[0] + p[0])) * std::cos(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
-		}
-
-		values[dim] = - a * a * M_PI * M_PI * ( std::cos(2 * M_PI * (p[0]+u[0])) + std::cos(2 * M_PI * (p[1]+u[1]))) * std::sin(M_PI * time) * std::sin(M_PI * time);
+		values[dim] = 0;
 	}
 	template <int dim>
 	void PressureValues<dim>::vector_value_list(
@@ -981,6 +952,7 @@ namespace NonlinearElasticity
 		void solve_SBDF2();
 		void solve_FE(LA::MPI::BlockVector &sol, LA::MPI::BlockVector &rel_sol);
 		void solve_SBDF2_system();
+		// void		 update_motion();
 		void output_results() const;
 		void calculate_error();
 		void create_error_table();
@@ -1080,7 +1052,6 @@ namespace NonlinearElasticity
 
 		TimerOutput timer;
 	};
-
 	// Constructor for the main class
 	template <int dim>
 	Incompressible<dim>::Incompressible(const std::string &input_file)
@@ -1150,8 +1121,8 @@ namespace NonlinearElasticity
 			{
 				TimerOutput::Scope timer_section(timer, "Building Grid");
 				for (int i = 0; i < ref_step; ++i) {
-					// dt *= 0.5;
-					n_ref += 1;
+					dt *= 0.5;
+					//n_ref += 1;
 				}
 				if (parameters.Simplex == true) {
 					parameters.n_ref = n_ref;
@@ -2085,10 +2056,15 @@ namespace NonlinearElasticity
 			constraints.close();
 		}
 
-		solution_extrap = solution;
 
-		solution_extrap.add(dt, solution_dot);
-		
+		if (present_time < 1.1 * dt)
+		{
+			solution_extrap = solution + dt * solution_dot;
+		}
+		else
+		{
+			solution_extrap= 4./3. * solution - 1. / 3. * old_solution + 2. / 3. * dt * solution_dot;
+		}
 		relevant_solution_extrap = solution_extrap;
 
 		// assemble_Rv();
@@ -2191,14 +2167,13 @@ namespace NonlinearElasticity
 		K.block(0, 0).vmult_add(Ru, un_motion);
 
 		M_inverse.vmult(tmp1, Ru);
-		// constraints.distribute(tmp1);
+		constraints.distribute(tmp1);
 		tmp1 *= -1.0;
 		Kpu.vmult_add(Rp, tmp1);
 
 		auto &v = solution_dot.block(0);
 
-		solution_dot.block(1) = solution.block(1);
-		auto &p = solution_dot.block(1);
+		auto &p = solution.block(1);
 		auto fake_solution = solution;
 		constraints.set_zero(solution.block(1));
 		constraints.set_zero(solution_dot);
@@ -2211,7 +2186,7 @@ namespace NonlinearElasticity
 		{
 			solver_S.solve(schur_complement, p, R.block(1), preconditioner_S_comp);
 		}
-		constraints.distribute(solution_dot);
+		//constraints.distribute(solution.block(1));
 
 		Kup.vmult(tmp1, p);
 		Ru.add(-1.0, tmp1);
@@ -2219,8 +2194,6 @@ namespace NonlinearElasticity
 		// Solve for velocity
 
 		constraints.distribute(solution_dot);
-
-		solution.block(1) = solution_dot.block(1);
 
 		relevant_solution = solution;
 		relevant_solution_dot = solution_dot;

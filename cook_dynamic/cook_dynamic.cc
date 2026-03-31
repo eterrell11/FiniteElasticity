@@ -36,10 +36,6 @@
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/table_handler.h>
 
-
-
-
-
 //Enables Petsc for distributing work across my whopping 4 cores
 #include <deal.II/lac/petsc_vector.h>
 #include <deal.II/lac/petsc_sparse_matrix.h>
@@ -55,14 +51,11 @@
 //Enables the usage of a SymmetricTensor "class" and rotation matrices
 #include <deal.II/base/symmetric_tensor.h>
 #include <deal.II/physics/transformations.h>
-#include <deal.II/physics/elasticity/kinematics.h>
-#include <deal.II/physics/elasticity/standard_tensors.h>
 #include <iomanip>
 
 #include <deal.II/lac/linear_operator.h>
 #include <deal.II/lac/linear_operator_tools.h>
 #include <deal.II/lac/packaged_operation.h>
-#include <deal.II/physics/elasticity/standard_tensors.h>
 
 //for dealing with constraints for time dependent problems
 #include <deal.II/lac/constrained_linear_operator.h>
@@ -1063,6 +1056,7 @@ namespace NonlinearElasticity
 
 
 	};
+
 	// Constructor for the main class
 	template<int dim>
 	Incompressible<dim>::Incompressible(const std::string& input_file)
@@ -1677,8 +1671,6 @@ namespace NonlinearElasticity
 		K.block(0, 1) = 0;
 		K.block(1, 0) = 0;
 
-
-
 		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
 			(*quad_rule_ptr),
@@ -1780,8 +1772,6 @@ namespace NonlinearElasticity
 				solution.update_ghost_values();
 				old_solution.update_ghost_values();
 
-				
-
 				fe_values[Velocity].get_function_gradients(relevant_solution, displacement_grads);
 				fe_values[Velocity].get_function_gradients(relevant_old_solution, old_displacement_grads);
 				fe_values[Pressure].get_function_values(relevant_solution, sol_vec_pressure);
@@ -1791,10 +1781,7 @@ namespace NonlinearElasticity
 				fe_values[Velocity].get_function_values(relevant_old_solution, old_sol_vec_displacement);
 				fe_values[Velocity].get_function_gradients(relevant_solution_extrap, tmp_displacement_grads);
 
-
-
 				right_hand_side.rhs_vector_value_list(fe_values.get_quadrature_points(), rhs_values, parameters.BodyForce, present_time, mu, kappa);
-
 
 				for (const unsigned int q : fe_values.quadrature_point_indices())
 				{
@@ -1816,33 +1803,31 @@ namespace NonlinearElasticity
 					total_volume += Jf * fe_values.JxW(q);
 
 				
-					if (parameters.AB2_extrap){
-						if (present_time < dt*1.1)
+					if (parameters.AB2_extrap)
+					{
+						if (present_time < dt * 1.1)
 						{
 							FF = get_real_FF(tmp_displacement_grads[q]);
 							double tmp_Jf = get_Jf(FF);
 							HH_tilde = get_HH(FF, tmp_Jf);
 							pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
-							//HH_tilde = 2. * HH - old_HH;
 						}
-						else 
+						else
 						{
 							HH_tilde = 2. * HH - old_HH;
 							pk1_dev_tilde = 2. * pk1_dev - old_pk1_dev;
 						}
 					}
-					else 
+					else
 					{
 						FF = get_real_FF(tmp_displacement_grads[q]);
-						Jf_tilde = get_Jf(FF);
-						HH_tilde = get_HH(FF, Jf_tilde);
-						pk1_dev_tilde = get_pk1_dev(FF, mu, Jf_tilde, HH_tilde);
-						//HH_tilde = 2. * HH - old_HH;
+						double tmp_Jf = get_Jf(FF);
+						HH_tilde = get_HH(FF, tmp_Jf);
+						pk1_dev_tilde = get_pk1_dev(FF, mu, tmp_Jf, HH_tilde);
 					}
 
 					double w_prime = wvol.W_prime(parameters.WVol_form, Jf);
 
-					//temp_pressure -= pressure_mean;
 					for (const unsigned int i : fe_values.dof_indices())
 					{
 						auto Grad_u_i = fe_values[Velocity].gradient(i, q);
@@ -1884,34 +1869,30 @@ namespace NonlinearElasticity
 						}
 					}
 				}
-				for (const auto& face : cell->face_iterators())
+				for (const auto &face : cell->face_iterators())
 				{
 					if (face->at_boundary())
 					{
-
-						fe_face_values.reinit(cell, face);
-						fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
-						fe_face_values[Velocity].get_function_values(relevant_solution, face_sol_vec_displacement);
-						fe_face_values[Velocity].get_function_values(relevant_old_solution, old_face_sol_vec_displacement);
-
-						traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
-
-						for (const unsigned int q : fe_face_values.quadrature_point_indices())
+						if (face->boundary_id() == 2 && parameters.TractionMagnitude!=0.)
 						{
-							for (const unsigned int i : fe_face_values.dof_indices())
-							{
-								if (face->boundary_id() == 2) {
-									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
+							fe_face_values.reinit(cell, face);
+							fe_face_values[Velocity].get_function_gradients(relevant_solution, face_displacement_grads);
 
+							traction_vector.traction_vector_value_list(fe_face_values.get_quadrature_points(), traction_values, parameters.TractionMagnitude, present_time);
+
+							for (const unsigned int q : fe_face_values.quadrature_point_indices())
+							{
+								FF = get_real_FF(face_displacement_grads[q]);
+								Jf = get_Jf(FF);
+								HH = get_HH(FF, Jf);
+								for (const unsigned int i : fe_face_values.dof_indices())
+								{
+									cell_rhs(i) += scale * fe_face_values[Velocity].value(i, q) * traction_values[q] * fe_face_values.JxW(q);
 								}
 							}
 						}
 					}
-
 				}
-				//cout << cell_rhs<< std::endl;
-
-
 
 				cell->get_dof_indices(local_dof_indices);
 				constraints.distribute_local_to_global(cell_mass_matrix,
@@ -1938,8 +1919,6 @@ namespace NonlinearElasticity
 		K.block(0, 1) = 0;
 		K.block(1, 0) = 0;
 
-
-
 		FEValues<dim> fe_values(*mapping_ptr,
 			*fe_ptr,
 			(*quad_rule_ptr),
@@ -1957,31 +1936,22 @@ namespace NonlinearElasticity
 			update_quadrature_points |
 			update_JxW_values);
 
-
 		const unsigned int dofs_per_cell = (*fe_ptr).n_dofs_per_cell();
 		const unsigned int n_q_points = (*quad_rule_ptr).size();
 		const unsigned int n_face_q_points = (*face_quad_rule_ptr).size();
-
-
 
 		FullMatrix<double> cell_mass_matrix(dofs_per_cell, dofs_per_cell);
 		FullMatrix<double> cell_preconditioner_matrix(dofs_per_cell, dofs_per_cell);
 
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-
 		const FEValuesExtractors::Vector Velocity(0);
 		const FEValuesExtractors::Scalar Pressure(dim);
 
-
-
 		Vector<double>     cell_rhs(dofs_per_cell);
-
-		
 
 		FExt<dim> right_hand_side;
 		std::vector<Tensor<1, dim>> rhs_values(n_q_points, Tensor<1, dim>());
-
 
 		TractionVector<dim> traction_vector;
 		std::vector<Tensor<1, dim>> traction_values(n_face_q_points, Tensor<1, dim>());
@@ -2390,9 +2360,6 @@ namespace NonlinearElasticity
 		old_solution.block(0) = solution_save;
 		relevant_solution = solution;
 		relevant_old_solution = old_solution;
-		
-		//calculate_error();
-
 	}
 
 	template<int dim>
