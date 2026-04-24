@@ -581,7 +581,7 @@ namespace NonlinearElasticity
 		}
 		Tensor<2, dim> stress;
 		Tensor<2, 3> full_pk1_stress;
-		full_pk1_stress = mu * full_FF;
+		full_pk1_stress = mu * (std::cbrt(Jf) / Jf) * (full_FF - scalar_product(full_FF, full_FF) / 3. * full_HH / Jf);
 		for (int i = 0; i < dim; ++i)
 			for (int j = 0; j < dim; ++j)
 				stress[i][j] = full_pk1_stress[i][j];
@@ -629,7 +629,7 @@ namespace NonlinearElasticity
 	class FExt : public Function<dim>
 	{
 	public:
-		virtual void rhs_vector_value(const Point<dim> &p, Tensor<1, dim> &values, double &a, double /*&present_time*/, double /*&mu*/)
+		virtual void rhs_vector_value(const Point<dim> &p, Tensor<1, dim> &values, double &a, double present_time, double mu)
 
 		{
 			// Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
@@ -742,8 +742,8 @@ namespace NonlinearElasticity
 									   Vector<double> &values) const
 	{
 		Assert(values.size() == (dim + 1), ExcDimensionMismatch(values.size(), dim + 1));
-		values[0] = 0; //- velocity/2.0 * M_PI * std::sin(M_PI / 2.0 * p[0]);
-		values[1] = 0; // velocity* M_PI* std::sin(M_PI * p[0])* std::sin(M_PI * p[1]);
+		values[0] = 0;
+		values[1] = 0; 
 		values[dim] = 0;
 	}
 	template <int dim>
@@ -899,7 +899,7 @@ namespace NonlinearElasticity
 			u[1] = -a * std::cos(M_PI * (u[0] + p[0])) * std::sin(M_PI * (u[1] + p[1])) * std::sin(M_PI * time);
 		}
 
-		values[dim] = - a * a * M_PI * M_PI * ( std::cos(2 * M_PI * (p[0]+u[0])) + std::cos(2 * M_PI * (p[1]+u[1]))) * std::sin(M_PI * time) * std::sin(M_PI * time);
+		values[dim] = - 0.5 * a * a * M_PI * M_PI * ( std::cos(2 * M_PI * (p[0]+u[0])) + std::cos(2 * M_PI * (p[1]+u[1]))) * std::sin(M_PI * time) * std::sin(M_PI * time);
 	}
 	template <int dim>
 	void PressureValues<dim>::vector_value_list(
@@ -1424,25 +1424,25 @@ namespace NonlinearElasticity
 				1,
 				VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				3,
 				VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));	
+				(*fe_ptr).component_mask(Velocityx));	
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
 				VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				2,
 				VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 				constraints,
-				(*fe_ptr).component_mask(Velocity));
+				(*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
@@ -2039,25 +2039,25 @@ namespace NonlinearElasticity
 													 1,
 													VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 													 constraints,
-													 (*fe_ptr).component_mask(Velocity));
+													 (*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 													 dof_handler,
 													 3,
 													VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 													 constraints,
-													 (*fe_ptr).component_mask(Velocity));
+													 (*fe_ptr).component_mask(Velocityx));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 													 dof_handler,
 													 0,
 													VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 													 constraints,
-													 (*fe_ptr).component_mask(Velocity));
+													 (*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 													 dof_handler,
 													 2,
 													VelocitySolution<dim>(parameters.InitialVelocity, mu, present_time),
 													 constraints,
-													 (*fe_ptr).component_mask(Velocity));
+													 (*fe_ptr).component_mask(Velocityy));
 			VectorTools::interpolate_boundary_values(*(mapping_ptr),
 				dof_handler,
 				0,
@@ -2145,7 +2145,7 @@ namespace NonlinearElasticity
 
 		auto &Pp = P.block(1, 1);
 
-		SolverControl reduction_control_Kuu(1000, 1.0e-12);
+		SolverControl reduction_control_Kuu(1000, 1.0e-14);
 		SolverCG<LA::MPI::Vector> solver_Kuu(reduction_control_Kuu);
 		PETScWrappers::PreconditionBlockJacobi preconditioner_Kuu;
 		preconditioner_Kuu.initialize(Kuu);
@@ -2164,7 +2164,7 @@ namespace NonlinearElasticity
 		const InverseMatrix<LA::MPI::SparseMatrix, PETScWrappers::PreconditionBlockJacobi>
 			M_inverse(Kuu, preconditioner_Kuu);
 
-		SolverControl solver_control_S(8000, 1.0e-12);
+		SolverControl solver_control_S(8000, 1.0e-14);
 		SolverGMRES<LA::MPI::Vector> solver_S(solver_control_S);
 
 		IterationNumberControl iteration_number_control_aS(30, 1.e-18);

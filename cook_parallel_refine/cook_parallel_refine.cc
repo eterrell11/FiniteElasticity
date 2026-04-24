@@ -1108,7 +1108,7 @@ template <class PreconditionerType>
 
 			set_simulation_parameters();
 			for (int i = 0; i < ref_step; ++i) {
-				dt *= 0.5;
+				dt *= 0.25;
 			}
 			setup_system();
 			if (ref_step == 0)
@@ -3034,10 +3034,8 @@ template <int dim>
 	{
 		TableHandler error_table;
 		dt = parameters.dt;
-		for (int i = 1; i < max_it; ++i) {
-			//cout << "|" << parameters.dt << "*0.5^" << i << "|" << l2_u_eps_vec[i] - l2_u_eps_vec[i - 1] << "|" << l1_u_eps_vec[i] - l1_u_eps_vec[i - 1] << "|" << linfty_u_eps_vec[i] - linfty_u_eps_vec[i - 1]
-			//<< "|" << l2_p_eps_vec[i] - l2_p_eps_vec[i - 1] << "|" << l1_p_eps_vec[i] - l1_p_eps_vec[i - 1] << "|" << linfty_p_eps_vec[i] - linfty_p_eps_vec[i - 1] << std::endl;
-			dt *= 0.25;
+		for (int i = 0; i < max_it; ++i) 
+		{
 			error_table.add_value("dt ", dt);
 			error_table.set_scientific("dt ", true);
 
@@ -3047,6 +3045,7 @@ template <int dim>
 			error_table.set_scientific("dEvol_l1 ", true);
 			error_table.add_value("dEvol_linf ", linfty_v_eps_vec[i]/* - linfty_v_eps_vec[i - 1]*/);
 			error_table.set_scientific("dEvol_linf ", true);
+			dt *= 0.25;
 		}
 		std::string boi;
 		std::string nu_str;
@@ -3107,7 +3106,7 @@ template <int dim>
 			"Displacement_error",
 			DataOut<dim>::type_cell_data);
 		data_out.add_data_vector(vol_cell_wise_error,
-			"Pressure_error",
+			"Volumetric_error",
 			DataOut<dim>::type_cell_data);
 
 		LA::MPI::BlockVector extra_vector = relevant_solution;

@@ -2215,11 +2215,6 @@ namespace NonlinearElasticity
 	template <int dim>
 	void Incompressible<dim>::calculate_error()
 	{
-		// error_solution_store.update_ghost_values();
-		// relevant_error_solution_store = solution - error_solution_store;
-		// error_sol.update_ghost_values();
-		// VectorTools::interpolate(dof_handler, Solution<dim>(present_time, parameters.TractionMagnitude, kappa), true_solution);
-		// error = (true_solution - solution);
 		const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim), dim + 1);
 		const ComponentSelectFunction<dim> pressure_mask(dim, dim + 1);
 
@@ -2340,15 +2335,15 @@ namespace NonlinearElasticity
 		std::string nu_str;
 		if (parameters.BodyForce != 0)
 			boi = "BF";
-		if (parameters.TractionMagnitude != 0)
+		else if (parameters.TractionMagnitude != 0)
 			boi = "TR";
-		if (parameters.InitialVelocity != 0)
+		else if (parameters.InitialVelocity != 0)
 			boi = "IV";
 		if (parameters.nu == 0.4)
 			nu_str = "4";
-		if (parameters.nu == 0.49)
+		else if (parameters.nu == 0.49)
 			nu_str = "49";
-		if (parameters.nu == 0.5)
+		else if (parameters.nu == 0.5)
 			nu_str = "5";
 		if (this_mpi_process == 0)
 			error_table.write_text(std::cout);
@@ -2359,11 +2354,11 @@ namespace NonlinearElasticity
 
 		stream << "dt" << ',' << "l2_u" << ',' << "l1_u" << ',' << "linf_u" << ',' << "l2_p" << ',' << "l1_p" << ',' << "linf_p" << '\n';
 		dt = parameters.dt;
-		for (int i = 1; i < max_it; ++i)
+		for (int i = 0; i < max_it; ++i)
 		{
-			dt *= 0.5;
 			stream << dt << ',' << abs(l2_u_eps_vec[i]) << ',' << abs(l1_u_eps_vec[i]) << ',' << abs(linfty_u_eps_vec[i])
 				   << ',' << abs(l2_p_eps_vec[i]) << ',' << abs(l1_p_eps_vec[i]) << ',' << abs(linfty_p_eps_vec[i]) << '\n';
+			dt *= 0.5;
 		}
 		output << stream.str();
 	}
